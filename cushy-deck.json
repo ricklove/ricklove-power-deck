@@ -1,0 +1,7 @@
+{
+    "$schema": "../../../src/cards/DeckManifest.schema.json",
+    "name": "my-cushy-desk",
+    "authorName": "ricklove",
+    "description": "Testing 2",
+    "cards": []
+}
