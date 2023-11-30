@@ -1,6 +1,6 @@
 import { FormBuilder, Widget_group, Widget_group_output, Widget_inlineRun, Widget_list_output } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
-import { StopError, run_buildMasks, ui_maskPrompt } from './src/_maskPrefabs'
+import { StopError, operation_mask } from './src/_maskPrefabs'
 
 app({
     ui: (form) => ({
@@ -8,8 +8,12 @@ app({
 
         startImage: form.image({}),
         _1: form.markdown({ markdown: `# Prepare Image` }),
-        crop: ui_maskPrompt(form, { defaultPrompt: `person` }),
-        mask: ui_maskPrompt(form, { defaultPrompt: `ball` }),
+        // crop1:
+        cropMaskOperations: operation_mask.ui(form),
+        //operation_mask.ui(form).maskOperations,
+        replaceMaskOperations: operation_mask.ui(form),
+        // ...operation_replaceMask.ui(form),
+        // mask: ui_maskPrompt(form, { defaultPrompt: `ball` }),
         _2: form.markdown({ markdown: `# Modify Image` }),
         // g: form.groupOpt({
         //     items: () => ({
@@ -39,22 +43,18 @@ app({
 
             // Build a ComfyUI graph
             const graph = flow.nodes
+            const state = { flow, graph, scopeStack: [{}] }
 
             // load, crop, and resize image
             const startImage = await flow.loadImageAnswer(form.startImage)
 
-            const { mask: cropMask, stop: stopAtCrop } = await run_buildMasks(flow, graph, startImage, form.crop)
-            if (stopAtCrop) {
-                return
-            }
+            const cropMask = await operation_mask.run(state, startImage, undefined, form.cropMaskOperations)
+
             const { cropped_image } = !cropMask
                 ? { cropped_image: startImage }
                 : graph.RL$_Crop$_Resize({ image: startImage, mask: cropMask }).outputs
 
-            const { mask, stop: stopAtMask } = await run_buildMasks(flow, graph, cropped_image, form.mask)
-            if (stopAtMask) {
-                return
-            }
+            const mask = await operation_mask.run(state, cropped_image, undefined, form.replaceMaskOperations)
 
             const loraStack = graph.LoRA_Stacker({
                 input_mode: `simple`,
@@ -94,7 +94,7 @@ app({
                 cfg: 1.5,
                 sampler_name: 'lcm',
                 scheduler: 'normal',
-                start_at_step: 7,
+                start_at_step: 0,
 
                 model: loader,
                 positive: loader.outputs.CONDITIONING$6, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
