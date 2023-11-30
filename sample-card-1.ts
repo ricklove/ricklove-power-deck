@@ -17,6 +17,7 @@ const createMaskForm = (form: FormBuilder, optional = false) => {
 
 app({
     ui: (form) => ({
+        workingDirectory: form.str({}),
         startImage: form.image({}),
         _1: form.markdown({ markdown: `# Prepare Image` }),
         cropPrompt: form.str({ default: `person` }),
@@ -31,23 +32,27 @@ app({
         previewMasks: form.bool({}),
 
         _2: form.markdown({ markdown: `# Modify Image` }),
+        // g: form.groupOpt({
+        //     items: () => ({
         positive: form.str({}),
+        //     }),
+        // }),
     }),
-    run: async (runtime, form) => {
-        // runtime.print('Hello World 3');
+    run: async (flow, form) => {
+        flow.print(`${JSON.stringify(form)}`);
 
         // Build a ComfyUI graph
-        const graph = runtime.nodes;
+        const graph = flow.nodes;
 
         // load, crop, and resize image
-        const startImage = await runtime.loadImageAnswer(form.startImage);
+        const startImage = await flow.loadImageAnswer(form.startImage);
         const cropMask = graph.CLIPSeg({ image: startImage, text: form.cropPrompt });
         const { cropped_image } = graph.RL$_Crop$_Resize({ image: startImage, mask: cropMask }).outputs;
 
         if (form.previewCrop) {
             graph.PreviewImage({ images: cropMask.outputs.Heatmap$_Mask });
             graph.PreviewImage({ images: cropped_image });
-            await runtime.PROMPT();
+            await flow.PROMPT();
             return;
         }
 
@@ -100,7 +105,7 @@ app({
                 });
                 graph.PreviewImage({ images: maskRaw.outputs.Heatmap$_Mask });
                 graph.PreviewImage({ images: maskPreview });
-                await runtime.PROMPT();
+                await flow.PROMPT();
                 return;
             }
         }
@@ -108,7 +113,7 @@ app({
         mask = !mask || !unmask ? mask : combineMasks(mask, unmask, `aNotB`);
         if (form.previewMasks) {
             if (!mask) {
-                runtime.print(`No Mask Defined`);
+                flow.print(`No Mask Defined`);
                 return;
             }
             const maskAsImage = graph.MaskToImage({ mask });
@@ -119,7 +124,7 @@ app({
                 blend_factor: 0.5,
             });
             graph.PreviewImage({ images: maskPreview });
-            await runtime.PROMPT();
+            await flow.PROMPT();
             return;
         }
 
@@ -150,7 +155,7 @@ app({
             return startLatent1;
         })();
 
-        const seed = runtime.randomSeed();
+        const seed = flow.randomSeed();
         const sampler = graph.KSampler_Adv$5_$1Efficient$2({
             add_noise: `disable`,
             return_with_leftover_noise: `disable`,
@@ -177,7 +182,23 @@ app({
         });
 
         // Run the graph you built
-        await runtime.PROMPT();
+        const result = await flow.PROMPT();
+
+        // Disable some nodes
+        const iDisableStart = flow.workflow.nodes.indexOf(cropMask) + 1;
+        flow.workflow.nodes.slice(iDisableStart).forEach((x) => x.disable());
+
+        // Build new graph with part of old graph
+        graph.PreviewImage({ images: cropMask.outputs.Heatmap$_Mask });
+
+        // Run new graph
+        await flow.PROMPT();
+
+        // result.delete();
+        // result.
+
+        // Undisable all nodes so they can be rendered in the graph view
+        // flow.workflow.nodes.forEach((x) => (x.disabled = false));
     },
 });
 
