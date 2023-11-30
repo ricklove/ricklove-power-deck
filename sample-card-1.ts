@@ -1,10 +1,11 @@
 import { FormBuilder, Widget_group, Widget_group_output, Widget_inlineRun, Widget_list_output } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
-import { run_buildMasks, ui_maskPrompt } from './src/_maskPrefabs'
+import { StopError, run_buildMasks, ui_maskPrompt } from './src/_maskPrefabs'
 
 app({
     ui: (form) => ({
         workingDirectory: form.str({}),
+
         startImage: form.image({}),
         _1: form.markdown({ markdown: `# Prepare Image` }),
         crop: ui_maskPrompt(form, { defaultPrompt: `person` }),
@@ -33,98 +34,106 @@ app({
         // }),
     }),
     run: async (flow, form) => {
-        flow.print(`${JSON.stringify(form)}`)
+        try {
+            flow.print(`${JSON.stringify(form)}`)
 
-        // Build a ComfyUI graph
-        const graph = flow.nodes
+            // Build a ComfyUI graph
+            const graph = flow.nodes
 
-        // load, crop, and resize image
-        const startImage = await flow.loadImageAnswer(form.startImage)
+            // load, crop, and resize image
+            const startImage = await flow.loadImageAnswer(form.startImage)
 
-        const { mask: cropMask, stop: stopAtCrop } = await run_buildMasks(flow, graph, startImage, form.crop)
-        if (stopAtCrop) {
-            return
-        }
-        const { cropped_image } = !cropMask
-            ? { cropped_image: startImage }
-            : graph.RL$_Crop$_Resize({ image: startImage, mask: cropMask }).outputs
-
-        const { mask, stop: stopAtMask } = await run_buildMasks(flow, graph, cropped_image, form.mask)
-        if (stopAtMask) {
-            return
-        }
-
-        const loraStack = graph.LoRA_Stacker({
-            input_mode: `simple`,
-            lora_count: 1,
-            lora_name_1: `lcm-lora-sdxl.safetensors`,
-        } as LoRA_Stacker_input)
-
-        const loader = graph.Efficient_Loader({
-            ckpt_name: `protovisionXLHighFidelity3D_beta0520Bakedvae.safetensors`,
-            lora_stack: loraStack,
-            // defaults
-            lora_name: `None`,
-            token_normalization: `none`,
-            vae_name: `Baked VAE`,
-            weight_interpretation: `comfy`,
-            positive: form.positive,
-            negative: ``,
-        })
-
-        const startLatent = (() => {
-            const startLatent0 = graph.VAEEncode({ pixels: cropped_image, vae: loader })
-            if (!mask) {
-                return startLatent0
+            const { mask: cropMask, stop: stopAtCrop } = await run_buildMasks(flow, graph, startImage, form.crop)
+            if (stopAtCrop) {
+                return
             }
-            const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask })
-            return startLatent1
-        })()
+            const { cropped_image } = !cropMask
+                ? { cropped_image: startImage }
+                : graph.RL$_Crop$_Resize({ image: startImage, mask: cropMask }).outputs
 
-        const seed = flow.randomSeed()
-        const sampler = graph.KSampler_Adv$5_$1Efficient$2({
-            add_noise: `disable`,
-            return_with_leftover_noise: `disable`,
-            vae_decode: `true`,
-            preview_method: `auto`,
-            noise_seed: seed,
-            steps: 11,
-            cfg: 1.5,
-            sampler_name: 'lcm',
-            scheduler: 'normal',
-            start_at_step: 7,
+            const { mask, stop: stopAtMask } = await run_buildMasks(flow, graph, cropped_image, form.mask)
+            if (stopAtMask) {
+                return
+            }
 
-            model: loader,
-            positive: loader.outputs.CONDITIONING$6, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
-            negative: loader.outputs.CONDITIONING$7, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
-            // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
-            // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
-            latent_image: startLatent,
-        })
+            const loraStack = graph.LoRA_Stacker({
+                input_mode: `simple`,
+                lora_count: 1,
+                lora_name_1: `lcm-lora-sdxl.safetensors`,
+            } as LoRA_Stacker_input)
 
-        graph.SaveImage({
-            images: graph.VAEDecode({ samples: sampler, vae: loader }),
-            filename_prefix: 'ComfyUI',
-        })
+            const loader = graph.Efficient_Loader({
+                ckpt_name: `protovisionXLHighFidelity3D_beta0520Bakedvae.safetensors`,
+                lora_stack: loraStack,
+                // defaults
+                lora_name: `None`,
+                token_normalization: `none`,
+                vae_name: `Baked VAE`,
+                weight_interpretation: `comfy`,
+                positive: form.positive,
+                negative: ``,
+            })
 
-        // Run the graph you built
-        const result = await flow.PROMPT()
+            const startLatent = (() => {
+                const startLatent0 = graph.VAEEncode({ pixels: cropped_image, vae: loader })
+                if (!mask) {
+                    return startLatent0
+                }
+                const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask })
+                return startLatent1
+            })()
 
-        // // Disable some nodes
-        // const iDisableStart = flow.workflow.nodes.indexOf(loraStack) - 1
-        // flow.workflow.nodes.slice(iDisableStart).forEach((x) => x.disable())
+            const seed = flow.randomSeed()
+            const sampler = graph.KSampler_Adv$5_$1Efficient$2({
+                add_noise: `disable`,
+                return_with_leftover_noise: `disable`,
+                vae_decode: `true`,
+                preview_method: `auto`,
+                noise_seed: seed,
+                steps: 11,
+                cfg: 1.5,
+                sampler_name: 'lcm',
+                scheduler: 'normal',
+                start_at_step: 7,
 
-        // // Build new graph with part of old graph
-        // graph.PreviewImage({ images: cropMask.outputs.Heatmap$_Mask })
+                model: loader,
+                positive: loader.outputs.CONDITIONING$6, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
+                negative: loader.outputs.CONDITIONING$7, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
+                // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
+                // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
+                latent_image: startLatent,
+            })
 
-        // // Run new graph
-        // await flow.PROMPT()
+            graph.SaveImage({
+                images: graph.VAEDecode({ samples: sampler, vae: loader }),
+                filename_prefix: 'ComfyUI',
+            })
 
-        // result.delete();
-        // result.
+            // Run the graph you built
+            const result = await flow.PROMPT()
 
-        // Undisable all nodes so they can be rendered in the graph view
-        // flow.workflow.nodes.forEach((x) => (x.disabled = false));
+            // // Disable some nodes
+            // const iDisableStart = flow.workflow.nodes.indexOf(loraStack) - 1
+            // flow.workflow.nodes.slice(iDisableStart).forEach((x) => x.disable())
+
+            // // Build new graph with part of old graph
+            // graph.PreviewImage({ images: cropMask.outputs.Heatmap$_Mask })
+
+            // // Run new graph
+            // await flow.PROMPT()
+
+            // result.delete();
+            // result.
+
+            // Undisable all nodes so they can be rendered in the graph view
+            // flow.workflow.nodes.forEach((x) => (x.disabled = false));
+        } catch (err) {
+            if (err instanceof StopError) {
+                return
+            }
+
+            throw err
+        }
     },
 })
 

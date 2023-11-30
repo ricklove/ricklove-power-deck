@@ -1,40 +1,347 @@
 import { FormBuilder } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
+import { WidgetDict } from 'src/cards/Card'
 
-export const ui_maskItemPrompt = (
-    form: FormBuilder,
-    { defaultPrompt, showUnmask = true }: { defaultPrompt?: string; showUnmask?: boolean } = {},
-) => {
-    return form.group({
-        layout: 'V',
-        items: () => ({
-            prompt: form.str({ default: defaultPrompt ?? `ball` }),
-            ...(!showUnmask ? {} : { unmask: form.bool({ default: false }) }),
-            threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
-            dilation: form.int({ default: 4, min: 0 }),
-            blur: form.float({ default: 1, min: 0 }),
-            erodeOrDilate: form.int({ default: 4, min: -64, max: 64 }),
-            preview: form.inlineRun({}),
-        }),
-    })
+export class StopError extends Error {}
+
+export type AppState = {
+    scopeStack: Record<string, unknown>[]
+    flow: {
+        PROMPT: () => Promise<unknown>
+        print: (message: string) => void
+    }
+    graph: ComfyWorkflowBuilder
 }
 
-export const ui_maskPrompt = (form: FormBuilder, options: { defaultPrompt?: string } = {}) => {
-    return form.group({
-        layout: 'V',
-        items: () => ({
-            parts: form.list({
-                element: () => ui_maskItemPrompt(form, options),
+const storeInScope = <T extends null | Object>(state: AppState, name: string, value: T) => {
+    const { scopeStack } = state
+    scopeStack[scopeStack.length - 1][name] = value
+}
+
+const loadFromScope = <T extends null | Object>(state: AppState, name: string): undefined | T => {
+    const { scopeStack } = state
+
+    let i = scopeStack.length
+    while (i >= 0) {
+        const v = scopeStack[scopeStack.length - 1][name]
+        if (v !== undefined) {
+            return v as T
+        }
+    }
+
+    return undefined
+}
+
+type MaskOperation<TFields extends WidgetDict> = {
+    ui: (form: FormBuilder) => TFields
+    run: (
+        state: AppState,
+        image: _IMAGE,
+        mask: undefined | _MASK,
+        form: { [k in keyof TFields]: TFields[k]['$Output'] },
+    ) => Promise<undefined | _MASK>
+}
+const createMaskOperation = <TFields extends WidgetDict>(op: MaskOperation<TFields>): MaskOperation<TFields> => op
+
+const operation_clipSeg = createMaskOperation({
+    ui: (form) => ({
+        clipSeg: form.groupOpt({
+            items: () => ({
+                prompt: form.str({ default: `ball` }),
+                threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+                dilation: form.int({ default: 4, min: 0 }),
+                blur: form.float({ default: 1, min: 0 }),
             }),
-            segmentIndex: form.intOpt({ default: 0, min: 0, max: 10 }),
-            samDetectorThreshold: form.floatOpt({ default: 0.4, min: 0, max: 1.0 }),
-            erodeOrDilate: form.int({ default: 4, min: -64, max: 64 }),
-            preview: form.inlineRun({}),
         }),
-    })
-}
+    }),
+    run: async ({ flow, graph }, image, mask, form) => {
+        if (form.clipSeg == null) {
+            return mask
+        }
 
-type MaskForm = ReturnType<typeof ui_maskPrompt>
+        const clipMask = graph.CLIPSeg({
+            image: image,
+            text: form.clipSeg.prompt,
+            threshold: form.clipSeg.threshold,
+            dilation_factor: form.clipSeg.dilation,
+            blur: form.clipSeg.blur,
+        })
+
+        return clipMask.outputs.Mask
+    },
+})
+
+const operation_erodeOrDilate = createMaskOperation({
+    ui: (form) => ({
+        erodeOrDilate: form.intOpt({ min: -64, max: 64 }),
+    }),
+    run: async ({ flow, graph }, image, mask, form) => {
+        if (form.erodeOrDilate == null) {
+            return mask
+        }
+        if (!mask) {
+            return mask
+        }
+
+        const maskDilated =
+            form.erodeOrDilate > 0
+                ? graph.Mask_Dilate_Region({ masks: mask, iterations: form.erodeOrDilate })
+                : form.erodeOrDilate < 0
+                ? graph.Mask_Erode_Region({ masks: mask, iterations: -form.erodeOrDilate })
+                : mask
+        return maskDilated
+    },
+})
+
+const operation_segment = createMaskOperation({
+    ui: (form) => ({
+        segmentIndex: form.intOpt({ min: 0, max: 10 }),
+    }),
+    run: async ({ flow, graph }, image, mask, form) => {
+        if (form.segmentIndex == null) {
+            return mask
+        }
+        if (!mask) {
+            return mask
+        }
+
+        const segs = graph.MaskToSEGS({
+            mask,
+        })
+
+        const segsFilter = graph.ImpactSEGSOrderedFilter({
+            segs,
+            target: `area(=w*h)`,
+            take_start: form.segmentIndex,
+        })
+
+        mask = graph.SegsToCombinedMask({ segs: segsFilter.outputs.filtered_SEGS })
+
+        return mask
+    },
+})
+
+const operation_sam = createMaskOperation({
+    ui: (form) => ({
+        sam: form.groupOpt({
+            items: () => ({
+                // prompt: form.str({ default: `ball` }),
+                threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+                // dilation: form.int({ default: 4, min: 0 }),
+                // blur: form.float({ default: 1, min: 0 }),
+            }),
+        }),
+    }),
+    run: async ({ flow, graph }, image, mask, form) => {
+        if (form.sam == null) {
+            return mask
+        }
+        if (!mask) {
+            return mask
+        }
+
+        const samModel = graph.SAMLoader({
+            model_name: `sam_vit_b_01ec64.pth`,
+            device_mode: `Prefer GPU`,
+        })
+
+        const segs = graph.MaskToSEGS({
+            mask,
+        })
+
+        mask = graph.SAMDetectorSegmented({
+            segs,
+            sam_model: samModel,
+            image,
+            detection_hint: `center-1`,
+            mask_hint_use_negative: `False`,
+            threshold: form.sam.threshold,
+        }).outputs.combined_mask
+
+        return mask
+    },
+})
+
+const operation_storeMask = createMaskOperation({
+    ui: (form) => ({
+        storeMask: form.groupOpt({
+            items: () => ({
+                name: form.string({ default: `a` }),
+            }),
+        }),
+    }),
+    run: async (state, image, mask, form) => {
+        if (form.storeMask == null) {
+            return mask
+        }
+
+        storeInScope(state, form.storeMask.name, mask ?? null)
+        return mask
+    },
+})
+
+const operation_combineMasks = createMaskOperation({
+    ui: (form) => ({
+        combineMasks: form.groupOpt({
+            items: () => ({
+                operation: form.selectOne({
+                    choices: [{ id: `union` }, { id: `intersection` }],
+                }),
+                a: form.group({
+                    layout: `V`,
+                    items: () => ({
+                        name: form.string({ default: `a` }),
+                        inverse: form.bool({ default: false }),
+                    }),
+                }),
+                b: form.group({
+                    layout: `V`,
+                    items: () => ({
+                        name: form.string({ default: `b` }),
+                        inverse: form.bool({ default: false }),
+                    }),
+                }),
+                c: form.groupOpt({
+                    layout: `V`,
+                    items: () => ({
+                        name: form.string({ default: `c` }),
+                        inverse: form.bool({ default: false }),
+                    }),
+                }),
+                d: form.groupOpt({
+                    layout: `V`,
+                    items: () => ({
+                        name: form.string({ default: `d` }),
+                        inverse: form.bool({ default: false }),
+                    }),
+                }),
+                e: form.groupOpt({
+                    layout: `V`,
+                    items: () => ({
+                        name: form.string({ default: `d` }),
+                        inverse: form.bool({ default: false }),
+                    }),
+                }),
+            }),
+        }),
+    }),
+    run: async (state, image, mask, form) => {
+        if (form.combineMasks == null) {
+            return mask
+        }
+
+        mask = undefined
+        const otherMasks = [
+            form.combineMasks.a,
+            form.combineMasks.b,
+            form.combineMasks.c,
+            form.combineMasks.d,
+            form.combineMasks.e,
+        ]
+            .filter((x) => x)
+            .map((x) => x!)
+
+        const { graph } = state
+
+        for (const mItem of otherMasks) {
+            const m = loadFromScope<_MASK>(state, mItem.name)
+            if (!m) {
+                continue
+            }
+
+            const mInverted = !mItem.inverse ? m : graph.InvertMask({ mask: m })
+            if (!mask) {
+                mask = mInverted
+                continue
+            }
+
+            mask = run_combineMasks(graph, mask, mInverted, form.combineMasks.operation.id)
+        }
+
+        return mask
+    },
+})
+
+// const operation_combineWithMasks = createMaskOperation({
+//     ui: (form) => ({
+//         combineWithMasks: form.groupOpt({
+//             items: () => ({
+//                 operation: form.selectOne({
+//                     choices: [{ id: `union` }, { id: `intersection` }],
+//                 }),
+//                 a: form.group({
+//                     layout: `V`,
+//                     items: () => ({
+//                         name: form.string({ default: `a` }),
+//                         inverse: form.bool({ default: false }),
+//                     }),
+//                 }),
+//                 b: form.groupOpt({
+//                     layout: `V`,
+//                     items: () => ({
+//                         name: form.string({ default: `b` }),
+//                         inverse: form.bool({ default: false }),
+//                     }),
+//                 }),
+//                 c: form.groupOpt({
+//                     layout: `V`,
+//                     items: () => ({
+//                         name: form.string({ default: `c` }),
+//                         inverse: form.bool({ default: false }),
+//                     }),
+//                 }),
+//                 d: form.groupOpt({
+//                     layout: `V`,
+//                     items: () => ({
+//                         name: form.string({ default: `d` }),
+//                         inverse: form.bool({ default: false }),
+//                     }),
+//                 }),
+//                 e: form.groupOpt({
+//                     layout: `V`,
+//                     items: () => ({
+//                         name: form.string({ default: `d` }),
+//                         inverse: form.bool({ default: false }),
+//                     }),
+//                 }),
+//             }),
+//         }),
+//     }),
+//     run: async (state, image, mask, form) => {
+//         if (form.combineWithMasks == null) {
+//             return mask
+//         }
+
+//         const otherMasks = [
+//             form.combineWithMasks.a,
+//             form.combineWithMasks.b,
+//             form.combineWithMasks.c,
+//             form.combineWithMasks.d,
+//             form.combineWithMasks.e,
+//         ]
+//             .filter((x) => x)
+//             .map((x) => x!)
+
+//         const { graph } = state
+
+//         for (const mItem of otherMasks) {
+//             const m = loadFromScope<_MASK>(state, mItem.name)
+//             if (!m) {
+//                 continue
+//             }
+
+//             const mInverted = !mItem.inverse ? m : graph.InvertMask({ mask: m })
+//             if (!mask) {
+//                 mask = mInverted
+//                 continue
+//             }
+
+//             mask = run_combineMasks(graph, mask, mInverted, form.combineWithMasks.operation.id)
+//         }
+
+//         return mask
+//     },
+// })
 
 export const run_combineMasks = (
     graph: ComfyWorkflowBuilder,
@@ -57,6 +364,96 @@ export const run_combineMasks = (
     })
 }
 
+const operation_all = createMaskOperation({
+    ui: (form) => ({
+        maskOperations: form.list({
+            element: () =>
+                form.group({
+                    layout: 'V',
+                    items: () => ({
+                        ...operation_clipSeg.ui(form),
+                        ...operation_segment.ui(form),
+                        ...operation_sam.ui(form),
+                        ...operation_erodeOrDilate.ui(form),
+                        // ...operation_combineWithMasks.ui(form),
+                        ...operation_storeMask.ui(form),
+                        ...operation_combineMasks.ui(form),
+                        preview: form.inlineRun({}),
+                    }),
+                }),
+        }),
+    }),
+    run: async (state, image, mask, form) => {
+        for (const op of form.maskOperations) {
+            mask = await operation_clipSeg.run(state, image, mask, op)
+            mask = await operation_segment.run(state, image, mask, op)
+            mask = await operation_sam.run(state, image, mask, op)
+            mask = await operation_erodeOrDilate.run(state, image, mask, op)
+            mask = await operation_storeMask.run(state, image, mask, op)
+            mask = await operation_combineMasks.run(state, image, mask, op)
+            // mask = await operation_combineWithMasks.run(state, image, mask, op)
+
+            if (op.preview) {
+                const { flow, graph } = state
+                if (!mask) {
+                    flow.print(`No mask!`)
+                    throw new StopError()
+                }
+
+                const maskAsImage = graph.MaskToImage({ mask })
+                const maskPreview = graph.ImageBlend({
+                    image1: maskAsImage,
+                    image2: image,
+                    blend_mode: `normal`,
+                    blend_factor: 0.5,
+                })
+                // graph.PreviewImage({ images: maskRaw.outputs.Heatmap$_Mask })
+                graph.PreviewImage({ images: maskPreview })
+                await flow.PROMPT()
+                throw new StopError()
+            }
+        }
+
+        return mask
+    },
+})
+
+export const ui_maskItemPrompt = (
+    form: FormBuilder,
+    { defaultPrompt, showUnmask = true }: { defaultPrompt?: string; showUnmask?: boolean } = {},
+) => {
+    return form.group({
+        layout: 'V',
+        items: () => ({
+            prompt: form.str({ default: defaultPrompt ?? `ball` }),
+            ...(!showUnmask ? {} : { unmask: form.bool({ default: false }) }),
+            threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+            dilation: form.int({ default: 4, min: 0 }),
+            blur: form.float({ default: 1, min: 0 }),
+            ...operation_erodeOrDilate.ui(form),
+            preview: form.inlineRun({}),
+        }),
+    })
+}
+
+export const ui_maskPrompt = (form: FormBuilder, options: { defaultPrompt?: string } = {}) => {
+    return form.group({
+        layout: 'V',
+        items: () => ({
+            ...operation_all.ui(form),
+            parts: form.list({
+                element: () => ui_maskItemPrompt(form, options),
+            }),
+            segmentIndex: form.intOpt({ default: 0, min: 0, max: 10 }),
+            samDetectorThreshold: form.floatOpt({ default: 0.4, min: 0, max: 1.0 }),
+            ...operation_erodeOrDilate.ui(form),
+            preview: form.inlineRun({}),
+        }),
+    })
+}
+
+type MaskForm = ReturnType<typeof ui_maskPrompt>
+
 export const run_buildMasks = async (
     flow: {
         PROMPT: () => Promise<unknown>
@@ -66,6 +463,9 @@ export const run_buildMasks = async (
     image: _IMAGE,
     maskForm: MaskForm['$Output'],
 ) => {
+    let state = { flow, graph, scopeStack: [{}] }
+    let test = await operation_all.run(state, image, undefined, maskForm)
+
     let mask = undefined as undefined | _MASK
     let unmask = undefined as undefined | _MASK
     for (const x of maskForm.parts) {
@@ -77,12 +477,7 @@ export const run_buildMasks = async (
             blur: x.blur,
         })
 
-        const maskDilated =
-            x.erodeOrDilate > 0
-                ? graph.Mask_Dilate_Region({ masks: maskRaw, iterations: x.erodeOrDilate })
-                : x.erodeOrDilate < 0
-                ? graph.Mask_Erode_Region({ masks: maskRaw, iterations: -x.erodeOrDilate })
-                : maskRaw
+        const maskDilated = (await operation_erodeOrDilate.run(state, image, maskRaw, x)) ?? maskRaw
 
         if (!x.unmask) {
             mask = !mask ? maskDilated : run_combineMasks(graph, mask, maskDilated, `union`)
@@ -141,12 +536,7 @@ export const run_buildMasks = async (
     }
 
     if (mask && maskForm.erodeOrDilate !== 0) {
-        mask =
-            maskForm.erodeOrDilate > 0
-                ? graph.Mask_Dilate_Region({ masks: mask, iterations: maskForm.erodeOrDilate })
-                : maskForm.erodeOrDilate < 0
-                ? graph.Mask_Erode_Region({ masks: mask, iterations: -maskForm.erodeOrDilate })
-                : mask
+        mask = await operation_erodeOrDilate.run(state, image, mask, maskForm)
     }
 
     if (maskForm.preview) {
