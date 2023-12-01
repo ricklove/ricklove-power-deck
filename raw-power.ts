@@ -8,6 +8,7 @@ app({
 
         startImage: form.image({}),
         _1: form.markdown({ markdown: `# Prepare Image` }),
+
         // crop1:
         cropMaskOperations: operation_mask.ui(form),
         //operation_mask.ui(form).maskOperations,
@@ -18,6 +19,19 @@ app({
         // g: form.groupOpt({
         //     items: () => ({
         positive: form.str({}),
+        size: form.choice({
+            items: () => ({
+                common: form.selectOne({
+                    default: { id: `512` },
+                    choices: [{ id: `384` }, { id: `512` }, { id: `768` }, { id: `1024` }, { id: `1280` }, { id: `1920` }],
+                }),
+                custom: form.number({ default: 512, min: 32, max: 8096 }),
+            }),
+        }),
+        steps: form.int({ default: 11, min: 0, max: 100 }),
+        startStepRelative: form.int({ default: 0, min: 0, max: 100 }),
+        endStepRelative: form.intOpt({ default: 0, min: 0, max: 100 }),
+        config: form.float({ default: 1.5 }),
 
         //     }),
         // }),
@@ -50,11 +64,14 @@ app({
 
             const cropMask = await operation_mask.run(state, startImage, undefined, form.cropMaskOperations)
 
+            const { size: sizeInput } = form
+            const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
             const { cropped_image } = !cropMask
                 ? { cropped_image: startImage }
-                : graph.RL$_Crop$_Resize({ image: startImage, mask: cropMask }).outputs
+                : graph.RL$_Crop$_Resize({ image: startImage, mask: cropMask, max_side_length: size }).outputs
 
-            const mask = await operation_mask.run(state, cropped_image, undefined, form.replaceMaskOperations)
+            // TODO: move replaceMask before crop so it is built on original pixels
+            const replaceMask = await operation_mask.run(state, cropped_image, undefined, form.replaceMaskOperations)
 
             const loraStack = graph.LoRA_Stacker({
                 input_mode: `simple`,
@@ -76,10 +93,10 @@ app({
 
             const startLatent = (() => {
                 const startLatent0 = graph.VAEEncode({ pixels: cropped_image, vae: loader })
-                if (!mask) {
+                if (!replaceMask) {
                     return startLatent0
                 }
-                const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask })
+                const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask })
                 return startLatent1
             })()
 
@@ -90,11 +107,13 @@ app({
                 vae_decode: `true`,
                 preview_method: `auto`,
                 noise_seed: seed,
-                steps: 11,
-                cfg: 1.5,
+                steps: form.steps,
+                start_at_step: form.steps - form.startStepRelative,
+                end_at_step: form.steps - (form.endStepRelative ?? 0),
+
+                cfg: form.config,
                 sampler_name: 'lcm',
                 scheduler: 'normal',
-                start_at_step: 0,
 
                 model: loader,
                 positive: loader.outputs.CONDITIONING$6, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
