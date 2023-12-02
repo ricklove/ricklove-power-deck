@@ -1,5 +1,4 @@
 import { StopError, operation_mask } from './src/_maskPrefabs'
-import { TestComponentWrapper } from './src/test'
 import { appOptimized } from './src/optimizer'
 
 appOptimized({
@@ -9,7 +8,6 @@ appOptimized({
         startImage: form.image({}),
         _1: form.markdown({
             markdown: () => `# Prepare Image`,
-            customComponent: TestComponentWrapper,
         }),
 
         // crop1:

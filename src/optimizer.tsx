@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid'
 import React, { useState } from 'react'
 import { renderToString } from 'react-dom/server'
-import { Widget_CustomComponentProps } from 'src'
+import { Widget_custom_componentProps } from 'src'
 import {
     FormBuilder,
     Widget,
@@ -24,7 +24,7 @@ import { unknown } from 'zod'
 export type OptimizerComponentViewState = InteractiveViewState & {
     varPath?: string
     images?: {
-        imageId: string
+        imageId: MediaImageID
         value: unknown
         formResults: Record<string, unknown>
         optimizedValues: { varPath: string; value: unknown }[]
@@ -42,11 +42,11 @@ const sortUnknown = <T extends unknown>(a: T, b: T, getValue: (t: T) => unknown)
     return `${aValue}`.localeCompare(`${bValue}`)
 }
 
-export const OptimizerComponent = (props: Widget_CustomComponentProps) => {
-    return <OptimizerComponentInner {...(props as Widget_CustomComponentProps<OptimizerComponentViewState>)} />
+export const OptimizerComponent = (props: Widget_custom_componentProps) => {
+    return <OptimizerComponentInner {...(props as Widget_custom_componentProps<OptimizerComponentViewState>)} />
 }
 
-const OptimizerComponentInner = (props: Widget_CustomComponentProps<OptimizerComponentViewState>) => {
+const OptimizerComponentInner = (props: Widget_custom_componentProps<OptimizerComponentViewState>) => {
     const { value = {} } = props
     const change = (v: Partial<OptimizerComponentViewState>) => {
         props.onChange({ ...value, ...v })
@@ -95,7 +95,7 @@ const OptimizerComponentInner = (props: Widget_CustomComponentProps<OptimizerCom
                         {g.items.map((x, i) => (
                             <React.Fragment key={i}>
                                 <div className='flex flex-col'>
-                                    <div>{x.imageId && <props.ui.image imageId={x.imageId} />}</div>
+                                    <div>{x.imageId && <props.ui.image img={x.imageId} />}</div>
                                     <div>
                                         {x.optimizedValues?.map((o) => (
                                             <React.Fragment key={o.varPath}>
@@ -158,9 +158,7 @@ const formOptimize = <TOpts, TResult extends Widget, TResultNonOpt extends Widge
                     count: form.int({ label: `Iterations`, default: 5, min: 1, max: 100 }),
                     run: form.inlineRun({ text: `Run`, className: `self-end` }),
                     clear: form.inlineRun({ text: `Clear`, kind: `warning` }),
-                    results: form.markdown({
-                        label: ``,
-                        markdown: () => ``,
+                    results: form.custom({
                         customComponent: OptimizerComponent,
                     }),
                 }),
@@ -187,10 +185,11 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                           formOptimize(form, form.float, opts, { isOptional: true, includeMinMax: true }),
                   }
 
+                  const uiResult = ui(formBuilderCustom as unknown as FormBuilder)
                   return {
-                      ...ui(formBuilderCustom as unknown as FormBuilder),
+                      ...uiResult,
                       clearOptimization: form.inlineRun({ kind: `warning` }),
-                  }
+                  } as typeof uiResult
               },
         run: async (runtime, formResultsRaw) => {
             const currentDraft = runtime.st.currentDraft
