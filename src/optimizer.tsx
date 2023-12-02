@@ -19,15 +19,29 @@ import {
 } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { GlobalFunctionToDefineAnApp, WidgetDict } from 'src/cards/Card'
+import { unknown } from 'zod'
 
 export type OptimizerComponentViewState = InteractiveViewState & {
+    varPath?: string
     images?: {
         imageId: string
         value: unknown
         formResults: Record<string, unknown>
-        optimizedValues: { value: unknown; varPath: string[] }[]
+        optimizedValues: { varPath: string; value: unknown }[]
     }[]
+    secondarySortVarPath?: string
 }
+
+const sortUnknown = <T extends unknown>(a: T, b: T, getValue: (t: T) => unknown) => {
+    const aValue = getValue(a)
+    const bValue = getValue(b)
+    if (typeof aValue === `number` && typeof bValue === `number`) {
+        return aValue - bValue
+    }
+
+    return `${aValue}`.localeCompare(`${bValue}`)
+}
+
 export const OptimizerComponent = (props: Widget_CustomComponentProps) => {
     return <OptimizerComponentInner {...(props as Widget_CustomComponentProps<OptimizerComponentViewState>)} />
 }
@@ -35,16 +49,26 @@ export const OptimizerComponent = (props: Widget_CustomComponentProps) => {
 const OptimizerComponentInner = (props: Widget_CustomComponentProps<OptimizerComponentViewState>) => {
     const { value = {} } = props
     const change = (v: Partial<OptimizerComponentViewState>) => {
-        props.onChange({ ...props.value, ...v })
+        props.onChange({ ...value, ...v })
     }
 
+    // TODO: Optimize this
+    const secondarySortVarPaths = [...new Set(value.images?.flatMap((x) => x.optimizedValues.map((o) => o.varPath)))].filter(
+        (x) => x !== value.varPath,
+    )
+    const secondarySortVarPath = value.secondarySortVarPath ?? secondarySortVarPaths[0]
     const imagesSorted = (value.images ?? [])?.sort((a, b) => {
-        if (typeof a.value === `number` && typeof b.value === `number`) {
-            return a.value - b.value
+        const s1 = sortUnknown(a, b, (x) => x.value)
+        if (s1 || !secondarySortVarPath) {
+            return s1
         }
 
-        return `${a.value}`.localeCompare(`${b.value}`)
+        return sortUnknown(a, b, (x) => x.optimizedValues.find((o) => o.varPath === secondarySortVarPath)?.value ?? 0)
     })
+    const getBucketValue = (x: unknown): string => (typeof x === `number` ? `${Math.floor(x * 20) / 20}` : `${x}`)
+    const imageGroupsMap = new Map(imagesSorted.map((x) => [getBucketValue(x.value), [] as typeof imagesSorted]))
+    imagesSorted.forEach((x) => imageGroupsMap.get(getBucketValue(x.value))?.push(x))
+    const imageGroups = [...imageGroupsMap.entries()].map(([k, v]) => ({ key: k, items: v }))
 
     const formatValue = (value: unknown) => {
         return `${typeof value === `number` && !Number.isInteger(value) ? (value as number).toFixed?.(2) : value}`
@@ -52,26 +76,42 @@ const OptimizerComponentInner = (props: Widget_CustomComponentProps<OptimizerCom
 
     return (
         <div>
-            <div className='flex flex-row flex-wrap'>
-                {imagesSorted.map((x, i) => (
-                    <React.Fragment key={i}>
-                        <div className='flex flex-col'>
-                            <div>{formatValue(x.value)}</div>
-                            <div>{x.imageId && <props.ui.image imageId={x.imageId} />}</div>
-                            <div>
-                                {x.optimizedValues?.map((o) => (
-                                    <React.Fragment key={o.varPath.join(`.`)}>
-                                        <div className='flex flex-row justify-between p-1'>
-                                            <div className='text-xs break-all'>{o.varPath.join(`.`)}</div>
-                                            <div className='text-xs'>{formatValue(o.value)}</div>
-                                        </div>
-                                    </React.Fragment>
-                                ))}
-                            </div>
+            <div>
+                {secondarySortVarPaths.map((x) => (
+                    <React.Fragment key={x}>
+                        <div
+                            className={`btn btn-sm ${x === secondarySortVarPath ? `btn-outline` : `btn-ghost`}`}
+                            onClick={() => change({ secondarySortVarPath: x })}
+                        >
+                            {x}
                         </div>
                     </React.Fragment>
                 ))}
             </div>
+            {imageGroups.map((g) => (
+                <React.Fragment key={g.key}>
+                    <div className='flex flex-row flex-wrap'>
+                        <div className='text-xs'>{formatValue(g.key)}</div>
+                        {g.items.map((x, i) => (
+                            <React.Fragment key={i}>
+                                <div className='flex flex-col'>
+                                    <div>{x.imageId && <props.ui.image imageId={x.imageId} />}</div>
+                                    <div>
+                                        {x.optimizedValues?.map((o) => (
+                                            <React.Fragment key={o.varPath}>
+                                                <div className='flex flex-row justify-between p-1'>
+                                                    <div className='text-xs break-all'>{o.varPath}</div>
+                                                    <div className='text-xs'>{formatValue(o.value)}</div>
+                                                </div>
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                </div>
+                            </React.Fragment>
+                        ))}
+                    </div>
+                </React.Fragment>
+            ))}
         </div>
     )
 }
@@ -373,10 +413,11 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                         .map((x) => ({
                             value: usedValue,
                             formResults: formResultsObj,
-                            optimizedValues,
+                            optimizedValues: optimizedValues.map((x) => ({ ...x, varPath: x.varPath.join(`.`) })),
                             imageId: x,
                         })),
                 ]
+                compValue.varPath = x.varPath.join(`.`)
                 formSerialOptimizeValue.results.componentValue = { ...compValue }
 
                 // console.log(`optimizedValues forEach`, {
