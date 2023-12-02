@@ -289,6 +289,9 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
 
                 if (i > 0) {
                     formResults = injectOptimizedValue(formResultsRaw, [])
+
+                    // Disable all existing nodes
+                    runtime.workflow.nodes.forEach((x) => x.disable())
                 }
 
                 await run(runtime, formResults as unknown as typeof formResultsRaw)

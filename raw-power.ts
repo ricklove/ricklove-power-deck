@@ -1,32 +1,14 @@
-import {
-    FormBuilder,
-    Widget,
-    Widget_floatOpt_opts,
-    Widget_float_opts,
-    Widget_group,
-    Widget_group_output,
-    Widget_group_serial,
-    Widget_inlineRun,
-    Widget_int,
-    Widget_intOpt_opts,
-    Widget_int_opts,
-    Widget_list_output,
-    Widget_markdown,
-} from 'src'
-import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { StopError, operation_mask } from './src/_maskPrefabs'
 import { TestComponentWrapper } from './src/test'
-import { OptimizerComponent, OptimizerComponentViewState, appOptimized } from './src/optimizer'
-import { GlobalFunctionToDefineAnApp, WidgetDict } from 'src/cards/Card'
+import { appOptimized } from './src/optimizer'
 
-let renderCount = 0
 appOptimized({
     ui: (form) => ({
         workingDirectory: form.str({}),
 
         startImage: form.image({}),
         _1: form.markdown({
-            markdown: () => `# Prepare Image ${renderCount++} ${new Date()}`,
+            markdown: () => `# Prepare Image`,
             customComponent: TestComponentWrapper,
         }),
 
@@ -57,81 +39,8 @@ appOptimized({
         add_noise: form.bool({ default: true }),
 
         render: form.inlineRun({}),
-        // test: form.image({
-        //     default: `cushy`,
-        //     // defaultCushy:{ }
-        // }),
-
-        //     }),
-        // }),
-
-        // testTimeline: form.timeline({
-        //     width: 100,
-        //     height: 100,
-        //     element: () => ({
-        //         item: form.str({ default: `ball` }),
-        //     }),
-        // }),
-        // testRegional: form.regional({
-        //     width: 100,
-        //     height: 100,
-        //     element: () => ({
-        //         item: form.str({ default: `ball` }),
-        //     }),
-        // }),
     }),
     run: async (flow, form) => {
-        // flow.formSerial._1.componentValue=
-        // flow.AUTO
-
-        // const getOptimizeredValue = async (
-        //     formResult: Widget_group_output<{
-        //         readonly value: Widget_int
-        //         readonly preview: Widget_inlineRun
-        //         readonly results: Widget_markdown
-        //     }>,
-        //     formSerial: Widget_group_serial<{
-        //         readonly value: Widget_int
-        //         readonly preview: Widget_inlineRun
-        //         readonly results: Widget_markdown
-        //     }>,
-        // ) => {
-        //     const id = formSerial.id
-
-        //     // populate results
-        //     // const componentValue: OptimizerComponentViewState = {
-        //     //     images: flow.generatedImages.map((x) => ({
-        //     //         inputValue: 0
-        //     //         path: x.filename,
-        //     //     })),
-        //     // }
-        //     // formSerial.values_.results.componentValue = componentValue
-        //     // get optimal value
-
-        //     return formResult.value
-        // }
-
-        // const addOptimizerResult = (
-        //     image: { path: string },
-        //     value: number,
-        //     formSerial: Widget_group_serial<{
-        //         readonly value: Widget_int
-        //         readonly preview: Widget_inlineRun
-        //         readonly results: Widget_markdown
-        //     }>,
-        // ) => {
-        //     const componentValue: OptimizerComponentViewState = formSerial.values_.results.componentValue ?? {
-        //         images: [],
-        //     }
-
-        //     componentValue.images?.push({
-        //         path: image.path,
-        //         value,
-        //     })
-
-        //     formSerial.values_.results.componentValue = { ...componentValue }
-        // }
-
         try {
             setTimeout(() => {
                 // flow.st.currentDraft.gui.value?.state
@@ -139,13 +48,6 @@ appOptimized({
             }, 1000)
 
             flow.print(`${JSON.stringify(form)}`)
-
-            // flow.output_File({});
-
-            // flow.output_HTML({
-            //     title: `preview2`,
-            //     htmlContent: testHtmlContent,
-            // })
 
             // Build a ComfyUI graph
             const graph = flow.nodes
