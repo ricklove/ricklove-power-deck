@@ -33,7 +33,10 @@ appOptimized({
         }),
 
         steps: form.int({ default: 11, min: 0, max: 100 }),
-        startStepFromEnd: form.intOpt({ default: 0, min: 0, max: 100 }),
+        startStep: form.intOpt({ default: 1, min: 0, max: 100 }),
+        startStepFromEnd: form.intOpt({ default: 1, min: 0, max: 100 }),
+        stepsToIterate: form.intOpt({ default: 2, min: 0, max: 100 }),
+        endStep: form.intOpt({ default: 1000, min: 0, max: 100 }),
         endStepFromEnd: form.intOpt({ default: 0, min: 0, max: 100 }),
         config: form.float({ default: 1.5 }),
         add_noise: form.bool({ default: true }),
@@ -95,6 +98,26 @@ appOptimized({
             })()
 
             const seed = flow.randomSeed()
+            const startStep = Math.max(
+                0,
+                Math.min(
+                    form.steps - 1,
+                    form.startStep ? form.startStep : form.startStepFromEnd ? form.steps - form.startStepFromEnd : 0,
+                ),
+            )
+            const endStep = Math.max(
+                1,
+                Math.min(
+                    form.steps,
+                    form.endStep
+                        ? form.endStep
+                        : form.endStepFromEnd
+                        ? form.steps - form.endStepFromEnd
+                        : form.stepsToIterate
+                        ? startStep + form.stepsToIterate
+                        : form.steps,
+                ),
+            )
             const sampler = graph.KSampler_Adv$5_$1Efficient$2({
                 add_noise: form.add_noise ? `enable` : `disable`,
                 return_with_leftover_noise: `disable`,
@@ -102,8 +125,8 @@ appOptimized({
                 preview_method: `auto`,
                 noise_seed: seed,
                 steps: form.steps,
-                start_at_step: !form.startStepFromEnd ? 0 : form.steps - form.startStepFromEnd,
-                end_at_step: form.steps - (form.endStepFromEnd ?? 0),
+                start_at_step: startStep,
+                end_at_step: endStep,
 
                 cfg: form.config,
                 sampler_name: 'lcm',

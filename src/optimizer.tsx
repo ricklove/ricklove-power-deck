@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid'
 import React, { useState } from 'react'
 import { renderToString } from 'react-dom/server'
 import { Widget_CustomComponentProps } from 'src'
@@ -20,7 +21,12 @@ import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { GlobalFunctionToDefineAnApp, WidgetDict } from 'src/cards/Card'
 
 export type OptimizerComponentViewState = InteractiveViewState & {
-    images?: { imageId: string; value: unknown }[]
+    images?: {
+        imageId: string
+        value: unknown
+        formResults: Record<string, unknown>
+        optimizedValues: { value: unknown; varPath: string[] }[]
+    }[]
 }
 export const OptimizerComponent = (props: Widget_CustomComponentProps) => {
     return <OptimizerComponentInner {...(props as Widget_CustomComponentProps<OptimizerComponentViewState>)} />
@@ -40,18 +46,28 @@ const OptimizerComponentInner = (props: Widget_CustomComponentProps<OptimizerCom
         return `${a.value}`.localeCompare(`${b.value}`)
     })
 
+    const formatValue = (value: unknown) => {
+        return `${typeof value === `number` && !Number.isInteger(value) ? (value as number).toFixed?.(2) : value}`
+    }
+
     return (
         <div>
             <div className='flex flex-row flex-wrap'>
                 {imagesSorted.map((x, i) => (
                     <React.Fragment key={i}>
                         <div className='flex flex-col'>
-                            <div>{`${
-                                typeof x.value === `number` && !Number.isInteger(x.value)
-                                    ? (x.value as number).toFixed?.(2)
-                                    : x.value
-                            }`}</div>
+                            <div>{formatValue(x.value)}</div>
                             <div>{x.imageId && <props.ui.image imageId={x.imageId} />}</div>
+                            <div>
+                                {x.optimizedValues?.map((o) => (
+                                    <React.Fragment key={o.varPath.join(`.`)}>
+                                        <div className='flex flex-row justify-between p-1'>
+                                            <div className='text-xs break-all'>{o.varPath.join(`.`)}</div>
+                                            <div className='text-xs'>{formatValue(o.value)}</div>
+                                        </div>
+                                    </React.Fragment>
+                                ))}
+                            </div>
                         </div>
                     </React.Fragment>
                 ))}
@@ -82,14 +98,13 @@ const InteractiveTest = (props: { value: InteractiveViewState; onChange: (value:
 
 const formOptimize = <TOpts, TResult extends Widget, TResultNonOpt extends Widget>(
     form: FormBuilder,
-    formCreate: (opts: TOpts) => TResult,
     formCreateNonOptional: (opts: TOpts) => TResultNonOpt,
     opts: TOpts,
     options?: { isOptional: boolean; includeMinMax?: boolean },
 ) => {
     return (options?.isOptional ? form.groupOpt : form.group)({
         items: () => ({
-            _value: formCreate(opts),
+            _value: formCreateNonOptional(opts),
             _optimize: form.groupOpt({
                 layout: `V`,
                 items: () => ({
@@ -114,6 +129,7 @@ const formOptimize = <TOpts, TResult extends Widget, TResultNonOpt extends Widge
     })
 }
 
+let autoRunsRemaining = 0
 export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
     return app({
         ui: !ui
@@ -122,25 +138,67 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                   const formBuilderCustom = {
                       ...form,
                       int: (opts: Widget_int_opts) =>
-                          formOptimize(form, form.int, form.int, opts, { isOptional: false, includeMinMax: true }),
+                          formOptimize(form, form.int, opts, { isOptional: false, includeMinMax: true }),
                       intOpt: (opts: Widget_intOpt_opts) =>
-                          formOptimize(form, form.intOpt, form.int, opts, { isOptional: true, includeMinMax: true }),
+                          formOptimize(form, form.int, opts, { isOptional: true, includeMinMax: true }),
                       float: (opts: Widget_float_opts) =>
-                          formOptimize(form, form.float, form.float, opts, { isOptional: false, includeMinMax: true }),
+                          formOptimize(form, form.float, opts, { isOptional: false, includeMinMax: true }),
                       floatOpt: (opts: Widget_floatOpt_opts) =>
-                          formOptimize(form, form.floatOpt, form.float, opts, { isOptional: true, includeMinMax: true }),
+                          formOptimize(form, form.float, opts, { isOptional: true, includeMinMax: true }),
                   }
 
-                  return ui(formBuilderCustom as unknown as FormBuilder)
+                  return {
+                      ...ui(formBuilderCustom as unknown as FormBuilder),
+                      clearOptimization: form.inlineRun({ kind: `warning` }),
+                  }
               },
         run: async (runtime, formResultsRaw) => {
+            const currentDraft = runtime.st.currentDraft
             const formSerial = runtime.formSerial
+
+            if (formResultsRaw.clearOptimization) {
+                const clearOptimizationRecursive = (n: unknown) => {
+                    if (!n || !(typeof n === `object`)) {
+                        return
+                    }
+
+                    if (Array.isArray(n)) {
+                        for (const x of n) {
+                            clearOptimizationRecursive(x)
+                        }
+                        return
+                    }
+
+                    if (`_optimize` in n) {
+                        const nTyped = n as {
+                            _optimize: {
+                                values_: {
+                                    results: {
+                                        componentValue: undefined | OptimizerComponentViewState
+                                    }
+                                }
+                            }
+                        }
+                        nTyped._optimize.values_.results.componentValue = undefined
+                        return
+                    }
+
+                    for (const x of Object.values(n)) {
+                        clearOptimizationRecursive(x)
+                    }
+                }
+
+                clearOptimizationRecursive(formSerial)
+
+                return
+            }
 
             const optimizationState = {
                 count: 1,
             }
             const optimizedValues = [] as {
                 varPath: string[]
+                value: unknown
             }[]
 
             const injectOptimizedValue = (vRaw: unknown, varPath: string[]): typeof vRaw => {
@@ -157,8 +215,6 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                 if (!(`_optimize` in v)) {
                     return Object.fromEntries(Object.entries(v).map(([k, v2]) => [k, injectOptimizedValue(v2, [...varPath, k])]))
                 }
-
-                optimizedValues.push({ varPath })
 
                 let value = v._value as unknown
 
@@ -201,27 +257,25 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                     }
                 }
 
-                console.log(`appOptimized: random normal value`, {
-                    min,
-                    max,
-                    value,
-                    v,
-                    vRaw: JSON.parse(JSON.stringify(vRaw)),
-                    // formResultsRaw: JSON.parse(JSON.stringify(formResultsRaw)),
-                    // formResults: JSON.parse(JSON.stringify(formResults)),
-                    // formSerial: JSON.parse(JSON.stringify(formSerial)),
-                })
+                // console.log(`appOptimized: random normal value`, {
+                //     min,
+                //     max,
+                //     value,
+                //     v,
+                //     vRaw: JSON.parse(JSON.stringify(vRaw)),
+                // })
 
+                optimizedValues.push({ varPath, value })
                 return value as typeof v
             }
 
             let formResults = injectOptimizedValue(formResultsRaw, [])
 
-            console.log(`appOptimized injected optimized values`, {
-                formResultsRaw: JSON.parse(JSON.stringify(formResultsRaw)),
-                formResults: JSON.parse(JSON.stringify(formResults)),
-                formSerial: JSON.parse(JSON.stringify(formSerial)),
-            })
+            // console.log(`appOptimized injected optimized values`, {
+            //     formResultsRaw: JSON.parse(JSON.stringify(formResultsRaw)),
+            //     formResults: JSON.parse(JSON.stringify(formResults)),
+            //     formSerial: JSON.parse(JSON.stringify(formSerial)),
+            // })
 
             const navigateToOptimizationVar = (varPath: string[]) => {
                 let raw = formResultsRaw
@@ -282,56 +336,68 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                 }
             }
 
-            for (let i = 0; i < optimizationState.count; i++) {
-                console.log(`appOptimized running ${i}`, {
-                    optimizedValues,
-                })
+            // console.log(`appOptimized running`, {
+            //     optimizedValues,
+            //     autoRunsRemaining,
+            // })
 
-                if (i > 0) {
-                    formResults = injectOptimizedValue(formResultsRaw, [])
+            await run(runtime, formResults as unknown as typeof formResultsRaw)
 
-                    // Disable all existing nodes
-                    runtime.workflow.nodes.forEach((x) => x.disable())
+            const generatedOutputIds = runtime.step.generatedImages.map((x) => x?.id ?? ``).filter((x) => x)
+
+            // console.log(`appOptimized ran`, {
+            //     optimizedValues,
+            //     generatedOutputIds,
+            //     generatedImages: runtime.step.generatedImages,
+            // })
+
+            // const formResultId = runtime.
+
+            const formResultsObj = JSON.parse(JSON.stringify(formResults)) as Record<string, unknown>
+            // formResultsJson.__id = nanoid()
+            optimizedValues.forEach((x) => {
+                const { formResultValue, formSerialOptimizeValue, formResultRawValue } = navigateToOptimizationVar(x.varPath)
+
+                if (!formResultRawValue._optimize) {
+                    return
                 }
 
-                await run(runtime, formResults as unknown as typeof formResultsRaw)
+                const usedValue = formResultValue as unknown
 
-                // const generatedOutputIds = [runtime.step.lastOutput].map((x) => x?.id ?? ``).filter((x) => x)
-                const generatedOutputIds = runtime.step.generatedImages.map((x) => x?.id ?? ``).filter((x) => x)
+                const compValue = formSerialOptimizeValue.results.componentValue ?? {}
+                // compValue.formResults = [...(compValue.formResults ?? []), formResultsJson]
+                compValue.images = [
+                    ...(compValue.images ?? []),
+                    ...generatedOutputIds
+                        .filter((x) => !compValue.images?.some((y) => y.imageId === x))
+                        .map((x) => ({
+                            value: usedValue,
+                            formResults: formResultsObj,
+                            optimizedValues,
+                            imageId: x,
+                        })),
+                ]
+                formSerialOptimizeValue.results.componentValue = { ...compValue }
 
-                console.log(`appOptimized ran`, {
-                    optimizedValues,
-                    generatedOutputIds,
-                    generatedImages: runtime.step.generatedImages,
-                })
+                // console.log(`optimizedValues forEach`, {
+                //     usedValue,
+                //     formResultValue,
+                //     formSerialOptimizeValue,
+                //     x,
+                //     formResults,
+                //     formSerial: JSON.parse(JSON.stringify(formSerial)),
+                // })
+            })
 
-                optimizedValues.forEach((x) => {
-                    const { formResultValue, formSerialOptimizeValue } = navigateToOptimizationVar(x.varPath)
-
-                    const usedValue = formResultValue as unknown
-
-                    const compValue = formSerialOptimizeValue.results.componentValue ?? {}
-                    compValue.images = [
-                        ...(compValue.images ?? []),
-                        ...generatedOutputIds
-                            .filter((x) => !compValue.images?.some((y) => y.imageId === x))
-                            .map((x) => ({
-                                value: usedValue,
-                                imageId: x,
-                            })),
-                    ]
-                    formSerialOptimizeValue.results.componentValue = { ...compValue }
-
-                    // const v = ser.values_ as ;
-                    console.log(`optimizedValues forEach`, {
-                        usedValue,
-                        formResultValue,
-                        formSerialOptimizeValue,
-                        x,
-                        formResults,
-                        formSerial: JSON.parse(JSON.stringify(formSerial)),
-                    })
-                })
+            if (autoRunsRemaining > 0) {
+                autoRunsRemaining--
+            } else if (optimizationState.count > 1) {
+                autoRunsRemaining = optimizationState.count - 1
+            }
+            if (autoRunsRemaining > 0) {
+                setTimeout(() => {
+                    currentDraft.start()
+                }, 100)
             }
         },
     })
