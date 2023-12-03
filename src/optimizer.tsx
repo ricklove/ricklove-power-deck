@@ -210,12 +210,12 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                             _optimize: {
                                 values_: {
                                     results: {
-                                        componentValue: undefined | OptimizerComponentViewState
+                                        componentState: undefined | OptimizerComponentViewState
                                     }
                                 }
                             }
                         }
-                        nTyped._optimize.values_.results.componentValue = undefined
+                        nTyped._optimize.values_.results.componentState = undefined
                         return
                     }
 
@@ -348,7 +348,7 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                     _optimize: {
                         values_: {
                             results: {
-                                componentValue: OptimizerComponentViewState
+                                componentState: OptimizerComponentViewState
                             }
                         }
                     }
@@ -366,8 +366,8 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
             for (const o of optimizedValues) {
                 const { formResultRawValue, formSerialOptimizeValue } = navigateToOptimizationVar(o.varPath)
                 if (formResultRawValue._optimize?.clear) {
-                    formSerialOptimizeValue.results.componentValue.images = []
-                    formSerialOptimizeValue.results.componentValue = { ...formSerialOptimizeValue.results.componentValue }
+                    formSerialOptimizeValue.results.componentState.images = []
+                    formSerialOptimizeValue.results.componentState = { ...formSerialOptimizeValue.results.componentState }
                     return
                 }
             }
@@ -400,7 +400,7 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
 
                 const usedValue = formResultValue as unknown
 
-                const compValue = formSerialOptimizeValue.results.componentValue ?? {}
+                const compValue = formSerialOptimizeValue.results.componentState ?? {}
                 // compValue.formResults = [...(compValue.formResults ?? []), formResultsJson]
                 compValue.images = [
                     ...(compValue.images ?? []),
@@ -414,7 +414,7 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                         })),
                 ]
                 compValue.varPath = x.varPath.join(`.`)
-                formSerialOptimizeValue.results.componentValue = { ...compValue }
+                formSerialOptimizeValue.results.componentState = { ...compValue }
 
                 // console.log(`optimizedValues forEach`, {
                 //     usedValue,

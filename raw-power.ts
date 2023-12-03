@@ -12,6 +12,7 @@ appOptimized({
 
         // crop1:
         cropMaskOperations: operation_mask.ui(form),
+        cropPadding: form.int({ default: 64 }),
         //operation_mask.ui(form).maskOperations,
         replaceMaskOperations: operation_mask.ui(form),
         // ...operation_replaceMask.ui(form),
@@ -54,11 +55,12 @@ appOptimized({
 
             const cropMask = await operation_mask.run(state, startImage, undefined, form.cropMaskOperations)
 
-            const { size: sizeInput } = form
+            const { size: sizeInput, cropPadding } = form
             const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
             const { cropped_image } = !cropMask
                 ? { cropped_image: startImage }
-                : graph.RL$_Crop$_Resize({ image: startImage, mask: cropMask, max_side_length: size }).outputs
+                : graph.RL$_Crop$_Resize({ image: startImage, mask: cropMask, max_side_length: size, padding: cropPadding })
+                      .outputs
 
             // TODO: move replaceMask before crop so it is built on original pixels
             const replaceMask = await operation_mask.run(state, cropped_image, undefined, form.replaceMaskOperations)
