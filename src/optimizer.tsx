@@ -42,22 +42,18 @@ const sortUnknown = <T extends unknown>(a: T, b: T, getValue: (t: T) => unknown)
     return `${aValue}`.localeCompare(`${bValue}`)
 }
 
-export const OptimizerComponent = (props: Widget_custom_componentProps) => {
-    return <OptimizerComponentInner {...(props as Widget_custom_componentProps<OptimizerComponentViewState>)} />
-}
-
-const OptimizerComponentInner = (props: Widget_custom_componentProps<OptimizerComponentViewState>) => {
-    const { value = {} } = props
+const OptimizerComponent = (props: Widget_custom_componentProps<OptimizerComponentViewState>) => {
+    const { componentState: s = {} } = props
     const change = (v: Partial<OptimizerComponentViewState>) => {
-        props.onChange({ ...value, ...v })
+        props.onChange({ ...s, ...v })
     }
 
     // TODO: Optimize this
-    const secondarySortVarPaths = [...new Set(value.images?.flatMap((x) => x.optimizedValues.map((o) => o.varPath)))].filter(
-        (x) => x !== value.varPath,
+    const secondarySortVarPaths = [...new Set(s.images?.flatMap((x) => x.optimizedValues.map((o) => o.varPath)))].filter(
+        (x) => x !== s.varPath,
     )
-    const secondarySortVarPath = value.secondarySortVarPath ?? secondarySortVarPaths[0]
-    const imagesSorted = (value.images ?? [])?.sort((a, b) => {
+    const secondarySortVarPath = s.secondarySortVarPath ?? secondarySortVarPaths[0]
+    const imagesSorted = (s.images ?? [])?.sort((a, b) => {
         const s1 = sortUnknown(a, b, (x) => x.value)
         if (s1 || !secondarySortVarPath) {
             return s1
@@ -159,7 +155,8 @@ const formOptimize = <TOpts, TResult extends Widget, TResultNonOpt extends Widge
                     run: form.inlineRun({ text: `Run`, className: `self-end` }),
                     clear: form.inlineRun({ text: `Clear`, kind: `warning` }),
                     results: form.custom({
-                        customComponent: OptimizerComponent,
+                        Component: OptimizerComponent,
+                        default: {},
                     }),
                 }),
             }),
@@ -436,7 +433,7 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
             }
             if (autoRunsRemaining > 0) {
                 setTimeout(() => {
-                    currentDraft.start()
+                    currentDraft?.start()
                 }, 100)
             }
         },

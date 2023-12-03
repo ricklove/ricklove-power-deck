@@ -43,11 +43,6 @@ appOptimized({
     }),
     run: async (flow, form) => {
         try {
-            setTimeout(() => {
-                // flow.st.currentDraft.gui.value?.state
-                flow.formSerial._1.componentValue = { items: [`cool`, `its`, `working`] }
-            }, 1000)
-
             flow.print(`${JSON.stringify(form)}`)
 
             // Build a ComfyUI graph
