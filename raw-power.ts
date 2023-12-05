@@ -1,5 +1,5 @@
 import { StopError, operation_mask } from './src/_maskPrefabs'
-import { appOptimized } from './src/optimizer'
+import { appOptimized, OptimizerComponent, OptimizerComponentViewState } from './src/optimizer'
 
 appOptimized({
     ui: (form) => ({
@@ -39,10 +39,22 @@ appOptimized({
         endStepFromEnd: form.intOpt({ default: 0, min: 0, max: 100 }),
         config: form.float({ default: 1.5 }),
         add_noise: form.bool({ default: true }),
+        useImpaintingModel: form.bool({ default: false }),
+        useImpaintingEncode: form.bool({ default: false }),
 
         render: form.inlineRun({}),
+
+        testSeed: form.seed({}),
+        test: form.custom({
+            Component: OptimizerComponent,
+            defaultValue: () => ({} as OptimizerComponentViewState),
+        }),
     }),
     run: async (flow, form) => {
+        // flow.formSerial.test.value.
+        // flow.formSerial.testSeed.val = 10
+        // flow.formInstance.state.values.testSeed.state.val
+
         try {
             flow.print(`${JSON.stringify(form)}`)
 
@@ -51,7 +63,28 @@ appOptimized({
             const state = { flow, graph, scopeStack: [{}] }
 
             // load, crop, and resize image
-            const startImage = await flow.loadImageAnswer(form.startImage)
+            const startImageRaw = await flow.loadImageAnswer(form.startImage)
+            const startImage = graph.AlphaChanelRemove({ images: startImageRaw })
+
+            // graph.CropImage$_AS({
+
+            // })
+
+            // const resizeImage = await graph.Image_Resize({
+            //     image: startImage,
+            //     mode:`resize`,
+            //     resampling:`lanczos`,
+            //     supersample: `false`,
+            //     resize_width: width,
+            //     resize_height: height,
+            // });
+
+            // const resizedImage = await graph.ImageTransformResizeClip({
+            //     images: Image,
+            //     method:`lanczos`,
+            //     max_width: width,
+            //     max_height: height,
+            // });
 
             const cropMask = await operation_mask.run(state, startImage, undefined, form.cropMaskOperations)
 
@@ -68,12 +101,14 @@ appOptimized({
             const loraStack = graph.LoRA_Stacker({
                 input_mode: `simple`,
                 lora_count: 1,
-                lora_name_1: `lcm-lora-sdxl.safetensors`,
+                lora_name_1: form.useImpaintingModel ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`,
             } as LoRA_Stacker_input)
 
             const loader = graph.Efficient_Loader({
-                ckpt_name: `protovisionXLHighFidelity3D_beta0520Bakedvae.safetensors`,
-                lora_stack: flow.AUTO(),
+                ckpt_name: form.useImpaintingModel
+                    ? `realisticVisionV51_v51VAE-inpainting.safetensors`
+                    : `protovisionXLHighFidelity3D_beta0520Bakedvae.safetensors`,
+                lora_stack: loraStack,
                 // defaults
                 lora_name: `None`,
                 token_normalization: `none`,
@@ -84,6 +119,10 @@ appOptimized({
             })
 
             const startLatent = (() => {
+                if (replaceMask && form.useImpaintingEncode) {
+                    return graph.VAEEncodeForInpaint({ pixels: cropped_image, vae: loader, mask: replaceMask })
+                }
+
                 const startLatent0 = graph.VAEEncode({ pixels: cropped_image, vae: loader })
                 if (!replaceMask) {
                     return startLatent0
@@ -91,6 +130,10 @@ appOptimized({
                 const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask })
                 return startLatent1
             })()
+
+            let latent = startLatent._LATENT
+            // latent = graph.LatentUpscaleBy({ samples: latent, scale_by: 1.1, upscale_method: `bicubic` }).outputs.LATENT
+            // latent = graph.LatentCrop({ samples: latent, width: 1024, height: 1024, x: width* }).outputs.LATENT
 
             const seed = flow.randomSeed()
             const startStep = Math.max(

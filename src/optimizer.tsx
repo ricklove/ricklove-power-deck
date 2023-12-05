@@ -1,25 +1,8 @@
-import { nanoid } from 'nanoid'
-import React, { useState } from 'react'
-import { renderToString } from 'react-dom/server'
-import { Widget_custom_componentProps } from 'src'
-import {
-    FormBuilder,
-    Widget,
-    Widget_floatOpt_opts,
-    Widget_float_opts,
-    Widget_group,
-    Widget_group_output,
-    Widget_group_serial,
-    Widget_inlineRun,
-    Widget_int,
-    Widget_intOpt_opts,
-    Widget_int_opts,
-    Widget_list_output,
-    Widget_markdown,
-} from 'src'
-import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
-import { GlobalFunctionToDefineAnApp, WidgetDict } from 'src/cards/Card'
-import { unknown } from 'zod'
+import { CustomWidgetProps } from 'src'
+import { FormBuilder, Widget, Widget_floatOpt_opts, Widget_float_opts, Widget_intOpt_opts, Widget_int_opts } from 'src'
+import { GlobalFunctionToDefineAnApp } from 'src/cards/Card'
+import { observer } from 'mobx-react-lite'
+import { Fragment } from 'react'
 
 export type OptimizerComponentViewState = InteractiveViewState & {
     varPath?: string
@@ -42,10 +25,14 @@ const sortUnknown = <T extends unknown>(a: T, b: T, getValue: (t: T) => unknown)
     return `${aValue}`.localeCompare(`${bValue}`)
 }
 
-const OptimizerComponent = (props: Widget_custom_componentProps<OptimizerComponentViewState>) => {
-    const { componentState: s = {} } = props
+export const OptimizerComponent = observer((props: CustomWidgetProps<OptimizerComponentViewState>) => {
+    const {
+        widget: {
+            state: { value: s },
+        },
+    } = props
     const change = (v: Partial<OptimizerComponentViewState>) => {
-        props.onChange({ ...s, ...v })
+        props.widget.state.value = { ...props.widget.state.value, ...v }
     }
 
     // TODO: Optimize this
@@ -53,7 +40,7 @@ const OptimizerComponent = (props: Widget_custom_componentProps<OptimizerCompone
         (x) => x !== s.varPath,
     )
     const secondarySortVarPath = s.secondarySortVarPath ?? secondarySortVarPaths[0]
-    const imagesSorted = (s.images ?? [])?.sort((a, b) => {
+    const imagesSorted = (s.images ?? [])?.slice().sort((a, b) => {
         const s1 = sortUnknown(a, b, (x) => x.value)
         if (s1 || !secondarySortVarPath) {
             return s1
@@ -74,43 +61,43 @@ const OptimizerComponent = (props: Widget_custom_componentProps<OptimizerCompone
         <div>
             <div>
                 {secondarySortVarPaths.map((x) => (
-                    <React.Fragment key={x}>
+                    <Fragment key={x}>
                         <div
                             className={`btn btn-sm ${x === secondarySortVarPath ? `btn-outline` : `btn-ghost`}`}
                             onClick={() => change({ secondarySortVarPath: x })}
                         >
                             {x}
                         </div>
-                    </React.Fragment>
+                    </Fragment>
                 ))}
             </div>
             {imageGroups.map((g) => (
-                <React.Fragment key={g.key}>
+                <Fragment key={g.key}>
                     <div className='flex flex-row flex-wrap'>
                         <div className='text-xs'>{formatValue(g.key)}</div>
                         {g.items.map((x, i) => (
-                            <React.Fragment key={i}>
+                            <Fragment key={i}>
                                 <div className='flex flex-col'>
-                                    <div>{x.imageId && <props.ui.image img={x.imageId} />}</div>
+                                    <div>{x.imageId && <props.extra.ImageUI img={x.imageId} />}</div>
                                     <div>
                                         {x.optimizedValues?.map((o) => (
-                                            <React.Fragment key={o.varPath}>
+                                            <Fragment key={o.varPath}>
                                                 <div className='flex flex-row justify-between p-1'>
                                                     <div className='text-xs break-all'>{o.varPath}</div>
                                                     <div className='text-xs'>{formatValue(o.value)}</div>
                                                 </div>
-                                            </React.Fragment>
+                                            </Fragment>
                                         ))}
                                     </div>
                                 </div>
-                            </React.Fragment>
+                            </Fragment>
                         ))}
                     </div>
-                </React.Fragment>
+                </Fragment>
             ))}
         </div>
     )
-}
+})
 
 type InteractiveViewState = {
     clickCount?: number
@@ -156,7 +143,7 @@ const formOptimize = <TOpts, TResult extends Widget, TResultNonOpt extends Widge
                     clear: form.inlineRun({ text: `Clear`, kind: `warning` }),
                     results: form.custom({
                         Component: OptimizerComponent,
-                        default: {},
+                        defaultValue: () => ({} as OptimizerComponentViewState),
                     }),
                 }),
             }),
@@ -210,12 +197,12 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                             _optimize: {
                                 values_: {
                                     results: {
-                                        componentState: undefined | OptimizerComponentViewState
+                                        value: undefined | OptimizerComponentViewState
                                     }
                                 }
                             }
                         }
-                        nTyped._optimize.values_.results.componentState = undefined
+                        nTyped._optimize.values_.results.value = undefined
                         return
                     }
 
@@ -348,7 +335,7 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                     _optimize: {
                         values_: {
                             results: {
-                                componentState: OptimizerComponentViewState
+                                value: OptimizerComponentViewState
                             }
                         }
                     }
@@ -366,8 +353,8 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
             for (const o of optimizedValues) {
                 const { formResultRawValue, formSerialOptimizeValue } = navigateToOptimizationVar(o.varPath)
                 if (formResultRawValue._optimize?.clear) {
-                    formSerialOptimizeValue.results.componentState.images = []
-                    formSerialOptimizeValue.results.componentState = { ...formSerialOptimizeValue.results.componentState }
+                    formSerialOptimizeValue.results.value.images = []
+                    formSerialOptimizeValue.results.value = { ...formSerialOptimizeValue.results.value }
                     return
                 }
             }
@@ -400,7 +387,7 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
 
                 const usedValue = formResultValue as unknown
 
-                const compValue = formSerialOptimizeValue.results.componentState ?? {}
+                const compValue = formSerialOptimizeValue.results.value ?? {}
                 // compValue.formResults = [...(compValue.formResults ?? []), formResultsJson]
                 compValue.images = [
                     ...(compValue.images ?? []),
@@ -414,7 +401,7 @@ export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
                         })),
                 ]
                 compValue.varPath = x.varPath.join(`.`)
-                formSerialOptimizeValue.results.componentState = { ...compValue }
+                formSerialOptimizeValue.results.value = { ...compValue }
 
                 // console.log(`optimizedValues forEach`, {
                 //     usedValue,

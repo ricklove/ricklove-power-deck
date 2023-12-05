@@ -75,6 +75,32 @@ const operation_clipSeg = createMaskOperation({
     },
 })
 
+const operation_color = createMaskOperation({
+    ui: (form) => ({
+        color: form.groupOpt({
+            items: () => ({
+                intensity: form.int({ default: 0, min: 0, max: 255 }),
+            }),
+        }),
+    }),
+    run: async ({ flow, graph }, image, mask, form) => {
+        if (form.color == null) {
+            return mask
+        }
+
+        const colorMask = graph.ImageColorToMask({
+            image,
+            color: form.color.intensity,
+        })
+        const dilated = graph.Mask_Dilate_Region({
+            masks: colorMask,
+            iterations: 1,
+        })
+
+        return dilated.outputs.MASKS
+    },
+})
+
 const operation_erodeOrDilate = createMaskOperation({
     ui: (form) => ({
         erodeOrDilate: form.intOpt({ min: -64, max: 64 }),
@@ -376,6 +402,7 @@ const operations_all = createMaskOperation({
                     layout: 'V',
                     items: () => ({
                         ...operation_clipSeg.ui(form),
+                        ...operation_color.ui(form),
                         ...operation_segment.ui(form),
                         ...operation_sam.ui(form),
                         ...operation_erodeOrDilate.ui(form),
@@ -390,6 +417,7 @@ const operations_all = createMaskOperation({
     run: async (state, image, mask, form) => {
         for (const op of form.maskOperations) {
             mask = await operation_clipSeg.run(state, image, mask, op)
+            mask = await operation_color.run(state, image, mask, op)
             mask = await operation_segment.run(state, image, mask, op)
             mask = await operation_sam.run(state, image, mask, op)
             mask = await operation_erodeOrDilate.run(state, image, mask, op)
