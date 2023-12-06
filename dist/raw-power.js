@@ -902,14 +902,14 @@ appOptimized({
       defaultValue: () => ({})
     })
   }),
-  run: async (flow, form) => {
+  run: async (runtime, form) => {
     const iterate = async (iterationIndex) => {
-      flow.print(`${JSON.stringify(form)}`);
+      runtime.print(`${JSON.stringify(form)}`);
       const dependencyKeyRef = { dependencyKey: `` };
       const imageDirectory = form.imageSource.directory.replace(/\/$/g, ``);
       const workingDirectory = `${imageDirectory}/working`;
-      const graph = flow.nodes;
-      const state = { runtime: flow, workingDirectory, graph, scopeStack: [{}] };
+      const graph = runtime.nodes;
+      const state = { runtime, workingDirectory, graph, scopeStack: [{}] };
       const frameIndex = form.imageSource.startIndex + iterationIndex * (form.imageSource.selectEveryNth ?? 1);
       const startImage = graph.Load_Image_Sequence_$1mtb$2({
         path: `${imageDirectory}/${form.imageSource.filePattern}`,
@@ -917,7 +917,7 @@ appOptimized({
       }).outputs.image;
       if (form.imageSource.preview) {
         graph.PreviewImage({ images: startImage });
-        await flow.PROMPT();
+        await runtime.PROMPT();
         throw new StopError();
       }
       const { mask: cropMask } = await cacheMask(
@@ -934,7 +934,7 @@ appOptimized({
           const maskImage = graph.MaskToImage({ mask: cropMask });
           graph.PreviewImage({ images: maskImage });
         }
-        await flow.PROMPT();
+        await runtime.PROMPT();
         throw new StopError();
       }
       const { size: sizeInput, cropPadding } = form;
@@ -959,7 +959,7 @@ appOptimized({
           graph.PreviewImage({ images: maskImage });
         }
         graph.PreviewImage({ images: croppedImage });
-        await flow.PROMPT();
+        await runtime.PROMPT();
         throw new StopError();
       }
       const replaceMaskBatch = await operation_mask.run(state, croppedImage, void 0, form.replaceMaskOperations);
@@ -973,7 +973,7 @@ appOptimized({
         const imagePre = c.controlNet.toLowerCase().includes(`depth`) ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }) : c.controlNet.toLowerCase().includes(`normal`) ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }) : croppedImage;
         if (c.preview) {
           graph.PreviewImage({ images: imagePre });
-          await flow.PROMPT();
+          await runtime.PROMPT();
           throw new StopError();
         }
         controlNetStack = graph.Control_Net_Stacker({
@@ -1025,10 +1025,10 @@ appOptimized({
         }
         const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE });
         graph.PreviewImage({ images: latentImage });
-        await flow.PROMPT();
+        await runtime.PROMPT();
         throw new StopError();
       }
-      const seed = flow.randomSeed();
+      const seed = runtime.randomSeed();
       const startStep = Math.max(
         0,
         Math.min(
@@ -1068,13 +1068,14 @@ appOptimized({
         images: graph.VAEDecode({ samples: sampler, vae: loader }),
         filename_prefix: "ComfyUI"
       });
-      const result = await flow.PROMPT();
+      const result = await runtime.PROMPT();
     };
     for (let i = 0; i < form.imageSource.iterationCount; i++) {
-      const loadingMain = showLoadingMessage(flow, `iteration: ${i}`);
+      const loadingMain = showLoadingMessage(runtime, `iteration: ${i}`);
       try {
         await iterate(i);
         loadingMain.delete();
+        disableNodesAfter(runtime, 0);
       } catch (err) {
         if (!(err instanceof StopError)) {
           throw err;
