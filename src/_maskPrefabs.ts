@@ -414,7 +414,19 @@ const operations_all = createMaskOperation({
                 }),
         }),
     }),
-    run: async (state, image, mask, form) => {
+    run: async (state, imageBatch, maskBatch, form) => {
+        const { flow, graph } = state
+
+        const image = graph.ImpactImageBatchToImageList({
+            image: imageBatch,
+        })
+
+        let mask = !maskBatch
+            ? undefined
+            : (graph.MasksToMaskList({
+                  masks: maskBatch,
+              }).outputs.MASK as _MASK)
+
         for (const op of form.maskOperations) {
             mask = await operation_clipSeg.run(state, image, mask, op)
             mask = await operation_color.run(state, image, mask, op)
@@ -426,7 +438,6 @@ const operations_all = createMaskOperation({
             // mask = await operation_combineWithMasks.run(state, image, mask, op)
 
             if (op.preview) {
-                const { flow, graph } = state
                 if (!mask) {
                     flow.print(`No mask!`)
                     throw new StopError()
@@ -446,7 +457,13 @@ const operations_all = createMaskOperation({
             }
         }
 
-        return mask
+        const maskBatchFinal = !mask
+            ? undefined
+            : graph.MaskListToMaskBatch({
+                  mask,
+              })
+
+        return maskBatchFinal
     },
 })
 
