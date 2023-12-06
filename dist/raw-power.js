@@ -17,6 +17,35 @@ var disableNodesAfter = (runtime, iNodeStartDisable) => {
   runtime.workflow.nodes.slice(iNodeStartDisable).forEach((x) => x.disable());
 };
 
+// library/ricklove/my-cushy-deck/src/_random.ts
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = h << 13 | h >>> 19;
+  }
+  return () => {
+    h = Math.imul(h ^ h >>> 16, 2246822507);
+    h = Math.imul(h ^ h >>> 13, 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+function mulberry32(a) {
+  return () => {
+    let t = a += 1831565813;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+var createRandomGenerator = (hash) => {
+  const seed = xmur3(hash)();
+  const random = mulberry32(seed);
+  const randomInt = (minInclusive = 0, maxExclusive = Number.MAX_SAFE_INTEGER) => Math.min(minInclusive + Math.floor(random() * (maxExclusive - minInclusive)), maxExclusive - 1);
+  const randomItem = (items) => items[randomInt(0, items.length)];
+  return { random, randomInt, randomItem };
+};
+
 // library/ricklove/my-cushy-deck/src/humor/_loading.ts
 var loadingMessages = `
 "Calibrating the hyperdrive with unicorn whispers."
@@ -122,43 +151,14 @@ var loadingMessages = `
 `.split(`
 `).map((x) => x.trim().replace(/"/g, ``)).filter((x) => x);
 
-// library/ricklove/my-cushy-deck/src/_random.ts
-function xmur3(str) {
-  let h = 1779033703 ^ str.length;
-  for (let i = 0; i < str.length; i++) {
-    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-    h = h << 13 | h >>> 19;
-  }
-  return () => {
-    h = Math.imul(h ^ h >>> 16, 2246822507);
-    h = Math.imul(h ^ h >>> 13, 3266489909);
-    return (h ^= h >>> 16) >>> 0;
-  };
-}
-function mulberry32(a) {
-  return () => {
-    let t = a += 1831565813;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-var createRandomGenerator = (hash) => {
-  const seed = xmur3(hash)();
-  const random = mulberry32(seed);
-  const randomInt = (minInclusive = 0, maxExclusive = Number.MAX_SAFE_INTEGER) => Math.min(minInclusive + Math.floor(random() * (maxExclusive - minInclusive)), maxExclusive - 1);
-  const randomItem = (items) => items[randomInt(0, items.length)];
-  return { random, randomInt, randomItem };
-};
-
-// library/ricklove/my-cushy-deck/src/_cache.ts
+// library/ricklove/my-cushy-deck/src/_loadingMessage.ts
 var rand = createRandomGenerator(`${Date.now()}`);
-var randomLoadingMessage = (runtime, context, contextData) => {
-  return runtime.output_Markdown(`### Loading... 
+var showLoadingMessage = (runtime, title, data) => {
+  const message = `### Loading... 
     
-${context}
-
-${!contextData ? `` : Object.entries(contextData).map(
+    ${title}
+    
+    ${!data ? `` : Object.entries(data).map(
     ([k, v]) => typeof v === `string` && v.includes(`
 `) ? `- ${k}: 
 
@@ -168,49 +168,64 @@ ${!contextData ? `` : Object.entries(contextData).map(
   ).join(`
 `)}
     
-- ${rand.randomItem(loadingMessages)}
-- ${rand.randomItem(loadingMessages)}
-- ${rand.randomItem(loadingMessages)}
-- ${rand.randomItem(loadingMessages)}
-- ${rand.randomItem(loadingMessages)}
-
-`);
+    ### Detailed Master Plan
+    
+    ${[...new Array(20)].map((_) => `- ${rand.randomItem(loadingMessages)}`).join(`
+`)}
+    
+    ### Oops...
+    
+    - If you are reading this somehting probably broke
+    - Manual intervention is likely required
+    - Not sure why you are still reading
+    - You should probably do something
+    
+    `;
+  let messageItem = runtime.output_Markdown(message);
+  const timeoutId = setTimeout(() => {
+    messageItem.delete();
+    messageItem = runtime.output_Markdown(message);
+  }, 1e3);
+  return {
+    delete: () => {
+      clearTimeout(timeoutId);
+      messageItem.delete();
+    }
+  };
 };
-var cacheMask = async (state, frameIndex, paramsKey, createMaskGraph) => {
+
+// library/ricklove/my-cushy-deck/src/_cache.ts
+var cacheImage = async (state, folderPrefix, frameIndex, params, dependencyKeyRef, createGraph) => {
   const { runtime, graph } = state;
-  const paramsPath = createRandomGenerator(paramsKey).randomInt();
-  const paramsFilePattern = `${state.workingDirectory}/${paramsPath}/#####.png`;
-  const loadMaskGraph = () => {
-    const maskImageReloaded = graph.RL$_LoadImageSequence({
+  const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
+  dependencyKeyRef.dependencyKey = paramsHash;
+  const paramsFilePattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}/#####.png`;
+  const loadImage_graph = () => {
+    const imageReloaded = graph.RL$_LoadImageSequence({
       path: paramsFilePattern,
       current_frame: frameIndex
     }).outputs.image;
-    const maskReloaded = graph.Image_To_Mask({
-      image: maskImageReloaded,
-      method: `intensity`
-    }).outputs.MASK;
-    return maskReloaded;
+    return imageReloaded;
   };
-  const createMask = async () => {
-    const mask = await createMaskGraph();
-    if (!mask) {
+  const createImage_execute = async () => {
+    const image = await createGraph();
+    if (!image) {
       return void 0;
     }
-    const maskImage = graph.MaskToImage({ mask });
     graph.RL$_SaveImageSequence({
-      images: maskImage,
+      images: image,
       current_frame: frameIndex,
       path: paramsFilePattern
     });
     const result = await runtime.PROMPT();
     if (result.data.error) {
-      throw new Error(`cacheMask: Failed to create mask`);
+      throw new Error(`cacheImage: Failed to create image`);
     }
   };
   const iNextInitial = getNextActiveNodeIndex(runtime);
-  const loadingMessage = randomLoadingMessage(runtime, `cacheMask ${frameIndex}`, { frameIndex, paramsKey });
+  const loadingMessage = showLoadingMessage(runtime, `cacheImage( ${frameIndex} )`, { frameIndex, params });
   try {
-    const mask = loadMaskGraph();
+    const image = loadImage_graph();
     const result = await runtime.PROMPT();
     if (result.data.error) {
       result.delete();
@@ -218,7 +233,7 @@ var cacheMask = async (state, frameIndex, paramsKey, createMaskGraph) => {
     }
     loadingMessage.delete();
     console.log(
-      `cacheMask: Load Success`,
+      `cacheImage: Load Success`,
       JSON.parse(
         JSON.stringify({
           data: result.data,
@@ -226,19 +241,38 @@ var cacheMask = async (state, frameIndex, paramsKey, createMaskGraph) => {
         })
       )
     );
-    return mask;
+    return { image };
   } catch {
     disableNodesAfter(runtime, iNextInitial);
   }
-  console.log(`cacheMask: Failed to load - creating`, {
+  console.log(`cacheImage: Failed to load - creating`, {
     paramsFilePattern,
     frameIndex,
-    paramsKey
+    params
   });
-  await createMask();
+  await createImage_execute();
   disableNodesAfter(runtime, iNextInitial);
   loadingMessage.delete();
-  return loadMaskGraph();
+  return { image: loadImage_graph() };
+};
+var cacheMask = async (state, folderPrefix, frameIndex, params, dependencyKeyRef, createGraph) => {
+  const { graph } = state;
+  const { image: reloadedMaskImage } = await cacheImage(state, folderPrefix, frameIndex, params, dependencyKeyRef, async () => {
+    const mask = await createGraph();
+    if (!mask) {
+      return void 0;
+    }
+    const maskImage = graph.MaskToImage({ mask });
+    return maskImage;
+  });
+  if (!reloadedMaskImage) {
+    return { mask: void 0 };
+  }
+  const maskReloaded = graph.Image_To_Mask({
+    image: reloadedMaskImage,
+    method: `intensity`
+  }).outputs.MASK;
+  return { mask: maskReloaded };
 };
 
 // library/ricklove/my-cushy-deck/src/_maskPrefabs.ts
@@ -871,6 +905,7 @@ appOptimized({
   run: async (flow, form) => {
     const iterate = async (iterationIndex) => {
       flow.print(`${JSON.stringify(form)}`);
+      const dependencyKeyRef = { dependencyKey: `` };
       const imageDirectory = form.imageSource.directory.replace(/\/$/g, ``);
       const workingDirectory = `${imageDirectory}/working`;
       const graph = flow.nodes;
@@ -885,10 +920,12 @@ appOptimized({
         await flow.PROMPT();
         throw new StopError();
       }
-      const cropMask = await cacheMask(
+      const { mask: cropMask } = await cacheMask(
         state,
+        `cropMask`,
         frameIndex,
-        JSON.stringify(form.cropMaskOperations),
+        form.cropMaskOperations,
+        dependencyKeyRef,
         async () => await operation_mask.run(state, startImage, void 0, form.cropMaskOperations)
       );
       if (form.previewCropMask) {
@@ -902,23 +939,30 @@ appOptimized({
       }
       const { size: sizeInput, cropPadding } = form;
       const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
-      const croppedImageBatch = !cropMask ? startImage : graph.RL$_Crop$_Resize({
-        image: startImage,
-        mask: cropMask,
-        max_side_length: size,
-        padding: cropPadding
-      }).outputs.cropped_image;
+      const { image: croppedImage } = !cropMask ? { image: startImage } : await cacheImage(
+        state,
+        `croppedImage`,
+        frameIndex,
+        { size, cropPadding },
+        dependencyKeyRef,
+        async () => graph.RL$_Crop$_Resize({
+          image: startImage,
+          mask: cropMask,
+          max_side_length: size,
+          padding: cropPadding
+        }).outputs.cropped_image
+      );
       if (form.previewCrop) {
         graph.PreviewImage({ images: startImage });
         if (cropMask) {
           const maskImage = graph.MaskToImage({ mask: cropMask });
           graph.PreviewImage({ images: maskImage });
         }
-        graph.PreviewImage({ images: croppedImageBatch });
+        graph.PreviewImage({ images: croppedImage });
         await flow.PROMPT();
         throw new StopError();
       }
-      const replaceMaskBatch = await operation_mask.run(state, croppedImageBatch, void 0, form.replaceMaskOperations);
+      const replaceMaskBatch = await operation_mask.run(state, croppedImage, void 0, form.replaceMaskOperations);
       const loraStack = !form.lcm ? void 0 : graph.LoRA_Stacker({
         input_mode: `simple`,
         lora_count: 1,
@@ -926,7 +970,7 @@ appOptimized({
       });
       let controlNetStack = void 0;
       for (const c of form.controlNet) {
-        const imagePre = c.controlNet.toLowerCase().includes(`depth`) ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImageBatch }) : c.controlNet.toLowerCase().includes(`normal`) ? graph.BAE$7NormalMapPreprocessor({ image: croppedImageBatch }) : croppedImageBatch;
+        const imagePre = c.controlNet.toLowerCase().includes(`depth`) ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }) : c.controlNet.toLowerCase().includes(`normal`) ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }) : croppedImage;
         if (c.preview) {
           graph.PreviewImage({ images: imagePre });
           await flow.PROMPT();
@@ -956,7 +1000,7 @@ appOptimized({
       const startLatent = (() => {
         if (replaceMaskBatch && form.useImpaintingEncode) {
           const imageList = graph.ImpactImageBatchToImageList({
-            image: croppedImageBatch
+            image: croppedImage
           });
           let maskList = graph.MasksToMaskList({
             masks: replaceMaskBatch
@@ -966,7 +1010,7 @@ appOptimized({
             latents: latentList
           });
         }
-        const startLatent0 = graph.VAEEncode({ pixels: croppedImageBatch, vae: loader });
+        const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader });
         if (!replaceMaskBatch) {
           return startLatent0;
         }
@@ -1027,13 +1071,15 @@ appOptimized({
       const result = await flow.PROMPT();
     };
     for (let i = 0; i < form.imageSource.iterationCount; i++) {
+      const loadingMain = showLoadingMessage(flow, `iteration: ${i}`);
       try {
         await iterate(i);
+        loadingMain.delete();
       } catch (err) {
-        if (err instanceof StopError) {
-          return;
+        if (!(err instanceof StopError)) {
+          throw err;
         }
-        throw err;
+        loadingMain.delete();
       }
     }
   }

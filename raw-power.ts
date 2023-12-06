@@ -1,5 +1,6 @@
 import { StopError } from './src/_appState'
-import { cacheMask } from './src/_cache'
+import { cacheImage, cacheMask } from './src/_cache'
+import { showLoadingMessage } from './src/_loadingMessage'
 import { operation_mask } from './src/_maskPrefabs'
 import { appOptimized, OptimizerComponent, OptimizerComponentViewState } from './src/optimizer'
 
@@ -110,6 +111,7 @@ appOptimized({
 
         const iterate = async (iterationIndex: number) => {
             flow.print(`${JSON.stringify(form)}`)
+            const dependencyKeyRef = { dependencyKey: `` }
 
             // Build a ComfyUI graph
             const imageDirectory = form.imageSource.directory.replace(/\/$/g, ``)
@@ -149,12 +151,15 @@ appOptimized({
             //     max_height: height,
             // });
 
-            const cropMask = await cacheMask(
+            const { mask: cropMask } = await cacheMask(
                 state,
+                `cropMask`,
                 frameIndex,
-                JSON.stringify(form.cropMaskOperations),
+                form.cropMaskOperations,
+                dependencyKeyRef,
                 async () => await operation_mask.run(state, startImage, undefined, form.cropMaskOperations),
             )
+
             if (form.previewCropMask) {
                 graph.PreviewImage({ images: startImage })
                 if (cropMask) {
@@ -167,14 +172,22 @@ appOptimized({
 
             const { size: sizeInput, cropPadding } = form
             const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
-            const croppedImageBatch = !cropMask
-                ? startImage
-                : graph.RL$_Crop$_Resize({
-                      image: startImage,
-                      mask: cropMask,
-                      max_side_length: size,
-                      padding: cropPadding,
-                  }).outputs.cropped_image
+            const { image: croppedImage } = !cropMask
+                ? { image: startImage }
+                : await cacheImage(
+                      state,
+                      `croppedImage`,
+                      frameIndex,
+                      { size, cropPadding },
+                      dependencyKeyRef,
+                      async () =>
+                          graph.RL$_Crop$_Resize({
+                              image: startImage,
+                              mask: cropMask,
+                              max_side_length: size,
+                              padding: cropPadding,
+                          }).outputs.cropped_image,
+                  )
 
             if (form.previewCrop) {
                 graph.PreviewImage({ images: startImage })
@@ -182,12 +195,12 @@ appOptimized({
                     const maskImage = graph.MaskToImage({ mask: cropMask })
                     graph.PreviewImage({ images: maskImage })
                 }
-                graph.PreviewImage({ images: croppedImageBatch })
+                graph.PreviewImage({ images: croppedImage })
                 await flow.PROMPT()
                 throw new StopError()
             }
 
-            const replaceMaskBatch = await operation_mask.run(state, croppedImageBatch, undefined, form.replaceMaskOperations)
+            const replaceMaskBatch = await operation_mask.run(state, croppedImage, undefined, form.replaceMaskOperations)
 
             const loraStack = !form.lcm
                 ? undefined
@@ -200,10 +213,10 @@ appOptimized({
             let controlNetStack = undefined as undefined | Control_Net_Stacker
             for (const c of form.controlNet) {
                 const imagePre = c.controlNet.toLowerCase().includes(`depth`)
-                    ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImageBatch })
+                    ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage })
                     : c.controlNet.toLowerCase().includes(`normal`)
-                    ? graph.BAE$7NormalMapPreprocessor({ image: croppedImageBatch })
-                    : croppedImageBatch
+                    ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage })
+                    : croppedImage
 
                 if (c.preview) {
                     graph.PreviewImage({ images: imagePre })
@@ -237,7 +250,7 @@ appOptimized({
             const startLatent = (() => {
                 if (replaceMaskBatch && form.useImpaintingEncode) {
                     const imageList = graph.ImpactImageBatchToImageList({
-                        image: croppedImageBatch,
+                        image: croppedImage,
                     })
 
                     let maskList = graph.MasksToMaskList({
@@ -250,7 +263,7 @@ appOptimized({
                     })
                 }
 
-                const startLatent0 = graph.VAEEncode({ pixels: croppedImageBatch, vae: loader })
+                const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader })
                 if (!replaceMaskBatch) {
                     return startLatent0
                 }
@@ -346,14 +359,18 @@ appOptimized({
         }
 
         for (let i = 0; i < form.imageSource.iterationCount; i++) {
+            const loadingMain = showLoadingMessage(flow, `iteration: ${i}`)
+
             try {
                 await iterate(i)
+                loadingMain.delete()
             } catch (err) {
-                if (err instanceof StopError) {
-                    return
+                if (!(err instanceof StopError)) {
+                    throw err
                 }
 
-                throw err
+                loadingMain.delete()
+                // return
             }
         }
     },
