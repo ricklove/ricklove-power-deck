@@ -7,9 +7,241 @@
 // ███    ███ ███    ███    ▄█    ███   ███    ███   ███   ███        ███    ███   ███          ███
 // ████████▀  ████████▀   ▄████████▀    ███    █▀     ▀█████▀         ███    █▀   ▄████▀       ▄████▀
 
-// library/ricklove/my-cushy-deck/src/_maskPrefabs.ts
+// library/ricklove/my-cushy-deck/src/_appState.ts
 var StopError = class extends Error {
 };
+var getNextActiveNodeIndex = (runtime) => {
+  return runtime.workflow.nodes.findLastIndex((x) => !x.disabled) + 1;
+};
+var disableNodesAfter = (runtime, iNodeStartDisable) => {
+  runtime.workflow.nodes.slice(iNodeStartDisable).forEach((x) => x.disable());
+};
+
+// library/ricklove/my-cushy-deck/src/humor/_loading.ts
+var loadingMessages = `
+"Calibrating the hyperdrive with unicorn whispers."
+"Translating alien emojis into Earthly emotions."
+"Dancing the binary code at the intergalactic disco."
+"Inflating space bubbles for zero-gravity pillow fights."
+"Convincing black holes to join a sing-along choir."
+"Wrestling quantum particles for a game of subatomic tag."
+"Tickling extraterrestrial amoebas just for kicks."
+"Polishing time-travel mirrors to see reflections from tomorrow."
+"Juggling antimatter snowflakes in a cosmic blizzard."
+"Babysitting baby star clusters during naptime."
+"Bottling the laughter of wormholes for later enjoyment."
+"Teaching interstellar crabs the moonwalk."
+"Balancing the cosmic equation with rubber duckies."
+"Dusting off ancient alien artifacts with laser feather dusters."
+"Organizing a parallel universe hide-and-seek tournament."
+"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
+"Negotiating peace treaties between parallel universe pandas and robots."
+"Training intergalactic snails for the great space race."
+"Herding quantum sheep through the fabric of spacetime."
+"Reciting Vogon poetry in an attempt to repel invaders."
+"Hosting a telepathic tea party for sentient clouds."
+"Coaxing malfunctioning robots with lullabies and oil massages."
+"Moonwalking on the event horizon of a cosmic donut."
+"Conducting a symphony of alien frequencies with a light saber baton."
+"Negotiating a trade deal between time-traveling pirates and space ninjas."
+"Babbling in an ancient alien dialect to confuse rogue AIs."
+"Playing hopscotch on the rings of Saturn with zero-gravity boots."
+"Befriending interdimensional dolphins fluent in binary."
+"Convincing dark matter to attend a glow-in-the-dark party."
+"Practicing levitation with levitating space jellyfish."
+"Hitching a ride on a comet while juggling star clusters."
+"Teaching a robot dance crew the art of emotional expression."
+"Summoning UFOs with interpretative dance rituals."
+"Creating crop circles in zero-gravity fields with tractor beams."
+"Impersonating a solar flare to confuse sunspot observers."
+"Diplomacy with alien diplomats through interpretive dance-offs."
+"Playing chess with a sentient nebula and losing gracefully."
+"Negotiating peace treaties between time-traveling dinosaurs and future robots."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Conducting an orchestra of alien bug symphonies."
+"Teleporting through dimensions with a rainbow-colored pogo stick."
+"Translating Morse code messages from extraterrestrial fireflies."
+"Attending a zero-gravity synchronized swimming competition."
+"Participating in a relay race across the rings of Jupiter."
+"Defying gravity by hosting upside-down picnics on magnetic asteroids."
+"Exchanging love letters with parallel universe versions of oneself."
+"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
+"Playing hide-and-seek with the shadows of dark matter."
+"Having a tea party with time-traveling dinosaurs and robot butlers."
+"Juggling quantum entangled particles while riding a quantum unicycle."
+"Hosting a holographic game night with ghostly entities."
+"Impersonating a comet to get a front-row seat at a cosmic concert."
+"Negotiating peace treaties between time-traveling pirates and space ninjas."
+"Having a conversation with extraterrestrial rock formations using telepathic vibrations."
+"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
+"Participating in a zero-gravity synchronized swimming competition."
+"Attempting to communicate with intergalactic space chickens using semaphore signals."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Convincing black holes to participate in a gravity-defying dance-off."
+"Befriending time-traveling flamingos in a temporal oasis."
+"Wrestling quantum particles for a game of subatomic tag."
+"Polishing the interstellar mirror for a reflection of parallel selves."
+"Organizing a parallel universe hide-and-seek tournament."
+"Playing chess with a sentient nebula and losing gracefully."
+"Hosting a telepathic tea party for sentient clouds."
+"Creating crop circles in zero-gravity fields with tractor beams."
+"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
+"Conducting an orchestra of alien bug symphonies."
+"Summoning UFOs with interpretative dance rituals."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Practicing levitation with levitating space jellyfish."
+"Attending a zero-gravity synchronized swimming competition."
+"Participating in a relay race across the rings of Jupiter."
+"Defying gravity by hosting upside-down picnics on magnetic asteroids."
+"Negotiating peace treaties between time-traveling dinosaurs and future robots."
+"Juggling quantum entangled particles while riding a quantum unicycle."
+"Having a tea party with time-traveling dinosaurs and robot butlers."
+"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
+"Playing hide-and-seek with the shadows of dark matter."
+"Exchanging love letters with parallel universe versions of oneself."
+"Impersonating a comet to get a front-row seat at a cosmic concert."
+"Negotiating peace treaties between time-traveling pirates and space ninjas."
+"Having a conversation with extraterrestrial rock formations using telepathic vibrations."
+"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
+"Participating in a zero-gravity synchronized swimming competition."
+"Attempting to communicate with intergalactic space chickens using semaphore signals."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Convincing black holes to participate in a gravity-defying dance-off."
+"Befriending time-traveling flamingos in a temporal oasis."
+"Wrestling quantum particles for a game of subatomic tag."
+"Polishing the interstellar mirror for a reflection of parallel selves."
+"Organizing a parallel universe hide-and-seek tournament."
+"Playing chess with a sentient nebula and losing gracefully."
+"Hosting a telepathic tea party for sentient clouds."
+"Creating crop circles in zero-gravity fields with tractor beams."
+"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
+"Conducting an orchestra of alien bug symphonies."
+"Summoning UFOs with interpretative dance rituals."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Practicing levitation with levitating space jellyfish."
+`.split(`
+`).map((x) => x.trim().replace(/"/g, ``)).filter((x) => x);
+
+// library/ricklove/my-cushy-deck/src/_random.ts
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = h << 13 | h >>> 19;
+  }
+  return () => {
+    h = Math.imul(h ^ h >>> 16, 2246822507);
+    h = Math.imul(h ^ h >>> 13, 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+function mulberry32(a) {
+  return () => {
+    let t = a += 1831565813;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+var createRandomGenerator = (hash) => {
+  const seed = xmur3(hash)();
+  const random = mulberry32(seed);
+  const randomInt = (minInclusive = 0, maxExclusive = Number.MAX_SAFE_INTEGER) => Math.min(minInclusive + Math.floor(random() * (maxExclusive - minInclusive)), maxExclusive - 1);
+  const randomItem = (items) => items[randomInt(0, items.length)];
+  return { random, randomInt, randomItem };
+};
+
+// library/ricklove/my-cushy-deck/src/_cache.ts
+var rand = createRandomGenerator(`${Date.now()}`);
+var randomLoadingMessage = (runtime, context, contextData) => {
+  return runtime.output_Markdown(`### Loading... 
+    
+${context}
+
+${!contextData ? `` : Object.entries(contextData).map(
+    ([k, v]) => typeof v === `string` && v.includes(`
+`) ? `- ${k}: 
+
+    ${v.split(`
+`).join(`
+    `)}` : `- ${k}: ${v}`
+  ).join(`
+`)}
+    
+- ${rand.randomItem(loadingMessages)}
+- ${rand.randomItem(loadingMessages)}
+- ${rand.randomItem(loadingMessages)}
+- ${rand.randomItem(loadingMessages)}
+- ${rand.randomItem(loadingMessages)}
+
+`);
+};
+var cacheMask = async (state, frameIndex, paramsKey, createMaskGraph) => {
+  const { runtime, graph } = state;
+  const paramsPath = createRandomGenerator(paramsKey).randomInt();
+  const paramsFilePattern = `${state.workingDirectory}/${paramsPath}/#####.png`;
+  const loadMaskGraph = () => {
+    const maskImageReloaded = graph.RL$_LoadImageSequence({
+      path: paramsFilePattern,
+      current_frame: frameIndex
+    }).outputs.image;
+    const maskReloaded = graph.Image_To_Mask({
+      image: maskImageReloaded,
+      method: `intensity`
+    }).outputs.MASK;
+    return maskReloaded;
+  };
+  const createMask = async () => {
+    const mask = await createMaskGraph();
+    if (!mask) {
+      return void 0;
+    }
+    const maskImage = graph.MaskToImage({ mask });
+    graph.RL$_SaveImageSequence({
+      images: maskImage,
+      current_frame: frameIndex,
+      path: paramsFilePattern
+    });
+    const result = await runtime.PROMPT();
+    if (result.data.error) {
+      throw new Error(`cacheMask: Failed to create mask`);
+    }
+  };
+  const iNextInitial = getNextActiveNodeIndex(runtime);
+  const loadingMessage = randomLoadingMessage(runtime, `cacheMask ${frameIndex}`, { frameIndex, paramsKey });
+  try {
+    const mask = loadMaskGraph();
+    const result = await runtime.PROMPT();
+    if (result.data.error) {
+      result.delete();
+      throw new Error(`ignore`);
+    }
+    loadingMessage.delete();
+    console.log(
+      `cacheMask: Load Success`,
+      JSON.parse(
+        JSON.stringify({
+          data: result.data,
+          finished: result.finished
+        })
+      )
+    );
+    return mask;
+  } catch {
+    disableNodesAfter(runtime, iNextInitial);
+  }
+  console.log(`cacheMask: Failed to load - creating`, {
+    paramsFilePattern,
+    frameIndex,
+    paramsKey
+  });
+  await createMask();
+  disableNodesAfter(runtime, iNextInitial);
+  loadingMessage.delete();
+  return loadMaskGraph();
+};
+
+// library/ricklove/my-cushy-deck/src/_maskPrefabs.ts
 var storeInScope = (state, name, value) => {
   const { scopeStack } = state;
   scopeStack[scopeStack.length - 1][name] = value;
@@ -38,7 +270,7 @@ var operation_clipSeg = createMaskOperation({
       })
     })
   }),
-  run: async ({ flow, graph }, image, mask, form) => {
+  run: async ({ runtime, graph }, image, mask, form) => {
     if (form.clipSeg == null) {
       return mask;
     }
@@ -60,7 +292,7 @@ var operation_color = createMaskOperation({
       })
     })
   }),
-  run: async ({ flow, graph }, image, mask, form) => {
+  run: async ({ runtime, graph }, image, mask, form) => {
     if (form.color == null) {
       return mask;
     }
@@ -79,7 +311,7 @@ var operation_erodeOrDilate = createMaskOperation({
   ui: (form) => ({
     erodeOrDilate: form.intOpt({ min: -64, max: 64 })
   }),
-  run: async ({ flow, graph }, image, mask, form) => {
+  run: async ({ runtime, graph }, image, mask, form) => {
     if (form.erodeOrDilate == null) {
       return mask;
     }
@@ -94,7 +326,7 @@ var operation_segment = createMaskOperation({
   ui: (form) => ({
     segmentIndex: form.intOpt({ min: 0, max: 10 })
   }),
-  run: async ({ flow, graph }, image, mask, form) => {
+  run: async ({ runtime, graph }, image, mask, form) => {
     if (form.segmentIndex == null) {
       return mask;
     }
@@ -124,7 +356,7 @@ var operation_sam = createMaskOperation({
       })
     })
   }),
-  run: async ({ flow, graph }, image, mask, form) => {
+  run: async ({ runtime, graph }, image, mask, form) => {
     if (form.sam == null) {
       return mask;
     }
@@ -271,14 +503,8 @@ var operations_all = createMaskOperation({
       })
     })
   }),
-  run: async (state, imageBatch, maskBatch, form) => {
-    const { flow, graph } = state;
-    const image = graph.ImpactImageBatchToImageList({
-      image: imageBatch
-    });
-    let mask = !maskBatch ? void 0 : graph.MasksToMaskList({
-      masks: maskBatch
-    }).outputs.MASK;
+  run: async (state, image, mask, form) => {
+    const { runtime, graph } = state;
     for (const op of form.maskOperations) {
       mask = await operation_clipSeg.run(state, image, mask, op);
       mask = await operation_color.run(state, image, mask, op);
@@ -289,7 +515,7 @@ var operations_all = createMaskOperation({
       mask = await operation_combineMasks.run(state, image, mask, op);
       if (op.preview) {
         if (!mask) {
-          flow.print(`No mask!`);
+          runtime.print(`No mask!`);
           throw new StopError();
         }
         const maskAsImage = graph.MaskToImage({ mask });
@@ -300,14 +526,11 @@ var operations_all = createMaskOperation({
           blend_factor: 0.5
         });
         graph.PreviewImage({ images: maskPreview });
-        await flow.PROMPT();
+        await runtime.PROMPT();
         throw new StopError();
       }
     }
-    const maskBatchFinal = !mask ? void 0 : graph.MaskListToMaskBatch({
-      mask
-    });
-    return maskBatchFinal;
+    return mask;
   }
 });
 var operation_mask = createMaskOperationValue({
@@ -563,14 +786,15 @@ appOptimized({
     // startImage: form.image({}),
     imageSource: form.group({
       items: () => ({
-        directory: form.string({}),
+        directory: form.string({ default: `video` }),
+        filePattern: form.string({ default: `#####.png` }),
         // pattern: form.string({ default: `*.png` }),
         startIndex: form.int({ default: 0, min: 0 }),
         endIndex: form.intOpt({ default: 1e4, min: 0, max: 1e4 }),
         selectEveryNth: form.intOpt({ default: 1, min: 1 }),
-        batchSize: form.int({ default: 1, min: 1 }),
+        // batchSize: form.int({ default: 1, min: 1 }),
         iterationCount: form.int({ default: 1, min: 1 }),
-        iterationSize: form.intOpt({ default: 1, min: 1 }),
+        // iterationSize: form.intOpt({ default: 1, min: 1 }),
         preview: form.inlineRun({})
       })
     }),
@@ -589,6 +813,7 @@ appOptimized({
         custom: form.number({ default: 512, min: 32, max: 8096 })
       })
     }),
+    previewCropMask: form.inlineRun({}),
     previewCrop: form.inlineRun({}),
     _2: form.markdown({
       markdown: () => `# Mask Replacement`
@@ -644,34 +869,49 @@ appOptimized({
     })
   }),
   run: async (flow, form) => {
-    const iterate = async (batchIndex) => {
+    const iterate = async (iterationIndex) => {
       flow.print(`${JSON.stringify(form)}`);
+      const imageDirectory = form.imageSource.directory.replace(/\/$/g, ``);
+      const workingDirectory = `${imageDirectory}/working`;
       const graph = flow.nodes;
-      const state = { flow, graph, scopeStack: [{}] };
-      const startImageBatch = graph.VHS$_LoadImagesPath({
-        directory: form.imageSource.directory,
-        image_load_cap: form.imageSource.batchSize,
-        skip_first_images: form.imageSource.startIndex + batchIndex * (form.imageSource.iterationSize ?? form.imageSource.batchSize) * (form.imageSource.selectEveryNth ?? 1),
-        select_every_nth: form.imageSource.selectEveryNth ?? 1
-      }).outputs.IMAGE;
+      const state = { runtime: flow, workingDirectory, graph, scopeStack: [{}] };
+      const frameIndex = form.imageSource.startIndex + iterationIndex * (form.imageSource.selectEveryNth ?? 1);
+      const startImage = graph.Load_Image_Sequence_$1mtb$2({
+        path: `${imageDirectory}/${form.imageSource.filePattern}`,
+        current_frame: frameIndex
+      }).outputs.image;
       if (form.imageSource.preview) {
-        graph.PreviewImage({ images: startImageBatch });
+        graph.PreviewImage({ images: startImage });
         await flow.PROMPT();
         throw new StopError();
       }
-      const cropMaskBatch = await operation_mask.run(state, startImageBatch, void 0, form.cropMaskOperations);
+      const cropMask = await cacheMask(
+        state,
+        frameIndex,
+        JSON.stringify(form.cropMaskOperations),
+        async () => await operation_mask.run(state, startImage, void 0, form.cropMaskOperations)
+      );
+      if (form.previewCropMask) {
+        graph.PreviewImage({ images: startImage });
+        if (cropMask) {
+          const maskImage = graph.MaskToImage({ mask: cropMask });
+          graph.PreviewImage({ images: maskImage });
+        }
+        await flow.PROMPT();
+        throw new StopError();
+      }
       const { size: sizeInput, cropPadding } = form;
       const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
-      const croppedImageBatch = !cropMaskBatch ? startImageBatch : graph.RL$_Crop$_Resize({
-        image: startImageBatch,
-        mask: cropMaskBatch,
+      const croppedImageBatch = !cropMask ? startImage : graph.RL$_Crop$_Resize({
+        image: startImage,
+        mask: cropMask,
         max_side_length: size,
         padding: cropPadding
       }).outputs.cropped_image;
       if (form.previewCrop) {
-        graph.PreviewImage({ images: startImageBatch });
-        if (cropMaskBatch) {
-          const maskImage = graph.MaskToImage({ mask: cropMaskBatch });
+        graph.PreviewImage({ images: startImage });
+        if (cropMask) {
+          const maskImage = graph.MaskToImage({ mask: cropMask });
           graph.PreviewImage({ images: maskImage });
         }
         graph.PreviewImage({ images: croppedImageBatch });

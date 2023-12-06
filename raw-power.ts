@@ -1,4 +1,6 @@
-import { StopError, operation_mask } from './src/_maskPrefabs'
+import { StopError } from './src/_appState'
+import { cacheMask } from './src/_cache'
+import { operation_mask } from './src/_maskPrefabs'
 import { appOptimized, OptimizerComponent, OptimizerComponentViewState } from './src/optimizer'
 
 appOptimized({
@@ -7,14 +9,15 @@ appOptimized({
         // startImage: form.image({}),
         imageSource: form.group({
             items: () => ({
-                directory: form.string({}),
+                directory: form.string({ default: `video` }),
+                filePattern: form.string({ default: `#####.png` }),
                 // pattern: form.string({ default: `*.png` }),
                 startIndex: form.int({ default: 0, min: 0 }),
                 endIndex: form.intOpt({ default: 10000, min: 0, max: 10000 }),
                 selectEveryNth: form.intOpt({ default: 1, min: 1 }),
-                batchSize: form.int({ default: 1, min: 1 }),
+                // batchSize: form.int({ default: 1, min: 1 }),
                 iterationCount: form.int({ default: 1, min: 1 }),
-                iterationSize: form.intOpt({ default: 1, min: 1 }),
+                // iterationSize: form.intOpt({ default: 1, min: 1 }),
                 preview: form.inlineRun({}),
             }),
         }),
@@ -34,6 +37,8 @@ appOptimized({
                 custom: form.number({ default: 512, min: 32, max: 8096 }),
             }),
         }),
+
+        previewCropMask: form.inlineRun({}),
         previewCrop: form.inlineRun({}),
 
         _2: form.markdown({
@@ -103,30 +108,23 @@ appOptimized({
         // flow.formSerial.testSeed.val = 10
         // flow.formInstance.state.values.testSeed.state.val
 
-        const iterate = async (batchIndex: number) => {
+        const iterate = async (iterationIndex: number) => {
             flow.print(`${JSON.stringify(form)}`)
 
             // Build a ComfyUI graph
+            const imageDirectory = form.imageSource.directory.replace(/\/$/g, ``)
+            const workingDirectory = `${imageDirectory}/working`
             const graph = flow.nodes
-            const state = { flow, graph, scopeStack: [{}] }
+            const state = { runtime: flow, workingDirectory, graph, scopeStack: [{}] }
 
-            // load, crop, and resize image
-            // const startImageRaw = await flow.loadImageAnswer(form.startImage)
-            // const startImage = graph.AlphaChanelRemove({ images: startImageRaw })
-
-            const startImageBatch = graph.VHS$_LoadImagesPath({
-                directory: form.imageSource.directory,
-                image_load_cap: form.imageSource.batchSize,
-                skip_first_images:
-                    form.imageSource.startIndex +
-                    batchIndex *
-                        (form.imageSource.iterationSize ?? form.imageSource.batchSize) *
-                        (form.imageSource.selectEveryNth ?? 1),
-                select_every_nth: form.imageSource.selectEveryNth ?? 1,
-            }).outputs.IMAGE
+            const frameIndex = form.imageSource.startIndex + iterationIndex * (form.imageSource.selectEveryNth ?? 1)
+            const startImage = graph.Load_Image_Sequence_$1mtb$2({
+                path: `${imageDirectory}/${form.imageSource.filePattern}`,
+                current_frame: frameIndex,
+            }).outputs.image
 
             if (form.imageSource.preview) {
-                graph.PreviewImage({ images: startImageBatch })
+                graph.PreviewImage({ images: startImage })
                 await flow.PROMPT()
                 throw new StopError()
             }
@@ -151,23 +149,37 @@ appOptimized({
             //     max_height: height,
             // });
 
-            const cropMaskBatch = await operation_mask.run(state, startImageBatch, undefined, form.cropMaskOperations)
+            const cropMask = await cacheMask(
+                state,
+                frameIndex,
+                JSON.stringify(form.cropMaskOperations),
+                async () => await operation_mask.run(state, startImage, undefined, form.cropMaskOperations),
+            )
+            if (form.previewCropMask) {
+                graph.PreviewImage({ images: startImage })
+                if (cropMask) {
+                    const maskImage = graph.MaskToImage({ mask: cropMask })
+                    graph.PreviewImage({ images: maskImage })
+                }
+                await flow.PROMPT()
+                throw new StopError()
+            }
 
             const { size: sizeInput, cropPadding } = form
             const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
-            const croppedImageBatch = !cropMaskBatch
-                ? startImageBatch
+            const croppedImageBatch = !cropMask
+                ? startImage
                 : graph.RL$_Crop$_Resize({
-                      image: startImageBatch,
-                      mask: cropMaskBatch,
+                      image: startImage,
+                      mask: cropMask,
                       max_side_length: size,
                       padding: cropPadding,
                   }).outputs.cropped_image
 
             if (form.previewCrop) {
-                graph.PreviewImage({ images: startImageBatch })
-                if (cropMaskBatch) {
-                    const maskImage = graph.MaskToImage({ mask: cropMaskBatch })
+                graph.PreviewImage({ images: startImage })
+                if (cropMask) {
+                    const maskImage = graph.MaskToImage({ mask: cropMask })
                     graph.PreviewImage({ images: maskImage })
                 }
                 graph.PreviewImage({ images: croppedImageBatch })

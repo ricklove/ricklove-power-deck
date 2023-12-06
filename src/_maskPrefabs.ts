@@ -1,17 +1,7 @@
-import { FormBuilder, Widget } from 'src'
+import { FormBuilder, Runtime, Widget } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { WidgetDict } from 'src/cards/Card'
-
-export class StopError extends Error {}
-
-export type AppState = {
-    scopeStack: Record<string, unknown>[]
-    flow: {
-        PROMPT: () => Promise<unknown>
-        print: (message: string) => void
-    }
-    graph: ComfyWorkflowBuilder
-}
+import { AppState, StopError } from './_appState'
 
 const storeInScope = <T extends null | Object>(state: AppState, name: string, value: T) => {
     const { scopeStack } = state
@@ -58,7 +48,7 @@ const operation_clipSeg = createMaskOperation({
             }),
         }),
     }),
-    run: async ({ flow, graph }, image, mask, form) => {
+    run: async ({ runtime, graph }, image, mask, form) => {
         if (form.clipSeg == null) {
             return mask
         }
@@ -83,7 +73,7 @@ const operation_color = createMaskOperation({
             }),
         }),
     }),
-    run: async ({ flow, graph }, image, mask, form) => {
+    run: async ({ runtime, graph }, image, mask, form) => {
         if (form.color == null) {
             return mask
         }
@@ -105,7 +95,7 @@ const operation_erodeOrDilate = createMaskOperation({
     ui: (form) => ({
         erodeOrDilate: form.intOpt({ min: -64, max: 64 }),
     }),
-    run: async ({ flow, graph }, image, mask, form) => {
+    run: async ({ runtime, graph }, image, mask, form) => {
         if (form.erodeOrDilate == null) {
             return mask
         }
@@ -127,7 +117,7 @@ const operation_segment = createMaskOperation({
     ui: (form) => ({
         segmentIndex: form.intOpt({ min: 0, max: 10 }),
     }),
-    run: async ({ flow, graph }, image, mask, form) => {
+    run: async ({ runtime, graph }, image, mask, form) => {
         if (form.segmentIndex == null) {
             return mask
         }
@@ -162,7 +152,7 @@ const operation_sam = createMaskOperation({
             }),
         }),
     }),
-    run: async ({ flow, graph }, image, mask, form) => {
+    run: async ({ runtime, graph }, image, mask, form) => {
         if (form.sam == null) {
             return mask
         }
@@ -414,18 +404,8 @@ const operations_all = createMaskOperation({
                 }),
         }),
     }),
-    run: async (state, imageBatch, maskBatch, form) => {
-        const { flow, graph } = state
-
-        const image = graph.ImpactImageBatchToImageList({
-            image: imageBatch,
-        })
-
-        let mask = !maskBatch
-            ? undefined
-            : (graph.MasksToMaskList({
-                  masks: maskBatch,
-              }).outputs.MASK as _MASK)
+    run: async (state, image, mask, form) => {
+        const { runtime, graph } = state
 
         for (const op of form.maskOperations) {
             mask = await operation_clipSeg.run(state, image, mask, op)
@@ -439,7 +419,7 @@ const operations_all = createMaskOperation({
 
             if (op.preview) {
                 if (!mask) {
-                    flow.print(`No mask!`)
+                    runtime.print(`No mask!`)
                     throw new StopError()
                 }
 
@@ -452,18 +432,12 @@ const operations_all = createMaskOperation({
                 })
                 // graph.PreviewImage({ images: maskRaw.outputs.Heatmap$_Mask })
                 graph.PreviewImage({ images: maskPreview })
-                await flow.PROMPT()
+                await runtime.PROMPT()
                 throw new StopError()
             }
         }
 
-        const maskBatchFinal = !mask
-            ? undefined
-            : graph.MaskListToMaskBatch({
-                  mask,
-              })
-
-        return maskBatchFinal
+        return mask
     },
 })
 
@@ -509,7 +483,7 @@ export const operation_mask = createMaskOperationValue({
 // type MaskForm = ReturnType<typeof ui_maskPrompt>
 
 // export const run_buildMasks = async (
-//     flow: {
+//     runtime: {
 //         PROMPT: () => Promise<unknown>
 //         print: (message: string) => void
 //     },
@@ -517,7 +491,7 @@ export const operation_mask = createMaskOperationValue({
 //     image: _IMAGE,
 //     maskForm: MaskForm['$Output'],
 // ) => {
-//     let state = { flow, graph, scopeStack: [{}] }
+//     let state = { runtime, graph, scopeStack: [{}] }
 //     let test = await operation_all.run(state, image, undefined, maskForm)
 
 //     let mask = undefined as undefined | _MASK
@@ -549,7 +523,7 @@ export const operation_mask = createMaskOperationValue({
 //             })
 //             graph.PreviewImage({ images: maskRaw.outputs.Heatmap$_Mask })
 //             graph.PreviewImage({ images: maskPreview })
-//             await flow.PROMPT()
+//             await runtime.PROMPT()
 //             return { stop: true }
 //         }
 //     }
@@ -595,7 +569,7 @@ export const operation_mask = createMaskOperationValue({
 
 //     if (maskForm.preview) {
 //         if (!mask) {
-//             flow.print(`No Mask Defined`)
+//             runtime.print(`No Mask Defined`)
 //             return { stop: true }
 //         }
 //         const maskAsImage = graph.MaskToImage({ mask })
@@ -606,7 +580,7 @@ export const operation_mask = createMaskOperationValue({
 //             blend_factor: 0.5,
 //         })
 //         graph.PreviewImage({ images: maskPreview })
-//         await flow.PROMPT()
+//         await runtime.PROMPT()
 //         return { stop: true }
 //     }
 
