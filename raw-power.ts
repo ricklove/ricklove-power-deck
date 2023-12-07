@@ -200,7 +200,14 @@ appOptimized({
                 throw new StopError()
             }
 
-            const replaceMaskBatch = await operation_mask.run(state, croppedImage, undefined, form.replaceMaskOperations)
+            const { mask: replaceMask } = await cacheMask(
+                state,
+                `replaceMask`,
+                frameIndex,
+                form.replaceMaskOperations,
+                dependencyKeyRef,
+                async () => await operation_mask.run(state, croppedImage, undefined, form.replaceMaskOperations),
+            )
 
             const loraStack = !form.lcm
                 ? undefined
@@ -212,11 +219,21 @@ appOptimized({
 
             let controlNetStack = undefined as undefined | Control_Net_Stacker
             for (const c of form.controlNet) {
-                const imagePre = c.controlNet.toLowerCase().includes(`depth`)
-                    ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage })
+                const preprocessorKind = c.controlNet.toLowerCase().includes(`depth`)
+                    ? `zoe-depth`
                     : c.controlNet.toLowerCase().includes(`normal`)
-                    ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage })
-                    : croppedImage
+                    ? `bae-normal`
+                    : undefined
+
+                const { image: imagePre } = !preprocessorKind
+                    ? { image: croppedImage }
+                    : await cacheImage(state, `preprocessor`, frameIndex, { preprocessorKind }, dependencyKeyRef, async () =>
+                          preprocessorKind === `zoe-depth`
+                              ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage })
+                              : preprocessorKind === `bae-normal`
+                              ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage })
+                              : croppedImage,
+                      )
 
                 if (c.preview) {
                     graph.PreviewImage({ images: imagePre })
@@ -248,13 +265,13 @@ appOptimized({
             })
 
             const startLatent = (() => {
-                if (replaceMaskBatch && form.useImpaintingEncode) {
+                if (replaceMask && form.useImpaintingEncode) {
                     const imageList = graph.ImpactImageBatchToImageList({
                         image: croppedImage,
                     })
 
                     let maskList = graph.MasksToMaskList({
-                        masks: replaceMaskBatch,
+                        masks: replaceMask,
                     }).outputs.MASK as _MASK
                     const latentList = graph.VAEEncodeForInpaint({ pixels: imageList, vae: loader, mask: maskList })
 
@@ -264,10 +281,10 @@ appOptimized({
                 }
 
                 const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader })
-                if (!replaceMaskBatch) {
+                if (!replaceMask) {
                     return startLatent0
                 }
-                const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMaskBatch })
+                const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask })
                 return startLatent1
             })()
 
@@ -276,8 +293,8 @@ appOptimized({
             // latent = graph.LatentCrop({ samples: latent, width: 1024, height: 1024, x: width* }).outputs.LATENT
 
             if (form.previewLatent) {
-                if (replaceMaskBatch) {
-                    const maskImage = graph.MaskToImage({ mask: replaceMaskBatch })
+                if (replaceMask) {
+                    const maskImage = graph.MaskToImage({ mask: replaceMask })
                     graph.PreviewImage({ images: maskImage })
                 }
 
