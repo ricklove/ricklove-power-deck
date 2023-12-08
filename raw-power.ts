@@ -241,9 +241,9 @@ appOptimized({
 
                         const imagePre =
                             preprocessorKind === `zoe-depth`
-                                ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage })
+                                ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }).outputs.IMAGE
                                 : preprocessorKind === `bae-normal`
-                                ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage })
+                                ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }).outputs.IMAGE
                                 : croppedImage
 
                         return {
@@ -263,6 +263,7 @@ appOptimized({
                     inputSteps: { preprocessorStep, controlNetStepPrev },
                     create: ({ graph }, { inputs }) => {
                         const { imagePre, controlNetStack: controlNetStackPrev } = inputs
+                        console.log(`controlNetStep:`, { imagePre, controlNetStackPrev })
 
                         const controlNetStack = graph.Control_Net_Stacker({
                             cnet_stack: controlNetStackPrev,

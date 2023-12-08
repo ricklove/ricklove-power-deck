@@ -59,9 +59,9 @@ const operation_clipSeg = createMaskOperation({
             threshold: form.clipSeg.threshold,
             dilation_factor: form.clipSeg.dilation,
             blur: form.clipSeg.blur,
-        })
+        }).outputs.Mask
 
-        return clipMask.outputs.Mask
+        return clipMask
     },
 })
 
@@ -85,9 +85,9 @@ const operation_color = createMaskOperation({
         const dilated = graph.Mask_Dilate_Region({
             masks: colorMask,
             iterations: 1,
-        })
+        }).outputs.MASKS
 
-        return dilated.outputs.MASKS
+        return dilated
     },
 })
 
@@ -105,9 +105,9 @@ const operation_erodeOrDilate = createMaskOperation({
 
         const maskDilated =
             form.erodeOrDilate > 0
-                ? graph.Mask_Dilate_Region({ masks: mask, iterations: form.erodeOrDilate })
+                ? graph.Mask_Dilate_Region({ masks: mask, iterations: form.erodeOrDilate }).outputs.MASKS
                 : form.erodeOrDilate < 0
-                ? graph.Mask_Erode_Region({ masks: mask, iterations: -form.erodeOrDilate })
+                ? graph.Mask_Erode_Region({ masks: mask, iterations: -form.erodeOrDilate }).outputs.MASKS
                 : mask
         return maskDilated
     },
@@ -135,7 +135,7 @@ const operation_segment = createMaskOperation({
             take_start: form.segmentIndex,
         })
 
-        mask = graph.SegsToCombinedMask({ segs: segsFilter.outputs.filtered_SEGS })
+        mask = graph.SegsToCombinedMask({ segs: segsFilter.outputs.filtered_SEGS }).outputs.MASK
 
         return mask
     },
@@ -300,7 +300,7 @@ export const run_combineMasks = (
             clamp_result: `yes`,
             round_result: `no`,
         }).outputs.IMAGE,
-    })
+    }).outputs.MASK
 }
 
 // const operation_combineWithMasks = createMaskOperation({
