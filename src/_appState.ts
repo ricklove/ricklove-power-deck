@@ -10,6 +10,7 @@ export class StopError extends Error {
 export type AppState = {
     runtime: Runtime
     graph: ComfyWorkflowBuilder
+    imageDirectory: string
     workingDirectory: string
     scopeStack: Record<string, unknown>[]
 }

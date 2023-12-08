@@ -816,6 +816,110 @@ var appOptimized = ({ ui, run }) => {
   });
 };
 
+// library/ricklove/my-cushy-deck/src/_steps.ts
+var createStepsSystem = (appState) => {
+  const _state = appState;
+  _state.workingDirectory = `${_state.imageDirectory}/working`;
+  const stepsRegistry = [];
+  const defineStep = ({
+    inputSteps,
+    create,
+    modify,
+    preview = false
+  }) => {
+    const stepDefinition = {
+      inputSteps,
+      create,
+      modify,
+      preview,
+      $Outputs: void 0
+    };
+    stepsRegistry.push(stepDefinition);
+    return stepDefinition;
+  };
+  const buildStep = (stepDef) => {
+    const { inputSteps, create, modify, preview } = stepDef;
+    const { nodes, outputs } = create(_state, {
+      inputs: Object.fromEntries(
+        Object.values(inputSteps).flatMap((x) => Object.entries(x._build?.outputs ?? {}))
+      )
+    });
+    const outputsList = Object.values(outputs);
+    const getOutputNodeType = (x) => {
+      if (typeof x === `function`) {
+        return void 0;
+      }
+      if (typeof x !== `object`) {
+        return void 0;
+      }
+      if (`type` in x) {
+        return x.type;
+      }
+      return void 0;
+    };
+    const isCacheable = (x) => {
+      const t = getOutputNodeType(x);
+      return t === `image` || t === `mask`;
+    };
+    const cachableOutputs = outputsList.filter((x) => isCacheable(x));
+    const canBeCached = outputsList.length === cachableOutputs.length;
+    const stepBuildDefinition = {
+      setFrameIndex: (frameIndex) => modify({ nodes, frameIndex }),
+      outputs,
+      canBeCached,
+      _nodes: nodes
+    };
+    stepDef._build = stepBuildDefinition;
+    console.log(`defineStep: stepDefinition`, { stepBuildDefinition, canBeCached, cachableOutputs });
+    if (preview) {
+      _state.graph.PreviewImage({ images: _state.runtime.AUTO });
+      throw new StopError(void 0);
+    }
+    return stepBuildDefinition;
+  };
+  const runStepsInner = async (stepsAll, frameIndexes) => {
+    const runGroups = [{ steps: [] }];
+    stepsAll.forEach((x) => {
+      runGroups[runGroups.length - 1].steps.push(x);
+      if (x._build?.canBeCached) {
+        runGroups.push({ steps: [] });
+      }
+    });
+    for (const g of runGroups) {
+      const steps = g.steps;
+      for (const frameIndex of frameIndexes) {
+        console.log(`runSteps: running ${frameIndex}`, { frameIndexes, steps });
+        stepsAll.forEach((s) => s._build?.setFrameIndex(frameIndex));
+        await _state.runtime.PROMPT();
+        await new Promise((r) => setTimeout(r, 1e3));
+      }
+    }
+  };
+  const runSteps = async (frameIndexes) => {
+    try {
+      for (const s of stepsRegistry) {
+        buildStep(s);
+      }
+    } catch (err) {
+      if (!(err instanceof StopError)) {
+        throw err;
+      }
+      if (err.setFrameIndex) {
+        const firstUnbuilt = stepsRegistry.find((x) => !x._build);
+        if (firstUnbuilt) {
+          firstUnbuilt._build = { setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false };
+        }
+      }
+    }
+    await runStepsInner(stepsRegistry, frameIndexes);
+  };
+  return {
+    state: _state,
+    defineStep,
+    runSteps
+  };
+};
+
 // library/ricklove/my-cushy-deck/raw-power.ts
 appOptimized({
   ui: (form) => ({
@@ -857,6 +961,7 @@ appOptimized({
     }),
     //operation_mask.ui(form).maskOperations,
     replaceMaskOperations: operation_mask.ui(form),
+    previewReplaceMask: form.inlineRun({}),
     // ...operation_replaceMask.ui(form),
     // mask: ui_maskPrompt(form, { defaultPrompt: `ball` }),
     _3: form.markdown({ markdown: (formRoot) => `# Generate Image` }),
@@ -907,88 +1012,16 @@ appOptimized({
   }),
   run: async (runtime, form) => {
     const _imageDirectory = form.imageSource.directory.replace(/\/$/g, ``);
-    const _state = {
+    const {
+      defineStep,
+      runSteps,
+      state: _state
+    } = createStepsSystem({
       runtime,
-      imageDirectory: _imageDirectory,
-      workingDirectory: `${_imageDirectory}/working`,
+      imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
       graph: runtime.nodes,
       scopeStack: [{}]
-    };
-    const stepsRegistry = [];
-    const defineStep = ({
-      inputSteps,
-      create,
-      modify,
-      preview = false
-    }) => {
-      const stepDefinition = {
-        inputSteps,
-        create,
-        modify,
-        preview,
-        $Outputs: void 0
-      };
-      stepsRegistry.push(stepDefinition);
-      return stepDefinition;
-    };
-    const buildStep = (stepDef) => {
-      const { inputSteps, create, modify, preview } = stepDef;
-      const { nodes, outputs } = create(_state, {
-        inputs: Object.fromEntries(
-          Object.values(inputSteps).flatMap((x) => Object.entries(x._build?.outputs ?? {}))
-        )
-      });
-      const outputsList = Object.values(outputs);
-      const getOutputNodeType = (x) => {
-        if (typeof x === `function`) {
-          return void 0;
-        }
-        if (typeof x !== `object`) {
-          return void 0;
-        }
-        if (`type` in x) {
-          return x.type;
-        }
-        return void 0;
-      };
-      const isCacheable = (x) => {
-        const t = getOutputNodeType(x);
-        return t === `image` || t === `mask`;
-      };
-      const cachableOutputs = outputsList.filter((x) => isCacheable(x));
-      const canBeCached = outputsList.length === cachableOutputs.length;
-      const stepBuildDefinition = {
-        setFrameIndex: (frameIndex) => modify({ nodes, frameIndex }),
-        outputs,
-        canBeCached,
-        _nodes: nodes
-      };
-      stepDef._build = stepBuildDefinition;
-      console.log(`defineStep: stepDefinition`, { stepBuildDefinition, canBeCached, cachableOutputs });
-      if (preview) {
-        _state.graph.PreviewImage({ images: runtime.AUTO });
-        throw new StopError(void 0);
-      }
-      return stepBuildDefinition;
-    };
-    const runSteps = async (stepsAll, frameIndexes2) => {
-      const runGroups = [{ steps: [] }];
-      stepsAll.forEach((x) => {
-        runGroups[runGroups.length - 1].steps.push(x);
-        if (x._build?.canBeCached) {
-          runGroups.push({ steps: [] });
-        }
-      });
-      for (const g of runGroups) {
-        const steps = g.steps;
-        for (const frameIndex of frameIndexes2) {
-          console.log(`runSteps: running ${frameIndex}`, { frameIndexes: frameIndexes2, steps });
-          stepsAll.forEach((s) => s._build?.setFrameIndex(frameIndex));
-          await runtime.PROMPT();
-          await new Promise((r) => setTimeout(r, 1e3));
-        }
-      }
-    };
+    });
     const startImageStep = defineStep({
       preview: form.imageSource.preview,
       inputSteps: {},
@@ -1042,28 +1075,24 @@ appOptimized({
       modify: ({ nodes, frameIndex }) => {
       }
     });
-    try {
-      for (const s of stepsRegistry) {
-        buildStep(s);
+    const replaceMaskStep = defineStep({
+      preview: form.previewReplaceMask,
+      inputSteps: { cropStep },
+      create: (state, { inputs }) => {
+        const { croppedImage } = inputs;
+        const replaceMask = operation_mask.run(state, croppedImage, void 0, form.replaceMaskOperations);
+        return {
+          nodes: {},
+          outputs: { replaceMask }
+        };
+      },
+      modify: ({ nodes, frameIndex }) => {
       }
-    } catch (err) {
-      if (!(err instanceof StopError)) {
-        throw err;
-      }
-      if (err.setFrameIndex) {
-        const firstUnbuilt = stepsRegistry.find((x) => !x._build);
-        if (firstUnbuilt) {
-          firstUnbuilt._build = { setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false };
-        }
-      }
-    }
+    });
     const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
       frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
     }));
-    await runSteps(
-      stepsRegistry,
-      frameIndexes.map((x) => x.frameIndex)
-    );
+    await runSteps(frameIndexes.map((x) => x.frameIndex));
     return;
     const iterate = async (iterationIndex) => {
       runtime.print(`${JSON.stringify(form)}`);
