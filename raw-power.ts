@@ -1,8 +1,11 @@
-import { StopError, disableNodesAfter } from './src/_appState'
+import { ComfyNode } from 'src/core/ComfyNode'
+import { AppState, StopError, disableNodesAfter } from './src/_appState'
 import { cacheImage, cacheMask } from './src/_cache'
 import { showLoadingMessage } from './src/_loadingMessage'
 import { operation_mask } from './src/_maskPrefabs'
 import { appOptimized, OptimizerComponent, OptimizerComponentViewState } from './src/optimizer'
+import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
+import { ComfyNodeOutput } from 'src/core/Slot'
 
 appOptimized({
     ui: (form) => ({
@@ -109,15 +112,234 @@ appOptimized({
         // flow.formSerial.testSeed.val = 10
         // flow.formInstance.state.values.testSeed.state.val
 
+        const _imageDirectory = form.imageSource.directory.replace(/\/$/g, ``)
+        const _state = {
+            runtime: runtime,
+            imageDirectory: _imageDirectory,
+            workingDirectory: `${_imageDirectory}/working`,
+            graph: runtime.nodes,
+            scopeStack: [{}],
+        } satisfies AppState & Record<string, unknown>
+        type StepState = typeof _state
+
+        type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never
+        // type MergeNestedFields<T extends Record<string, unknown>> = UnionToIntersection<T[keyof T]>
+        // type MergeFieldsTest = MergeFields<
+        //     {
+        //         aObj: { a: boolean }
+        //     } & {
+        //         bObj: { b: boolean }
+        //     }
+        // >
+        // const { a, b } = null as unknown as MergeFieldsTest
+
+        type OutputsOfInputSteps<TInputSteps extends Record<string, { outputs: Record<string, unknown> }>> = UnionToIntersection<
+            TInputSteps[keyof TInputSteps][`outputs`]
+        >
+
+        const stepsRegistry = [] as StepDefinition[]
+        // type StepOutputType = undefined | ComfyNodeOutput<unknown> | Record<string, ComfyNodeOutput<unknown>> | (() => ComfyNodeOutput<unknown>)
+        type StepOutputType = undefined | ComfyNodeOutput<unknown> | _IMAGE | _MASK
+
+        const defineStep = <
+            TNodes extends Record<string, unknown>,
+            TInputSteps extends Record<string, { outputs: Record<string, StepOutputType> }>,
+            TStepOutputs extends Record<string, StepOutputType>,
+        >({
+            inputSteps,
+            create,
+            modify,
+            preview = false,
+        }: {
+            inputSteps: TInputSteps
+            create: (
+                state: StepState,
+                args: { inputs: OutputsOfInputSteps<TInputSteps> },
+            ) => {
+                nodes: TNodes
+                outputs: TStepOutputs
+            }
+            modify: (args: { nodes: TNodes; frameIndex: number }) => void
+            preview?: boolean
+        }) => {
+            const { nodes, outputs } = create(_state, {
+                inputs: Object.fromEntries(
+                    Object.values(inputSteps).flatMap((x) => Object.entries(x.outputs)),
+                ) as OutputsOfInputSteps<TInputSteps>,
+            })
+
+            const outputsList = Object.values(outputs)
+            const getOutputNodeType = (x: StepOutputType): undefined | string => {
+                if (typeof x === `function`) {
+                    return undefined
+                }
+                if (typeof x !== `object`) {
+                    return undefined
+                }
+
+                if (`type` in x) {
+                    return x.type as string
+                }
+
+                return undefined
+            }
+            const isCacheable = (x: StepOutputType) => {
+                const t = getOutputNodeType(x)
+                return t === `image` || t === `mask`
+            }
+            const cachableOutputs = outputsList.filter((x) => isCacheable(x))
+            const canBeCached = outputsList.length === cachableOutputs.length
+
+            // return (frameIndex: number) => run(nodes, frameIndex)
+            // const outputs = {}
+            const stepDefinition = {
+                setFrameIndex: (frameIndex: number) => modify({ nodes, frameIndex }),
+                outputs,
+                canBeCached,
+                _nodes: nodes,
+            }
+            console.log(`defineStep: stepDefinition`, { stepDefinition, canBeCached, cachableOutputs })
+
+            stepsRegistry.push(stepDefinition)
+
+            if (preview) {
+                _state.graph.PreviewImage({ images: runtime.AUTO })
+                throw new StopError(undefined)
+            }
+
+            return stepDefinition
+        }
+        type StepDefinition = ReturnType<typeof defineStep>
+        const runSteps = async (stepsAll: StepDefinition[], frameIndexes: number[]) => {
+            // Group by cacheable
+            const runGroups = [{ steps: [] as StepDefinition[] }]
+            stepsAll.forEach((x) => {
+                runGroups[runGroups.length - 1].steps.push(x)
+                if (x.canBeCached) {
+                    runGroups.push({ steps: [] })
+                }
+            })
+
+            for (const g of runGroups) {
+                const steps = g.steps
+                for (const frameIndex of frameIndexes) {
+                    console.log(`runSteps: running ${frameIndex}`, { frameIndexes, steps })
+                    stepsAll.forEach((s) => s.setFrameIndex(frameIndex))
+                    await runtime.PROMPT()
+                    await new Promise((r) => setTimeout(r, 1000))
+                }
+            }
+        }
+
+        try {
+            const startImageStep = defineStep({
+                preview: form.imageSource.preview,
+                inputSteps: {},
+                create: ({ graph, imageDirectory }) => {
+                    const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
+                        path: `${imageDirectory}/${form.imageSource.filePattern}`,
+                        current_frame: 0,
+                    })
+                    const startImage = loadImageNode.outputs.image
+
+                    return {
+                        nodes: { loadImageNode },
+                        outputs: { startImage },
+                    }
+                },
+                modify: ({ nodes, frameIndex }) => {
+                    nodes.loadImageNode.inputs.current_frame = frameIndex
+                },
+            })
+
+            const cropMaskStep = defineStep({
+                preview: form.previewCropMask,
+                inputSteps: { startImageStep },
+                create: (state, { inputs }) => {
+                    const { startImage } = inputs
+                    const cropMask = operation_mask.run(state, startImage, undefined, form.cropMaskOperations)
+                    return {
+                        nodes: {},
+                        outputs: { cropMask },
+                    }
+                },
+                modify: ({ nodes, frameIndex }) => {
+                    // nothing specific to the frameIndex
+                },
+            })
+
+            const cropStep = defineStep({
+                preview: form.previewCrop,
+                inputSteps: { startImageStep, cropMaskStep },
+                create: ({ graph }, { inputs }) => {
+                    const { startImage, cropMask } = inputs
+
+                    const { size: sizeInput, cropPadding } = form
+                    const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
+                    const croppedImage = !cropMask
+                        ? startImage
+                        : graph.RL$_Crop$_Resize({
+                              image: startImage,
+                              mask: cropMask,
+                              max_side_length: size,
+                              padding: cropPadding,
+                          }).outputs.cropped_image
+                    // : await cacheImage(
+                    //       state,
+                    //       `croppedImage`,
+                    //       frameIndex,
+                    //       { size, cropPadding },
+                    //       dependencyKeyRef,
+                    //       async () =>
+                    //           graph.RL$_Crop$_Resize({
+                    //               image: startImage,
+                    //               mask: cropMask,
+                    //               max_side_length: size,
+                    //               padding: cropPadding,
+                    //           }).outputs.cropped_image,
+                    //   )
+
+                    return {
+                        nodes: {},
+                        outputs: { croppedImage },
+                    }
+                },
+                modify: ({ nodes, frameIndex }) => {
+                    // nothing specific to the frameIndex
+                },
+            })
+
+            return
+        } catch (err) {
+            if (!(err instanceof StopError)) {
+                throw err
+            }
+
+            // end definition early
+            if (err.setFrameIndex) {
+                stepsRegistry.push({ setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false })
+            }
+        }
+
+        // testing steps
+        const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
+            frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1),
+        }))
+        await runSteps(
+            stepsRegistry,
+            frameIndexes.map((x) => x.frameIndex),
+        )
+        return
+
+        // old
         const iterate = async (iterationIndex: number) => {
             runtime.print(`${JSON.stringify(form)}`)
             const dependencyKeyRef = { dependencyKey: `` }
 
             // Build a ComfyUI graph
-            const imageDirectory = form.imageSource.directory.replace(/\/$/g, ``)
-            const workingDirectory = `${imageDirectory}/working`
-            const graph = runtime.nodes
-            const state = { runtime: runtime, workingDirectory, graph, scopeStack: [{}] }
+            const state = _state
+            const { imageDirectory, graph } = state
+            state.scopeStack = [{}]
 
             const frameIndex = form.imageSource.startIndex + iterationIndex * (form.imageSource.selectEveryNth ?? 1)
             const startImage = graph.Load_Image_Sequence_$1mtb$2({
@@ -127,8 +349,7 @@ appOptimized({
 
             if (form.imageSource.preview) {
                 graph.PreviewImage({ images: startImage })
-                await runtime.PROMPT()
-                throw new StopError()
+                throw new StopError(undefined)
             }
 
             // graph.CropImage$_AS({
@@ -157,7 +378,7 @@ appOptimized({
                 frameIndex,
                 form.cropMaskOperations,
                 dependencyKeyRef,
-                async () => await operation_mask.run(state, startImage, undefined, form.cropMaskOperations),
+                async () => operation_mask.run(state, startImage, undefined, form.cropMaskOperations),
             )
 
             if (form.previewCropMask) {
@@ -166,8 +387,7 @@ appOptimized({
                     const maskImage = graph.MaskToImage({ mask: cropMask })
                     graph.PreviewImage({ images: maskImage })
                 }
-                await runtime.PROMPT()
-                throw new StopError()
+                throw new StopError(undefined)
             }
 
             const { size: sizeInput, cropPadding } = form
@@ -196,8 +416,7 @@ appOptimized({
                     graph.PreviewImage({ images: maskImage })
                 }
                 graph.PreviewImage({ images: croppedImage })
-                await runtime.PROMPT()
-                throw new StopError()
+                throw new StopError(undefined)
             }
 
             const { mask: replaceMask } = await cacheMask(
@@ -237,8 +456,7 @@ appOptimized({
 
                 if (c.preview) {
                     graph.PreviewImage({ images: imagePre })
-                    await runtime.PROMPT()
-                    throw new StopError()
+                    throw new StopError(undefined)
                 }
 
                 controlNetStack = graph.Control_Net_Stacker({
@@ -300,8 +518,7 @@ appOptimized({
 
                 const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE })
                 graph.PreviewImage({ images: latentImage })
-                await runtime.PROMPT()
-                throw new StopError()
+                throw new StopError(undefined)
             }
 
             const seed = runtime.randomSeed()
@@ -387,6 +604,7 @@ appOptimized({
                     throw err
                 }
 
+                await runtime.PROMPT()
                 loadingMain.delete()
                 // return
             }

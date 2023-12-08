@@ -29,12 +29,12 @@ type MaskOperation<TFields extends WidgetDict> = {
         image: _IMAGE,
         mask: undefined | _MASK,
         form: { [k in keyof TFields]: TFields[k]['$Output'] },
-    ) => Promise<undefined | _MASK>
+    ) => undefined | _MASK
 }
 const createMaskOperation = <TFields extends WidgetDict>(op: MaskOperation<TFields>): MaskOperation<TFields> => op
 const createMaskOperationValue = <TValue extends Widget>(op: {
     ui: (form: FormBuilder) => TValue
-    run: (state: AppState, image: _IMAGE, mask: undefined | _MASK, form: TValue['$Output']) => Promise<undefined | _MASK>
+    run: (state: AppState, image: _IMAGE, mask: undefined | _MASK, form: TValue['$Output']) => undefined | _MASK
 }) => op
 
 const operation_clipSeg = createMaskOperation({
@@ -48,7 +48,7 @@ const operation_clipSeg = createMaskOperation({
             }),
         }),
     }),
-    run: async ({ runtime, graph }, image, mask, form) => {
+    run: ({ runtime, graph }, image, mask, form) => {
         if (form.clipSeg == null) {
             return mask
         }
@@ -73,7 +73,7 @@ const operation_color = createMaskOperation({
             }),
         }),
     }),
-    run: async ({ runtime, graph }, image, mask, form) => {
+    run: ({ runtime, graph }, image, mask, form) => {
         if (form.color == null) {
             return mask
         }
@@ -95,7 +95,7 @@ const operation_erodeOrDilate = createMaskOperation({
     ui: (form) => ({
         erodeOrDilate: form.intOpt({ min: -64, max: 64 }),
     }),
-    run: async ({ runtime, graph }, image, mask, form) => {
+    run: ({ runtime, graph }, image, mask, form) => {
         if (form.erodeOrDilate == null) {
             return mask
         }
@@ -117,7 +117,7 @@ const operation_segment = createMaskOperation({
     ui: (form) => ({
         segmentIndex: form.intOpt({ min: 0, max: 10 }),
     }),
-    run: async ({ runtime, graph }, image, mask, form) => {
+    run: ({ runtime, graph }, image, mask, form) => {
         if (form.segmentIndex == null) {
             return mask
         }
@@ -152,7 +152,7 @@ const operation_sam = createMaskOperation({
             }),
         }),
     }),
-    run: async ({ runtime, graph }, image, mask, form) => {
+    run: ({ runtime, graph }, image, mask, form) => {
         if (form.sam == null) {
             return mask
         }
@@ -190,7 +190,7 @@ const operation_storeMask = createMaskOperation({
             }),
         }),
     }),
-    run: async (state, image, mask, form) => {
+    run: (state, image, mask, form) => {
         if (form.storeMask == null) {
             return mask
         }
@@ -245,7 +245,7 @@ const operation_combineMasks = createMaskOperation({
             }),
         }),
     }),
-    run: async (state, image, mask, form) => {
+    run: (state, image, mask, form) => {
         if (form.combineMasks == null) {
             return mask
         }
@@ -404,23 +404,23 @@ const operations_all = createMaskOperation({
                 }),
         }),
     }),
-    run: async (state, image, mask, form) => {
+    run: (state, image, mask, form) => {
         const { runtime, graph } = state
 
         for (const op of form.maskOperations) {
-            mask = await operation_clipSeg.run(state, image, mask, op)
-            mask = await operation_color.run(state, image, mask, op)
-            mask = await operation_segment.run(state, image, mask, op)
-            mask = await operation_sam.run(state, image, mask, op)
-            mask = await operation_erodeOrDilate.run(state, image, mask, op)
-            mask = await operation_storeMask.run(state, image, mask, op)
-            mask = await operation_combineMasks.run(state, image, mask, op)
+            mask = operation_clipSeg.run(state, image, mask, op)
+            mask = operation_color.run(state, image, mask, op)
+            mask = operation_segment.run(state, image, mask, op)
+            mask = operation_sam.run(state, image, mask, op)
+            mask = operation_erodeOrDilate.run(state, image, mask, op)
+            mask = operation_storeMask.run(state, image, mask, op)
+            mask = operation_combineMasks.run(state, image, mask, op)
             // mask = await operation_combineWithMasks.run(state, image, mask, op)
 
             if (op.preview) {
                 if (!mask) {
-                    runtime.print(`No mask!`)
-                    throw new StopError()
+                    runtime.output_text(`No mask!`)
+                    throw new StopError(undefined)
                 }
 
                 const maskAsImage = graph.MaskToImage({ mask })
@@ -432,8 +432,8 @@ const operations_all = createMaskOperation({
                 })
                 // graph.PreviewImage({ images: maskRaw.outputs.Heatmap$_Mask })
                 graph.PreviewImage({ images: maskPreview })
-                await runtime.PROMPT()
-                throw new StopError()
+                // don't wait for it?
+                throw new StopError(undefined)
             }
         }
 

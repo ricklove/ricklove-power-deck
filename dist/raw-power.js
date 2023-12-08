@@ -9,6 +9,10 @@
 
 // library/ricklove/my-cushy-deck/src/_appState.ts
 var StopError = class extends Error {
+  constructor(setFrameIndex) {
+    super();
+    this.setFrameIndex = setFrameIndex;
+  }
 };
 var getNextActiveNodeIndex = (runtime) => {
   return runtime.workflow.nodes.findLastIndex((x) => !x.disabled) + 1;
@@ -304,7 +308,7 @@ var operation_clipSeg = createMaskOperation({
       })
     })
   }),
-  run: async ({ runtime, graph }, image, mask, form) => {
+  run: ({ runtime, graph }, image, mask, form) => {
     if (form.clipSeg == null) {
       return mask;
     }
@@ -326,7 +330,7 @@ var operation_color = createMaskOperation({
       })
     })
   }),
-  run: async ({ runtime, graph }, image, mask, form) => {
+  run: ({ runtime, graph }, image, mask, form) => {
     if (form.color == null) {
       return mask;
     }
@@ -345,7 +349,7 @@ var operation_erodeOrDilate = createMaskOperation({
   ui: (form) => ({
     erodeOrDilate: form.intOpt({ min: -64, max: 64 })
   }),
-  run: async ({ runtime, graph }, image, mask, form) => {
+  run: ({ runtime, graph }, image, mask, form) => {
     if (form.erodeOrDilate == null) {
       return mask;
     }
@@ -360,7 +364,7 @@ var operation_segment = createMaskOperation({
   ui: (form) => ({
     segmentIndex: form.intOpt({ min: 0, max: 10 })
   }),
-  run: async ({ runtime, graph }, image, mask, form) => {
+  run: ({ runtime, graph }, image, mask, form) => {
     if (form.segmentIndex == null) {
       return mask;
     }
@@ -390,7 +394,7 @@ var operation_sam = createMaskOperation({
       })
     })
   }),
-  run: async ({ runtime, graph }, image, mask, form) => {
+  run: ({ runtime, graph }, image, mask, form) => {
     if (form.sam == null) {
       return mask;
     }
@@ -423,7 +427,7 @@ var operation_storeMask = createMaskOperation({
       })
     })
   }),
-  run: async (state, image, mask, form) => {
+  run: (state, image, mask, form) => {
     if (form.storeMask == null) {
       return mask;
     }
@@ -476,7 +480,7 @@ var operation_combineMasks = createMaskOperation({
       })
     })
   }),
-  run: async (state, image, mask, form) => {
+  run: (state, image, mask, form) => {
     if (form.combineMasks == null) {
       return mask;
     }
@@ -537,20 +541,20 @@ var operations_all = createMaskOperation({
       })
     })
   }),
-  run: async (state, image, mask, form) => {
+  run: (state, image, mask, form) => {
     const { runtime, graph } = state;
     for (const op of form.maskOperations) {
-      mask = await operation_clipSeg.run(state, image, mask, op);
-      mask = await operation_color.run(state, image, mask, op);
-      mask = await operation_segment.run(state, image, mask, op);
-      mask = await operation_sam.run(state, image, mask, op);
-      mask = await operation_erodeOrDilate.run(state, image, mask, op);
-      mask = await operation_storeMask.run(state, image, mask, op);
-      mask = await operation_combineMasks.run(state, image, mask, op);
+      mask = operation_clipSeg.run(state, image, mask, op);
+      mask = operation_color.run(state, image, mask, op);
+      mask = operation_segment.run(state, image, mask, op);
+      mask = operation_sam.run(state, image, mask, op);
+      mask = operation_erodeOrDilate.run(state, image, mask, op);
+      mask = operation_storeMask.run(state, image, mask, op);
+      mask = operation_combineMasks.run(state, image, mask, op);
       if (op.preview) {
         if (!mask) {
-          runtime.print(`No mask!`);
-          throw new StopError();
+          runtime.output_text(`No mask!`);
+          throw new StopError(void 0);
         }
         const maskAsImage = graph.MaskToImage({ mask });
         const maskPreview = graph.ImageBlend({
@@ -560,8 +564,7 @@ var operations_all = createMaskOperation({
           blend_factor: 0.5
         });
         graph.PreviewImage({ images: maskPreview });
-        await runtime.PROMPT();
-        throw new StopError();
+        throw new StopError(void 0);
       }
     }
     return mask;
@@ -903,13 +906,154 @@ appOptimized({
     })
   }),
   run: async (runtime, form) => {
+    const _imageDirectory = form.imageSource.directory.replace(/\/$/g, ``);
+    const _state = {
+      runtime,
+      imageDirectory: _imageDirectory,
+      workingDirectory: `${_imageDirectory}/working`,
+      graph: runtime.nodes,
+      scopeStack: [{}]
+    };
+    const stepsRegistry = [];
+    const defineStep = ({
+      inputSteps,
+      create,
+      modify,
+      preview = false
+    }) => {
+      const { nodes, outputs } = create(_state, {
+        inputs: Object.fromEntries(
+          Object.values(inputSteps).flatMap((x) => Object.entries(x.outputs))
+        )
+      });
+      const outputsList = Object.values(outputs);
+      const getOutputNodeType = (x) => {
+        if (typeof x === `function`) {
+          return void 0;
+        }
+        if (typeof x !== `object`) {
+          return void 0;
+        }
+        if (`type` in x) {
+          return x.type;
+        }
+        return void 0;
+      };
+      const isCacheable = (x) => {
+        const t = getOutputNodeType(x);
+        return t === `image` || t === `mask`;
+      };
+      const cachableOutputs = outputsList.filter((x) => isCacheable(x));
+      const canBeCached = outputsList.length === cachableOutputs.length;
+      const stepDefinition = {
+        setFrameIndex: (frameIndex) => modify({ nodes, frameIndex }),
+        outputs,
+        canBeCached,
+        _nodes: nodes
+      };
+      console.log(`defineStep: stepDefinition`, { stepDefinition, canBeCached, cachableOutputs });
+      stepsRegistry.push(stepDefinition);
+      if (preview) {
+        _state.graph.PreviewImage({ images: runtime.AUTO });
+        throw new StopError(void 0);
+      }
+      return stepDefinition;
+    };
+    const runSteps = async (stepsAll, frameIndexes2) => {
+      const runGroups = [{ steps: [] }];
+      stepsAll.forEach((x) => {
+        runGroups[runGroups.length - 1].steps.push(x);
+        if (x.canBeCached) {
+          runGroups.push({ steps: [] });
+        }
+      });
+      for (const g of runGroups) {
+        const steps = g.steps;
+        for (const frameIndex of frameIndexes2) {
+          console.log(`runSteps: running ${frameIndex}`, { frameIndexes: frameIndexes2, steps });
+          stepsAll.forEach((s) => s.setFrameIndex(frameIndex));
+          await runtime.PROMPT();
+          await new Promise((r) => setTimeout(r, 1e3));
+        }
+      }
+    };
+    try {
+      const startImageStep = defineStep({
+        preview: form.imageSource.preview,
+        inputSteps: {},
+        create: ({ graph, imageDirectory }) => {
+          const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
+            path: `${imageDirectory}/${form.imageSource.filePattern}`,
+            current_frame: 0
+          });
+          const startImage = loadImageNode.outputs.image;
+          return {
+            nodes: { loadImageNode },
+            outputs: { startImage }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+          nodes.loadImageNode.inputs.current_frame = frameIndex;
+        }
+      });
+      const cropMaskStep = defineStep({
+        preview: form.previewCropMask,
+        inputSteps: { startImageStep },
+        create: (state, { inputs }) => {
+          const { startImage } = inputs;
+          const cropMask = operation_mask.run(state, startImage, void 0, form.cropMaskOperations);
+          return {
+            nodes: {},
+            outputs: { cropMask }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+        }
+      });
+      const cropStep = defineStep({
+        preview: form.previewCrop,
+        inputSteps: { startImageStep, cropMaskStep },
+        create: ({ graph }, { inputs }) => {
+          const { startImage, cropMask } = inputs;
+          const { size: sizeInput, cropPadding } = form;
+          const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
+          const croppedImage = !cropMask ? startImage : graph.RL$_Crop$_Resize({
+            image: startImage,
+            mask: cropMask,
+            max_side_length: size,
+            padding: cropPadding
+          }).outputs.cropped_image;
+          return {
+            nodes: {},
+            outputs: { croppedImage }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+        }
+      });
+      return;
+    } catch (err) {
+      if (!(err instanceof StopError)) {
+        throw err;
+      }
+      if (err.setFrameIndex) {
+        stepsRegistry.push({ setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false });
+      }
+    }
+    const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
+      frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
+    }));
+    await runSteps(
+      stepsRegistry,
+      frameIndexes.map((x) => x.frameIndex)
+    );
+    return;
     const iterate = async (iterationIndex) => {
       runtime.print(`${JSON.stringify(form)}`);
       const dependencyKeyRef = { dependencyKey: `` };
-      const imageDirectory = form.imageSource.directory.replace(/\/$/g, ``);
-      const workingDirectory = `${imageDirectory}/working`;
-      const graph = runtime.nodes;
-      const state = { runtime, workingDirectory, graph, scopeStack: [{}] };
+      const state = _state;
+      const { imageDirectory, graph } = state;
+      state.scopeStack = [{}];
       const frameIndex = form.imageSource.startIndex + iterationIndex * (form.imageSource.selectEveryNth ?? 1);
       const startImage = graph.Load_Image_Sequence_$1mtb$2({
         path: `${imageDirectory}/${form.imageSource.filePattern}`,
@@ -917,8 +1061,7 @@ appOptimized({
       }).outputs.image;
       if (form.imageSource.preview) {
         graph.PreviewImage({ images: startImage });
-        await runtime.PROMPT();
-        throw new StopError();
+        throw new StopError(void 0);
       }
       const { mask: cropMask } = await cacheMask(
         state,
@@ -926,7 +1069,7 @@ appOptimized({
         frameIndex,
         form.cropMaskOperations,
         dependencyKeyRef,
-        async () => await operation_mask.run(state, startImage, void 0, form.cropMaskOperations)
+        async () => operation_mask.run(state, startImage, void 0, form.cropMaskOperations)
       );
       if (form.previewCropMask) {
         graph.PreviewImage({ images: startImage });
@@ -934,8 +1077,7 @@ appOptimized({
           const maskImage = graph.MaskToImage({ mask: cropMask });
           graph.PreviewImage({ images: maskImage });
         }
-        await runtime.PROMPT();
-        throw new StopError();
+        throw new StopError(void 0);
       }
       const { size: sizeInput, cropPadding } = form;
       const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
@@ -959,8 +1101,7 @@ appOptimized({
           graph.PreviewImage({ images: maskImage });
         }
         graph.PreviewImage({ images: croppedImage });
-        await runtime.PROMPT();
-        throw new StopError();
+        throw new StopError(void 0);
       }
       const { mask: replaceMask } = await cacheMask(
         state,
@@ -988,8 +1129,7 @@ appOptimized({
         );
         if (c.preview) {
           graph.PreviewImage({ images: imagePre });
-          await runtime.PROMPT();
-          throw new StopError();
+          throw new StopError(void 0);
         }
         controlNetStack = graph.Control_Net_Stacker({
           cnet_stack: controlNetStack,
@@ -1040,8 +1180,7 @@ appOptimized({
         }
         const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE });
         graph.PreviewImage({ images: latentImage });
-        await runtime.PROMPT();
-        throw new StopError();
+        throw new StopError(void 0);
       }
       const seed = runtime.randomSeed();
       const startStep = Math.max(
@@ -1095,6 +1234,7 @@ appOptimized({
         if (!(err instanceof StopError)) {
           throw err;
         }
+        await runtime.PROMPT();
         loadingMain.delete();
       }
     }
