@@ -1140,24 +1140,6 @@ appOptimized({
     // ...operation_replaceMask.ui(form),
     // mask: ui_maskPrompt(form, { defaultPrompt: `ball` }),
     _3: form.markdown({ markdown: (formRoot) => `# Generate Image` }),
-    useImpaintingEncode: form.bool({ default: false }),
-    previewLatent: form.inlineRun({}),
-    // g: form.groupOpt({
-    //     items: () => ({
-    positive: form.str({}),
-    negative: form.str({}),
-    steps: form.int({ default: 11, min: 0, max: 100 }),
-    startStep: form.intOpt({ default: 1, min: 0, max: 100 }),
-    startStepFromEnd: form.intOpt({ default: 1, min: 0, max: 100 }),
-    stepsToIterate: form.intOpt({ default: 2, min: 0, max: 100 }),
-    endStep: form.intOpt({ default: 1e3, min: 0, max: 100 }),
-    endStepFromEnd: form.intOpt({ default: 0, min: 0, max: 100 }),
-    checkpoint: form.enum({
-      enumName: "Enum_CheckpointLoaderSimple_ckpt_name",
-      default: "nightvisionXLPhotorealisticPortrait_release0770Bakedvae.safetensors"
-    }),
-    sdxl: form.bool({ default: true }),
-    lcm: form.bool({ default: true }),
     controlNet: form.list({
       element: () => form.group({
         items: () => ({
@@ -1176,9 +1158,33 @@ appOptimized({
         })
       })
     }),
-    config: form.float({ default: 1.5 }),
-    add_noise: form.bool({ default: true }),
-    render: form.inlineRun({}),
+    sampler: form.group({
+      items: () => ({
+        previewInputs: form.inlineRun({}),
+        useImpaintingEncode: form.bool({ default: false }),
+        previewLatent: form.inlineRun({}),
+        // g: form.groupOpt({
+        //     items: () => ({
+        positive: form.str({}),
+        negative: form.str({}),
+        seed: form.seed({}),
+        steps: form.int({ default: 11, min: 0, max: 100 }),
+        startStep: form.intOpt({ default: 1, min: 0, max: 100 }),
+        startStepFromEnd: form.intOpt({ default: 1, min: 0, max: 100 }),
+        stepsToIterate: form.intOpt({ default: 2, min: 0, max: 100 }),
+        endStep: form.intOpt({ default: 1e3, min: 0, max: 100 }),
+        endStepFromEnd: form.intOpt({ default: 0, min: 0, max: 100 }),
+        checkpoint: form.enum({
+          enumName: "Enum_CheckpointLoaderSimple_ckpt_name",
+          default: "nightvisionXLPhotorealisticPortrait_release0770Bakedvae.safetensors"
+        }),
+        sdxl: form.bool({ default: true }),
+        lcm: form.bool({ default: true }),
+        config: form.float({ default: 1.5 }),
+        add_noise: form.bool({ default: true }),
+        render: form.inlineRun({})
+      })
+    }),
     testSeed: form.seed({}),
     test: form.custom({
       Component: OptimizerComponent,
@@ -1272,6 +1278,164 @@ appOptimized({
       modify: ({ nodes, frameIndex }) => {
       }
     });
+    const controlNetStackStep = (() => {
+      let controlNetStepPrev = void 0;
+      for (const c of form.controlNet) {
+        const preprocessorKind = c.controlNet.toLowerCase().includes(`depth`) ? `zoe-depth` : c.controlNet.toLowerCase().includes(`normal`) ? `bae-normal` : void 0;
+        const preprocessorStep = defineStep({
+          name: `preprocessorStep`,
+          preview: c.preview,
+          cacheParams: [preprocessorKind],
+          inputSteps: { cropStep },
+          create: ({ graph }, { inputs }) => {
+            const { croppedImage } = inputs;
+            const imagePre = preprocessorKind === `zoe-depth` ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }) : preprocessorKind === `bae-normal` ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }) : croppedImage;
+            return {
+              nodes: {},
+              outputs: { imagePre }
+            };
+          },
+          modify: ({ nodes, frameIndex }) => {
+          }
+        });
+        const controlNetStep = defineStep({
+          name: `controlNetStep`,
+          preview: c.preview,
+          cacheParams: [],
+          inputSteps: { preprocessorStep, controlNetStepPrev },
+          create: ({ graph }, { inputs }) => {
+            const { imagePre, controlNetStack: controlNetStackPrev } = inputs;
+            const controlNetStack = graph.Control_Net_Stacker({
+              cnet_stack: controlNetStackPrev,
+              control_net: graph.ControlNetLoader({ control_net_name: c.controlNet }),
+              image: imagePre,
+              strength: c.strength,
+              start_percent: c.start,
+              end_percent: c.end
+            }).outputs.CNET_STACK;
+            return {
+              nodes: {},
+              outputs: { controlNetStack }
+            };
+          },
+          modify: ({ nodes, frameIndex }) => {
+          }
+        });
+        controlNetStepPrev = controlNetStep;
+      }
+      return controlNetStepPrev;
+    })();
+    const samplerStep = defineStep({
+      name: `samplerStep`,
+      preview: form.sampler.render,
+      cacheParams: [form.sampler],
+      inputSteps: { cropStep, replaceMaskStep, controlNetStackStep },
+      create: ({ graph }, { inputs }) => {
+        const { croppedImage, replaceMask, controlNetStack } = inputs;
+        if (form.sampler.previewInputs) {
+          graph.PreviewImage({ images: croppedImage });
+          if (replaceMask) {
+            const maskImage = graph.MaskToImage({ mask: replaceMask });
+            graph.PreviewImage({ images: maskImage });
+          }
+          throw new StopError(void 0);
+        }
+        const loraStack = !form.sampler.lcm ? void 0 : graph.LoRA_Stacker({
+          input_mode: `simple`,
+          lora_count: 1,
+          lora_name_1: !form.sampler.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`
+        });
+        const loader = graph.Efficient_Loader({
+          ckpt_name: form.sampler.checkpoint,
+          lora_stack: loraStack,
+          cnet_stack: controlNetStack,
+          // defaults
+          lora_name: `None`,
+          token_normalization: `none`,
+          vae_name: `Baked VAE`,
+          weight_interpretation: `comfy`,
+          positive: form.sampler.positive,
+          negative: form.sampler.negative
+        });
+        const startLatent = (() => {
+          if (replaceMask && form.sampler.useImpaintingEncode) {
+            const imageList = graph.ImpactImageBatchToImageList({
+              image: croppedImage
+            });
+            let maskList = graph.MasksToMaskList({
+              masks: replaceMask
+            }).outputs.MASK;
+            const latentList = graph.VAEEncodeForInpaint({ pixels: imageList, vae: loader, mask: maskList });
+            return graph.RebatchLatents({
+              latents: latentList
+            });
+          }
+          const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader });
+          if (!replaceMask) {
+            return startLatent0;
+          }
+          const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask });
+          return startLatent1;
+        })();
+        let latent = startLatent._LATENT;
+        if (form.sampler.previewLatent) {
+          if (replaceMask) {
+            const maskImage = graph.MaskToImage({ mask: replaceMask });
+            graph.PreviewImage({ images: maskImage });
+          }
+          const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE });
+          graph.PreviewImage({ images: latentImage });
+          throw new StopError(void 0);
+        }
+        const seed = form.sampler.seed;
+        const startStep = Math.max(
+          0,
+          Math.min(
+            form.sampler.steps - 1,
+            form.sampler.startStep ? form.sampler.startStep : form.sampler.startStepFromEnd ? form.sampler.steps - form.sampler.startStepFromEnd : 0
+          )
+        );
+        const endStep = Math.max(
+          1,
+          Math.min(
+            form.sampler.steps,
+            form.sampler.endStep ? form.sampler.endStep : form.sampler.endStepFromEnd ? form.sampler.steps - form.sampler.endStepFromEnd : form.sampler.stepsToIterate ? startStep + form.sampler.stepsToIterate : form.sampler.steps
+          )
+        );
+        const sampler = graph.KSampler_Adv$5_$1Efficient$2({
+          add_noise: form.sampler.add_noise ? `enable` : `disable`,
+          return_with_leftover_noise: `disable`,
+          vae_decode: `true`,
+          preview_method: `auto`,
+          noise_seed: seed,
+          steps: form.sampler.steps,
+          start_at_step: startStep,
+          end_at_step: endStep,
+          cfg: form.sampler.config,
+          sampler_name: "lcm",
+          scheduler: "normal",
+          model: loader,
+          positive: loader.outputs.CONDITIONING$6,
+          //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
+          negative: loader.outputs.CONDITIONING$7,
+          //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
+          // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
+          // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
+          latent_image: startLatent
+        });
+        const finalImage = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE;
+        graph.SaveImage({
+          images: finalImage,
+          filename_prefix: "cushy"
+        });
+        return {
+          nodes: {},
+          outputs: { finalImage }
+        };
+      },
+      modify: ({ nodes, frameIndex }) => {
+      }
+    });
     const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
       frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
     }));
@@ -1340,11 +1504,6 @@ appOptimized({
         dependencyKeyRef,
         async () => await operation_mask.run(state, croppedImage, void 0, form.replaceMaskOperations)
       );
-      const loraStack = !form.lcm ? void 0 : graph.LoRA_Stacker({
-        input_mode: `simple`,
-        lora_count: 1,
-        lora_name_1: !form.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`
-      });
       let controlNetStack = void 0;
       for (const c of form.controlNet) {
         const preprocessorKind = c.controlNet.toLowerCase().includes(`depth`) ? `zoe-depth` : c.controlNet.toLowerCase().includes(`normal`) ? `bae-normal` : void 0;
@@ -1369,8 +1528,13 @@ appOptimized({
           end_percent: c.end
         });
       }
+      const loraStack = !form.sampler.lcm ? void 0 : graph.LoRA_Stacker({
+        input_mode: `simple`,
+        lora_count: 1,
+        lora_name_1: !form.sampler.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`
+      });
       const loader = graph.Efficient_Loader({
-        ckpt_name: form.checkpoint,
+        ckpt_name: form.sampler.checkpoint,
         lora_stack: loraStack,
         cnet_stack: controlNetStack,
         // defaults
@@ -1378,11 +1542,11 @@ appOptimized({
         token_normalization: `none`,
         vae_name: `Baked VAE`,
         weight_interpretation: `comfy`,
-        positive: form.positive,
-        negative: form.negative
+        positive: form.sampler.positive,
+        negative: form.sampler.negative
       });
       const startLatent = (() => {
-        if (replaceMask && form.useImpaintingEncode) {
+        if (replaceMask && form.sampler.useImpaintingEncode) {
           const imageList = graph.ImpactImageBatchToImageList({
             image: croppedImage
           });
@@ -1402,7 +1566,7 @@ appOptimized({
         return startLatent1;
       })();
       let latent = startLatent._LATENT;
-      if (form.previewLatent) {
+      if (form.sampler.previewLatent) {
         if (replaceMask) {
           const maskImage = graph.MaskToImage({ mask: replaceMask });
           graph.PreviewImage({ images: maskImage });
@@ -1411,38 +1575,38 @@ appOptimized({
         graph.PreviewImage({ images: latentImage });
         throw new StopError(void 0);
       }
-      const seed = runtime.randomSeed();
+      const seed = form.sampler.seed;
       const startStep = Math.max(
         0,
         Math.min(
-          form.steps - 1,
-          form.startStep ? form.startStep : form.startStepFromEnd ? form.steps - form.startStepFromEnd : 0
+          form.sampler.steps - 1,
+          form.sampler.startStep ? form.sampler.startStep : form.sampler.startStepFromEnd ? form.sampler.steps - form.sampler.startStepFromEnd : 0
         )
       );
       const endStep = Math.max(
         1,
         Math.min(
-          form.steps,
-          form.endStep ? form.endStep : form.endStepFromEnd ? form.steps - form.endStepFromEnd : form.stepsToIterate ? startStep + form.stepsToIterate : form.steps
+          form.sampler.steps,
+          form.sampler.endStep ? form.sampler.endStep : form.sampler.endStepFromEnd ? form.sampler.steps - form.sampler.endStepFromEnd : form.sampler.stepsToIterate ? startStep + form.sampler.stepsToIterate : form.sampler.steps
         )
       );
       const sampler = graph.KSampler_Adv$5_$1Efficient$2({
-        add_noise: form.add_noise ? `enable` : `disable`,
+        add_noise: form.sampler.add_noise ? `enable` : `disable`,
         return_with_leftover_noise: `disable`,
         vae_decode: `true`,
         preview_method: `auto`,
         noise_seed: seed,
-        steps: form.steps,
+        steps: form.sampler.steps,
         start_at_step: startStep,
         end_at_step: endStep,
-        cfg: form.config,
+        cfg: form.sampler.config,
         sampler_name: "lcm",
         scheduler: "normal",
         model: loader,
         positive: loader.outputs.CONDITIONING$6,
-        //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
+        //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
         negative: loader.outputs.CONDITIONING$7,
-        //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
+        //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
         // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
         // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
         latent_image: startLatent

@@ -2,77 +2,80 @@ import { ComfyNodeOutput } from 'src/core/Slot'
 import { AppState, StopError, disableNodesAfterInclusive, getNextActiveNodeIndex, getEnabledNodeNames } from './_appState'
 import { cacheImage, cacheImageBuilder, cacheMaskBuilder } from './_cache'
 import { Widget } from 'src'
+import { ComfyNode } from 'src/core/ComfyNode'
+
+type StepState = AppState
+
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never
+// type MergeNestedFields<T extends Record<string, unknown>> = UnionToIntersection<T[keyof T]>
+// type MergeFieldsTest = MergeFields<
+//     {
+//         aObj: { a: boolean }
+//     } & {
+//         bObj: { b: boolean }
+//     }
+// >
+// const { a, b } = null as unknown as MergeFieldsTest
+
+type OutputsOfInputSteps<TInputStepDefinitions extends Record<string, undefined | {} | { $Outputs: Record<string, unknown> }>> =
+    UnionToIntersection<
+        {
+            [K in keyof TInputStepDefinitions]: TInputStepDefinitions[K] extends { $Outputs: Record<string, unknown> }
+                ? TInputStepDefinitions[K][`$Outputs`]
+                : TInputStepDefinitions[K] extends undefined | { $Outputs: Record<string, unknown> }
+                ? Partial<NonNullable<TInputStepDefinitions[K]>[`$Outputs`]>
+                : never
+        }[keyof TInputStepDefinitions]
+    >
+// const { a, b } = null as unknown as OutputsOfInputSteps<{
+//     aObj: { outputs: { a: boolean } }
+//     bObj: { outputs: { b: boolean } }
+//     cObj: {}
+// }>
+
+// type StepOutputType = undefined | ComfyNodeOutput<unknown> | Record<string, ComfyNodeOutput<unknown>> | (() => ComfyNodeOutput<unknown>)
+type StepOutputType = undefined | ComfyNodeOutput<unknown> | _IMAGE | _MASK
+export type StepDefinition<
+    TNodes extends Record<string, unknown> = Record<string, unknown>,
+    TInputStepDefinitions extends Record<
+        string,
+        undefined | {} | { $Outputs: Record<string, StepOutputType>; _build?: { outputs: TStepOutputs } }
+    > = Record<string, { $Outputs: Record<string, StepOutputType>; _build?: { outputs: Record<string, StepOutputType> } }>,
+    TStepOutputs extends Record<string, StepOutputType> = Record<string, StepOutputType>,
+> = {
+    name: string
+    inputSteps: TInputStepDefinitions
+    cacheParams: Widget[`$Output`] | Record<string, unknown>
+    create: (
+        state: StepState,
+        args: { inputs: OutputsOfInputSteps<TInputStepDefinitions> },
+    ) => {
+        nodes: TNodes
+        outputs: TStepOutputs
+    }
+    modify: (args: { nodes: TNodes; frameIndex: number }) => void
+    preview?: boolean
+    $Outputs: TStepOutputs
+    _build?: StepBuild<TNodes, TStepOutputs>
+}
+type StepBuild<
+    TNodes extends Record<string, unknown> = Record<string, unknown>,
+    TStepOutputs extends Record<string, StepOutputType> = Record<string, StepOutputType>,
+> = {
+    setFrameIndex: (frameIndex: number) => void
+    outputs: TStepOutputs
+    canBeCached: boolean
+    _nodes: TNodes
+}
 
 export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) => {
     const _state = appState as AppState
     _state.workingDirectory = `${_state.imageDirectory}/working`
-    type StepState = typeof _state
-
-    type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never
-    // type MergeNestedFields<T extends Record<string, unknown>> = UnionToIntersection<T[keyof T]>
-    // type MergeFieldsTest = MergeFields<
-    //     {
-    //         aObj: { a: boolean }
-    //     } & {
-    //         bObj: { b: boolean }
-    //     }
-    // >
-    // const { a, b } = null as unknown as MergeFieldsTest
-
-    type OutputsOfInputSteps<TInputStepDefinitions extends Record<string, {} | { $Outputs: Record<string, unknown> }>> =
-        UnionToIntersection<
-            {
-                [K in keyof TInputStepDefinitions]: TInputStepDefinitions[K] extends { $Outputs: Record<string, unknown> }
-                    ? TInputStepDefinitions[K][`$Outputs`]
-                    : never
-            }[keyof TInputStepDefinitions]
-        >
-    // const { a, b } = null as unknown as OutputsOfInputSteps<{
-    //     aObj: { outputs: { a: boolean } }
-    //     bObj: { outputs: { b: boolean } }
-    //     cObj: {}
-    // }>
-
     const stepsRegistry = [] as StepDefinition[]
-
-    // type StepOutputType = undefined | ComfyNodeOutput<unknown> | Record<string, ComfyNodeOutput<unknown>> | (() => ComfyNodeOutput<unknown>)
-    type StepOutputType = undefined | ComfyNodeOutput<unknown> | _IMAGE | _MASK
-    type StepDefinition<
-        TNodes extends Record<string, unknown> = Record<string, unknown>,
-        TInputStepDefinitions extends Record<
-            string,
-            {} | { $Outputs: Record<string, StepOutputType>; _build?: { outputs: TStepOutputs } }
-        > = Record<string, { $Outputs: Record<string, StepOutputType>; _build?: { outputs: Record<string, StepOutputType> } }>,
-        TStepOutputs extends Record<string, StepOutputType> = Record<string, StepOutputType>,
-    > = {
-        name: string
-        inputSteps: TInputStepDefinitions
-        cacheParams: Widget[`$Output`] | Record<string, unknown>
-        create: (
-            state: StepState,
-            args: { inputs: OutputsOfInputSteps<TInputStepDefinitions> },
-        ) => {
-            nodes: TNodes
-            outputs: TStepOutputs
-        }
-        modify: (args: { nodes: TNodes; frameIndex: number }) => void
-        preview?: boolean
-        $Outputs: TStepOutputs
-        _build?: StepBuild<TNodes, TStepOutputs>
-    }
-    type StepBuild<
-        TNodes extends Record<string, unknown> = Record<string, unknown>,
-        TStepOutputs extends Record<string, StepOutputType> = Record<string, StepOutputType>,
-    > = {
-        setFrameIndex: (frameIndex: number) => void
-        outputs: TStepOutputs
-        canBeCached: boolean
-        _nodes: TNodes
-    }
 
     const defineStep = <
         TNodes extends Record<string, unknown>,
-        TInputStepDefinitions extends Record<string, {} | { $Outputs: Record<string, StepOutputType> }>,
+        TInputStepDefinitions extends Record<string, undefined | {} | { $Outputs: Record<string, StepOutputType> }>,
         TStepOutputs extends Record<string, StepOutputType>,
     >({
         name,
