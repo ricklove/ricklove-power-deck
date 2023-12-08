@@ -17,8 +17,14 @@ var StopError = class extends Error {
 var getNextActiveNodeIndex = (runtime) => {
   return runtime.workflow.nodes.findLastIndex((x) => !x.disabled) + 1;
 };
-var disableNodesAfter = (runtime, iNodeStartDisable) => {
+var disableNodesAfterInclusive = (runtime, iNodeStartDisable) => {
   runtime.workflow.nodes.slice(iNodeStartDisable).forEach((x) => x.disable());
+};
+var getEnabledNodeNames = (runtime) => {
+  return {
+    enabledNodes: runtime.workflow.nodes.filter((x) => !x.disabled).map((x) => x.$schema.nameInCushy),
+    disabledNodes: runtime.workflow.nodes.filter((x) => x.disabled).map((x) => x.$schema.nameInCushy)
+  };
 };
 
 // library/ricklove/my-cushy-deck/src/_random.ts
@@ -199,6 +205,87 @@ var showLoadingMessage = (runtime, title, data) => {
 };
 
 // library/ricklove/my-cushy-deck/src/_cache.ts
+var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
+  const { runtime, graph } = state;
+  const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
+  dependencyKeyRef.dependencyKey = paramsHash;
+  const paramsFilePattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}/#####.png`;
+  const loadCached = () => {
+    const loadImageNode = graph.RL$_LoadImageSequence({
+      path: paramsFilePattern,
+      current_frame: 0
+    });
+    const imageReloaded = loadImageNode.outputs.image;
+    return {
+      getOutput: () => imageReloaded,
+      modify: (frameIndex) => {
+        loadImageNode.inputs.current_frame = frameIndex;
+      }
+    };
+  };
+  const createCache = (getValue) => {
+    const image = getValue();
+    if (!image) {
+      return {
+        // undefined
+        getOutput: () => image,
+        modify: (frameIndex) => {
+        }
+      };
+    }
+    const saveImageNode = graph.RL$_SaveImageSequence({
+      images: image,
+      current_frame: 0,
+      path: paramsFilePattern
+    });
+    return {
+      getOutput: () => image,
+      modify: (frameIndex) => {
+        saveImageNode.inputs.current_frame = frameIndex;
+      }
+    };
+  };
+  return {
+    loadCached,
+    createCache
+  };
+};
+var cacheMaskBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
+  const { graph } = state;
+  const imageBuilder = cacheImageBuilder(state, folderPrefix, params, dependencyKeyRef);
+  return {
+    loadCached: () => {
+      const loadCached_image = imageBuilder.loadCached();
+      return {
+        getOutput: () => {
+          const reloadedMaskImage = loadCached_image.getOutput();
+          const maskReloaded = graph.Image_To_Mask({
+            image: reloadedMaskImage,
+            method: `intensity`
+          }).outputs.MASK;
+          return maskReloaded;
+        },
+        modify: (frameIndex) => loadCached_image.modify(frameIndex)
+      };
+    },
+    createCache: (getValue) => {
+      const mask = getValue();
+      if (!mask) {
+        return void 0;
+      }
+      const createCache_image = imageBuilder.createCache(() => {
+        const maskImage = graph.MaskToImage({ mask });
+        return maskImage;
+      });
+      return {
+        getOutput: () => {
+          return mask;
+        },
+        modify: (frameIndex) => createCache_image.modify(frameIndex)
+      };
+    }
+  };
+};
 var cacheImage = async (state, folderPrefix, frameIndex, params, dependencyKeyRef, createGraph) => {
   const { runtime, graph } = state;
   const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
@@ -247,7 +334,7 @@ var cacheImage = async (state, folderPrefix, frameIndex, params, dependencyKeyRe
     );
     return { image };
   } catch {
-    disableNodesAfter(runtime, iNextInitial);
+    disableNodesAfterInclusive(runtime, iNextInitial);
   }
   console.log(`cacheImage: Failed to load - creating`, {
     paramsFilePattern,
@@ -255,7 +342,7 @@ var cacheImage = async (state, folderPrefix, frameIndex, params, dependencyKeyRe
     params
   });
   await createImage_execute();
-  disableNodesAfter(runtime, iNextInitial);
+  disableNodesAfterInclusive(runtime, iNextInitial);
   loadingMessage.delete();
   return { image: loadImage_graph() };
 };
@@ -822,28 +909,34 @@ var createStepsSystem = (appState) => {
   _state.workingDirectory = `${_state.imageDirectory}/working`;
   const stepsRegistry = [];
   const defineStep = ({
+    name,
     inputSteps,
     create,
     modify,
-    preview = false
+    preview = false,
+    cacheParams
   }) => {
     const stepDefinition = {
+      name,
       inputSteps,
       create,
       modify,
       preview,
+      cacheParams,
       $Outputs: void 0
     };
     stepsRegistry.push(stepDefinition);
     return stepDefinition;
   };
   const buildStep = (stepDef) => {
+    console.log(`buildStep:`, stepDef);
     const { inputSteps, create, modify, preview } = stepDef;
-    const { nodes, outputs } = create(_state, {
-      inputs: Object.fromEntries(
-        Object.values(inputSteps).flatMap((x) => Object.entries(x._build?.outputs ?? {}))
-      )
-    });
+    const inputs = Object.fromEntries(
+      Object.values(inputSteps).flatMap((x) => Object.entries(x._build?.outputs ?? {}))
+    );
+    console.log(`buildStep: inputs`, { inputs });
+    const { nodes, outputs } = create(_state, { inputs });
+    console.log(`buildStep: outputs`, { outputs });
     const outputsList = Object.values(outputs);
     const getOutputNodeType = (x) => {
       if (typeof x === `function`) {
@@ -858,7 +951,7 @@ var createStepsSystem = (appState) => {
       return void 0;
     };
     const isCacheable = (x) => {
-      const t = getOutputNodeType(x);
+      const t = getOutputNodeType(x)?.toLowerCase();
       return t === `image` || t === `mask`;
     };
     const cachableOutputs = outputsList.filter((x) => isCacheable(x));
@@ -870,48 +963,130 @@ var createStepsSystem = (appState) => {
       _nodes: nodes
     };
     stepDef._build = stepBuildDefinition;
-    console.log(`defineStep: stepDefinition`, { stepBuildDefinition, canBeCached, cachableOutputs });
+    console.log(`buildStep: stepBuildDefinition`, { stepBuildDefinition, canBeCached, cachableOutputs, stepDef });
     if (preview) {
       _state.graph.PreviewImage({ images: _state.runtime.AUTO });
       throw new StopError(void 0);
     }
     return stepBuildDefinition;
   };
-  const runStepsInner = async (stepsAll, frameIndexes) => {
-    const runGroups = [{ steps: [] }];
-    stepsAll.forEach((x) => {
-      runGroups[runGroups.length - 1].steps.push(x);
-      if (x._build?.canBeCached) {
-        runGroups.push({ steps: [] });
-      }
-    });
-    for (const g of runGroups) {
-      const steps = g.steps;
-      for (const frameIndex of frameIndexes) {
-        console.log(`runSteps: running ${frameIndex}`, { frameIndexes, steps });
-        stepsAll.forEach((s) => s._build?.setFrameIndex(frameIndex));
-        await _state.runtime.PROMPT();
-        await new Promise((r) => setTimeout(r, 1e3));
-      }
-    }
-  };
   const runSteps = async (frameIndexes) => {
+    const dependencyKeyRef = { dependencyKey: `` };
+    const changeFrame = (frameIndex) => {
+      stepsRegistry.forEach((s) => s._build?.setFrameIndex(frameIndex));
+    };
     try {
-      for (const s of stepsRegistry) {
-        buildStep(s);
+      for (const stepDef of stepsRegistry) {
+        console.log(`runSteps: buildStep START ${stepDef.name}`, { stepDef, ...getEnabledNodeNames(_state.runtime) });
+        const iStepStart = getNextActiveNodeIndex(_state.runtime);
+        const stepBuild = buildStep(stepDef);
+        console.log(`runSteps: check for cachable outputs ${stepDef.name}`, { stepDef });
+        const cachedOutputs = [];
+        for (const kOutput in stepBuild.outputs) {
+          const vOutput = stepBuild.outputs[kOutput];
+          const getCacheBuilderResult = () => {
+            const vOutputType = typeof vOutput === `object` && `type` in vOutput && typeof vOutput.type === `string` ? vOutput.type.toLowerCase() : void 0;
+            if (vOutputType === `image`) {
+              return cacheImageBuilder(_state, kOutput, stepDef.cacheParams, dependencyKeyRef);
+            }
+            if (vOutputType === `mask`) {
+              return cacheMaskBuilder(_state, kOutput, stepDef.cacheParams, dependencyKeyRef);
+            }
+            return void 0;
+          };
+          const cacheBuilderResult = getCacheBuilderResult();
+          if (!cacheBuilderResult) {
+            console.log(`runSteps: step SKIPPED - no cacheBuilderResult ${stepDef.name} ${kOutput}`, {
+              kOutput,
+              stepDef,
+              vOutput
+            });
+            continue;
+          }
+          console.log(`runSteps: check for uncached frames ${stepDef.name} ${kOutput}`, { stepDef });
+          const iLoadCache = getNextActiveNodeIndex(_state.runtime);
+          const { getOutput: getCachedOutput, modify: modifyCacheLoader } = cacheBuilderResult.loadCached();
+          const missingFrameIndexes = [];
+          for (const frameIndex of frameIndexes) {
+            changeFrame(frameIndex);
+            modifyCacheLoader(frameIndex);
+            const result = await _state.runtime.PROMPT();
+            if (result.data.error) {
+              missingFrameIndexes.push(frameIndex);
+            }
+          }
+          if (missingFrameIndexes.length) {
+            console.log(`runSteps: createCache START: create missing cache frames ${stepDef.name} ${kOutput}`, {
+              kOutput,
+              stepDef,
+              missingFrameIndexes,
+              ...getEnabledNodeNames(_state.runtime)
+            });
+            disableNodesAfterInclusive(_state.runtime, iLoadCache);
+            const iCache = getNextActiveNodeIndex(_state.runtime);
+            const cacheResult = cacheBuilderResult.createCache(() => vOutput);
+            if (!cacheResult) {
+              continue;
+            }
+            const { getOutput: getCachedOutput2, modify: modifyCacheLoader2 } = cacheResult;
+            for (const frameIndex of frameIndexes) {
+              changeFrame(frameIndex);
+              modifyCacheLoader2(frameIndex);
+              await _state.runtime.PROMPT();
+            }
+            disableNodesAfterInclusive(_state.runtime, iCache);
+            cacheBuilderResult.loadCached();
+            console.log(`runSteps: createCache END ${stepDef.name} ${kOutput}`, {
+              kOutput,
+              stepDef,
+              missingFrameIndexes,
+              ...getEnabledNodeNames(_state.runtime)
+            });
+          }
+          console.log(`runSteps: replace output with cached output ${stepDef.name} ${kOutput}`, {
+            kOutput,
+            stepDef,
+            missingFrameIndexes
+          });
+          stepBuild.outputs[kOutput] = getCachedOutput();
+          stepBuild.setFrameIndex = modifyCacheLoader;
+          cachedOutputs.push({
+            loadCacheAsOutput: () => {
+              const loader = cacheBuilderResult.loadCached();
+              stepBuild.outputs[kOutput] = loader.getOutput();
+              stepBuild.setFrameIndex = loader.modify;
+            }
+          });
+        }
+        if (cachedOutputs.length !== Object.keys(stepBuild.outputs).length) {
+          continue;
+        }
+        console.log(`runSteps: remove non-cache nodes and add load cache`, {
+          stepDef,
+          ...getEnabledNodeNames(_state.runtime)
+        });
+        disableNodesAfterInclusive(_state.runtime, iStepStart);
+        cachedOutputs.forEach((x) => x.loadCacheAsOutput());
+        console.log(`runSteps: step CACHED`, {
+          stepDef,
+          ...getEnabledNodeNames(_state.runtime)
+        });
       }
     } catch (err) {
       if (!(err instanceof StopError)) {
         throw err;
       }
-      if (err.setFrameIndex) {
-        const firstUnbuilt = stepsRegistry.find((x) => !x._build);
-        if (firstUnbuilt) {
-          firstUnbuilt._build = { setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false };
+      console.log(`runSteps: Stop Preview - Running up to this point in the graph for all frames`, {
+        ...getEnabledNodeNames(_state.runtime)
+      });
+      for (const frameIndex of frameIndexes) {
+        changeFrame(frameIndex);
+        if (err.setFrameIndex) {
+          err.setFrameIndex(frameIndex);
         }
+        await _state.runtime.PROMPT();
       }
     }
-    await runStepsInner(stepsRegistry, frameIndexes);
   };
   return {
     state: _state,
@@ -1023,7 +1198,9 @@ appOptimized({
       scopeStack: [{}]
     });
     const startImageStep = defineStep({
+      name: `startImageStep`,
       preview: form.imageSource.preview,
+      cacheParams: [],
       inputSteps: {},
       create: ({ graph, imageDirectory }) => {
         const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
@@ -1041,7 +1218,9 @@ appOptimized({
       }
     });
     const cropMaskStep = defineStep({
+      name: `cropMaskStep`,
       preview: form.previewCropMask,
+      cacheParams: [form.cropMaskOperations],
       inputSteps: { startImageStep },
       create: (state, { inputs }) => {
         const { startImage } = inputs;
@@ -1055,7 +1234,9 @@ appOptimized({
       }
     });
     const cropStep = defineStep({
+      name: `cropStep`,
       preview: form.previewCrop,
+      cacheParams: [form.size, form.cropPadding],
       inputSteps: { startImageStep, cropMaskStep },
       create: ({ graph }, { inputs }) => {
         const { startImage, cropMask } = inputs;
@@ -1076,7 +1257,9 @@ appOptimized({
       }
     });
     const replaceMaskStep = defineStep({
+      name: `replaceMaskStep`,
       preview: form.previewReplaceMask,
+      cacheParams: [form.replaceMaskOperations],
       inputSteps: { cropStep },
       create: (state, { inputs }) => {
         const { croppedImage } = inputs;
@@ -1275,7 +1458,7 @@ appOptimized({
       try {
         await iterate(i);
         loadingMain.delete();
-        disableNodesAfter(runtime, 0);
+        disableNodesAfterInclusive(runtime, 0);
       } catch (err) {
         if (!(err instanceof StopError)) {
           throw err;

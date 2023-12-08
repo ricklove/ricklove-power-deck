@@ -1,9 +1,115 @@
-import { AppState, disableNodesAfter, getNextActiveNodeIndex } from './_appState'
+import { AppState, disableNodesAfterInclusive, getNextActiveNodeIndex } from './_appState'
 import { createRandomGenerator } from './_random'
 import { showLoadingMessage } from './_loadingMessage'
 import { Widget } from 'src'
 
 type Params = Widget[`$Output`] | Record<string, unknown>
+export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
+    state: AppState,
+    folderPrefix: string,
+    params: (Widget[`$Output`] | Record<string, unknown>)[],
+    dependencyKeyRef: { dependencyKey: string },
+): {
+    loadCached: () => { getOutput: () => _IMAGE; modify: (frameIndex: number) => void }
+    createCache: (getValue: () => TIMAGE) => { getOutput: () => _IMAGE; modify: (frameIndex: number) => void }
+} => {
+    const { runtime, graph } = state
+    const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt()
+    dependencyKeyRef.dependencyKey = paramsHash
+
+    const paramsFilePattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}/#####.png`
+
+    const loadCached = () => {
+        const loadImageNode = graph.RL$_LoadImageSequence({
+            path: paramsFilePattern,
+            current_frame: 0,
+        })
+        const imageReloaded = loadImageNode.outputs.image as _IMAGE
+        return {
+            getOutput: () => imageReloaded,
+            modify: (frameIndex: number) => {
+                loadImageNode.inputs.current_frame = frameIndex
+            },
+        }
+    }
+
+    const createCache = (getValue: () => TIMAGE) => {
+        const image = getValue()
+        if (!image) {
+            return {
+                // undefined
+                getOutput: () => image,
+                modify: (frameIndex: number) => {},
+            }
+        }
+
+        const saveImageNode = graph.RL$_SaveImageSequence({
+            images: image,
+            current_frame: 0,
+            path: paramsFilePattern,
+        })
+        return {
+            getOutput: () => image,
+            modify: (frameIndex: number) => {
+                saveImageNode.inputs.current_frame = frameIndex
+            },
+        }
+    }
+
+    return {
+        loadCached,
+        createCache,
+    }
+}
+
+export const cacheMaskBuilder = <TMASK extends undefined | _MASK>(
+    state: AppState,
+    folderPrefix: string,
+    params: Params,
+    dependencyKeyRef: { dependencyKey: string },
+): {
+    loadCached: () => { getOutput: () => _MASK; modify: (frameIndex: number) => void }
+    createCache: (getValue: () => TMASK) => undefined | { getOutput: () => _MASK; modify: (frameIndex: number) => void }
+} => {
+    const { graph } = state
+
+    const imageBuilder = cacheImageBuilder(state, folderPrefix, params, dependencyKeyRef)
+
+    return {
+        loadCached: () => {
+            const loadCached_image = imageBuilder.loadCached()
+            return {
+                getOutput: () => {
+                    const reloadedMaskImage = loadCached_image.getOutput()
+                    const maskReloaded = graph.Image_To_Mask({
+                        image: reloadedMaskImage,
+                        method: `intensity`,
+                    }).outputs.MASK
+                    return maskReloaded
+                },
+                modify: (frameIndex: number) => loadCached_image.modify(frameIndex),
+            }
+        },
+        createCache: (getValue) => {
+            const mask = getValue()
+            if (!mask) {
+                return undefined
+            }
+
+            const createCache_image = imageBuilder.createCache(() => {
+                const maskImage = graph.MaskToImage({ mask })
+                return maskImage
+            })
+            return {
+                getOutput: () => {
+                    return mask
+                },
+                modify: (frameIndex: number) => createCache_image.modify(frameIndex),
+            }
+        },
+    }
+}
+
 export const cacheImage = async <TIMAGE extends undefined | _IMAGE | IMAGE>(
     state: AppState,
     folderPrefix: string,
@@ -69,7 +175,7 @@ export const cacheImage = async <TIMAGE extends undefined | _IMAGE | IMAGE>(
 
         return { image }
     } catch {
-        disableNodesAfter(runtime, iNextInitial)
+        disableNodesAfterInclusive(runtime, iNextInitial)
     }
 
     console.log(`cacheImage: Failed to load - creating`, {
@@ -78,7 +184,7 @@ export const cacheImage = async <TIMAGE extends undefined | _IMAGE | IMAGE>(
         params,
     })
     await createImage_execute()
-    disableNodesAfter(runtime, iNextInitial)
+    disableNodesAfterInclusive(runtime, iNextInitial)
     loadingMessage.delete()
 
     return { image: loadImage_graph() }

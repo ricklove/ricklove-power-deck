@@ -1,5 +1,7 @@
 import { ComfyNodeOutput } from 'src/core/Slot'
-import { AppState, StopError } from './_appState'
+import { AppState, StopError, disableNodesAfterInclusive, getNextActiveNodeIndex, getEnabledNodeNames } from './_appState'
+import { cacheImage, cacheImageBuilder, cacheMaskBuilder } from './_cache'
+import { Widget } from 'src'
 
 export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) => {
     const _state = appState as AppState
@@ -43,7 +45,9 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
         > = Record<string, { $Outputs: Record<string, StepOutputType>; _build?: { outputs: Record<string, StepOutputType> } }>,
         TStepOutputs extends Record<string, StepOutputType> = Record<string, StepOutputType>,
     > = {
+        name: string
         inputSteps: TInputStepDefinitions
+        cacheParams: Widget[`$Output`] | Record<string, unknown>
         create: (
             state: StepState,
             args: { inputs: OutputsOfInputSteps<TInputStepDefinitions> },
@@ -71,11 +75,14 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
         TInputStepDefinitions extends Record<string, {} | { $Outputs: Record<string, StepOutputType> }>,
         TStepOutputs extends Record<string, StepOutputType>,
     >({
+        name,
         inputSteps,
         create,
         modify,
         preview = false,
+        cacheParams,
     }: {
+        name: string
         inputSteps: TInputStepDefinitions
         create: (
             state: StepState,
@@ -86,12 +93,15 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
         }
         modify: (args: { nodes: TNodes; frameIndex: number }) => void
         preview?: boolean
+        cacheParams: (Widget[`$Output`] | Record<string, unknown>)[]
     }): StepDefinition<TNodes, TInputStepDefinitions, TStepOutputs> => {
         const stepDefinition: StepDefinition<TNodes, TInputStepDefinitions, TStepOutputs> = {
+            name,
             inputSteps,
             create,
             modify,
             preview,
+            cacheParams,
             $Outputs: undefined as unknown as TStepOutputs,
         }
         stepsRegistry.push(stepDefinition as unknown as StepDefinition)
@@ -99,12 +109,16 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
     }
 
     const buildStep = (stepDef: StepDefinition) => {
+        console.log(`buildStep:`, stepDef)
         const { inputSteps, create, modify, preview } = stepDef
-        const { nodes, outputs } = create(_state, {
-            inputs: Object.fromEntries(
-                Object.values(inputSteps).flatMap((x) => Object.entries(x._build?.outputs ?? {})),
-            ) as Record<string, StepOutputType>,
-        })
+
+        const inputs = Object.fromEntries(
+            Object.values(inputSteps).flatMap((x) => Object.entries(x._build?.outputs ?? {})),
+        ) as Record<string, StepOutputType>
+        console.log(`buildStep: inputs`, { inputs })
+
+        const { nodes, outputs } = create(_state, { inputs })
+        console.log(`buildStep: outputs`, { outputs })
 
         const outputsList = Object.values(outputs)
         const getOutputNodeType = (x: StepOutputType): undefined | string => {
@@ -122,7 +136,7 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
             return undefined
         }
         const isCacheable = (x: StepOutputType) => {
-            const t = getOutputNodeType(x)
+            const t = getOutputNodeType(x)?.toLowerCase()
             return t === `image` || t === `mask`
         }
         const cachableOutputs = outputsList.filter((x) => isCacheable(x))
@@ -138,7 +152,7 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
         }
 
         stepDef._build = stepBuildDefinition
-        console.log(`defineStep: stepDefinition`, { stepBuildDefinition, canBeCached, cachableOutputs })
+        console.log(`buildStep: stepBuildDefinition`, { stepBuildDefinition, canBeCached, cachableOutputs, stepDef })
 
         if (preview) {
             _state.graph.PreviewImage({ images: _state.runtime.AUTO })
@@ -148,48 +162,217 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
         return stepBuildDefinition
     }
 
-    const runStepsInner = async (stepsAll: StepDefinition[], frameIndexes: number[]) => {
-        // Group by cacheable
-        const runGroups = [{ steps: [] as StepDefinition[] }]
-        stepsAll.forEach((x) => {
-            runGroups[runGroups.length - 1].steps.push(x)
-            if (x._build?.canBeCached) {
-                runGroups.push({ steps: [] })
-            }
-        })
+    // const runStepsInner = async (stepsAll: StepDefinition[], frameIndexes: number[]) => {
+    //     // Group by cacheable
+    //     const runGroups = [{ steps: [] as StepDefinition[] }]
+    //     stepsAll.forEach((x) => {
+    //         runGroups[runGroups.length - 1].steps.push(x)
+    //         if (x._build?.canBeCached) {
+    //             runGroups.push({ steps: [] })
+    //         }
+    //     })
 
-        for (const g of runGroups) {
-            const steps = g.steps
-            for (const frameIndex of frameIndexes) {
-                console.log(`runSteps: running ${frameIndex}`, { frameIndexes, steps })
-                stepsAll.forEach((s) => s._build?.setFrameIndex(frameIndex))
-                await _state.runtime.PROMPT()
-                await new Promise((r) => setTimeout(r, 1000))
-            }
-        }
-    }
+    //     for (const g of runGroups) {
+    //         const steps = g.steps
+    //         for (const frameIndex of frameIndexes) {
+    //             console.log(`runSteps: running ${frameIndex}`, { frameIndexes, steps })
+    //             stepsAll.forEach((s) => s._build?.setFrameIndex(frameIndex))
+    //             await _state.runtime.PROMPT()
+    //             await new Promise((r) => setTimeout(r, 1000))
+    //         }
+    //     }
+    // }
+
+    // const runSteps = async (frameIndexes: number[]) => {
+    //     // loop (each line for all frames):
+    //     // - build a step
+    //     // - create cache for each output possible
+    //     // - run the caching prompt to create cache
+    //     // - replace the output with the cached version
+
+    //     // // build steps
+    //     // try {
+    //     //     for (const s of stepsRegistry) {
+    //     //         buildStep(s)
+    //     //     }
+    //     // } catch (err) {
+    //     //     if (!(err instanceof StopError)) {
+    //     //         throw err
+    //     //     }
+
+    //     //     // end definition early
+    //     //     if (err.setFrameIndex) {
+    //     //         const firstUnbuilt = stepsRegistry.find((x) => !x._build)
+    //     //         if (firstUnbuilt) {
+    //     //             firstUnbuilt._build = { setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false }
+    //     //         }
+    //     //     }
+    //     // }
+
+    //     // await runStepsInner(stepsRegistry, frameIndexes)
+    // }
 
     const runSteps = async (frameIndexes: number[]) => {
-        // build steps
+        // loop (each line for all frames):
+        // - build a step
+        // - create cache for each output possible
+        // - run the caching prompt to create cache
+        // - replace the output with the cached version
+
+        const dependencyKeyRef = { dependencyKey: `` }
+
+        const changeFrame = (frameIndex: number) => {
+            stepsRegistry.forEach((s) => s._build?.setFrameIndex(frameIndex))
+        }
+
         try {
-            for (const s of stepsRegistry) {
-                buildStep(s)
+            for (const stepDef of stepsRegistry) {
+                // build a step
+                console.log(`runSteps: buildStep START ${stepDef.name}`, { stepDef, ...getEnabledNodeNames(_state.runtime) })
+                const iStepStart = getNextActiveNodeIndex(_state.runtime)
+                const stepBuild = buildStep(stepDef)
+
+                // create cache for each output possible
+                console.log(`runSteps: check for cachable outputs ${stepDef.name}`, { stepDef })
+                const cachedOutputs = [] as { loadCacheAsOutput: () => void }[]
+                for (const kOutput in stepBuild.outputs) {
+                    const vOutput = stepBuild.outputs[kOutput]
+
+                    const getCacheBuilderResult = () => {
+                        const vOutputType =
+                            typeof vOutput === `object` && `type` in vOutput && typeof vOutput.type === `string`
+                                ? vOutput.type.toLowerCase()
+                                : undefined
+                        if (vOutputType === `image`) {
+                            return cacheImageBuilder(_state, kOutput, stepDef.cacheParams, dependencyKeyRef)
+                        }
+
+                        if (vOutputType === `mask`) {
+                            return cacheMaskBuilder(_state, kOutput, stepDef.cacheParams, dependencyKeyRef)
+                        }
+
+                        return undefined
+                    }
+
+                    const cacheBuilderResult = getCacheBuilderResult()
+                    if (!cacheBuilderResult) {
+                        console.log(`runSteps: step SKIPPED - no cacheBuilderResult ${stepDef.name} ${kOutput}`, {
+                            kOutput,
+                            stepDef,
+                            vOutput,
+                        })
+                        continue
+                    }
+
+                    // check for missing frames
+                    console.log(`runSteps: check for uncached frames ${stepDef.name} ${kOutput}`, { stepDef })
+                    const iLoadCache = getNextActiveNodeIndex(_state.runtime)
+                    const { getOutput: getCachedOutput, modify: modifyCacheLoader } = cacheBuilderResult.loadCached()
+                    const missingFrameIndexes = [] as number[]
+                    for (const frameIndex of frameIndexes) {
+                        changeFrame(frameIndex)
+                        modifyCacheLoader(frameIndex)
+                        const result = await _state.runtime.PROMPT()
+                        if (result.data.error) {
+                            missingFrameIndexes.push(frameIndex)
+                        }
+                    }
+
+                    // create missing frames
+                    if (missingFrameIndexes.length) {
+                        console.log(`runSteps: createCache START: create missing cache frames ${stepDef.name} ${kOutput}`, {
+                            kOutput,
+                            stepDef,
+                            missingFrameIndexes,
+                            ...getEnabledNodeNames(_state.runtime),
+                        })
+                        // remove load
+                        disableNodesAfterInclusive(_state.runtime, iLoadCache)
+
+                        // create cache
+                        const iCache = getNextActiveNodeIndex(_state.runtime)
+                        const cacheResult = cacheBuilderResult.createCache(() => vOutput as IMAGE & MASK)
+                        if (!cacheResult) {
+                            continue
+                        }
+
+                        const { getOutput: getCachedOutput, modify: modifyCacheLoader } = cacheResult
+
+                        for (const frameIndex of frameIndexes) {
+                            changeFrame(frameIndex)
+                            modifyCacheLoader(frameIndex)
+                            await _state.runtime.PROMPT()
+                        }
+
+                        // remove create cache and add load again
+                        disableNodesAfterInclusive(_state.runtime, iCache)
+                        cacheBuilderResult.loadCached()
+
+                        console.log(`runSteps: createCache END ${stepDef.name} ${kOutput}`, {
+                            kOutput,
+                            stepDef,
+                            missingFrameIndexes,
+                            ...getEnabledNodeNames(_state.runtime),
+                        })
+                    }
+
+                    // replace output with cached output
+                    console.log(`runSteps: replace output with cached output ${stepDef.name} ${kOutput}`, {
+                        kOutput,
+                        stepDef,
+                        missingFrameIndexes,
+                    })
+                    stepBuild.outputs[kOutput] = getCachedOutput()
+                    stepBuild.setFrameIndex = modifyCacheLoader
+
+                    cachedOutputs.push({
+                        loadCacheAsOutput: () => {
+                            const loader = cacheBuilderResult.loadCached()
+                            stepBuild.outputs[kOutput] = loader.getOutput()
+                            stepBuild.setFrameIndex = loader.modify
+                        },
+                    })
+                }
+
+                // done if something not cached
+                if (cachedOutputs.length !== Object.keys(stepBuild.outputs).length) {
+                    continue
+                }
+
+                console.log(`runSteps: remove non-cache nodes and add load cache`, {
+                    stepDef,
+                    ...getEnabledNodeNames(_state.runtime),
+                })
+
+                // remove whole step if every output is cached
+                disableNodesAfterInclusive(_state.runtime, iStepStart)
+
+                // enable cache output nodes
+                cachedOutputs.forEach((x) => x.loadCacheAsOutput())
+
+                console.log(`runSteps: step CACHED`, {
+                    stepDef,
+                    ...getEnabledNodeNames(_state.runtime),
+                })
             }
         } catch (err) {
             if (!(err instanceof StopError)) {
                 throw err
             }
 
-            // end definition early
-            if (err.setFrameIndex) {
-                const firstUnbuilt = stepsRegistry.find((x) => !x._build)
-                if (firstUnbuilt) {
-                    firstUnbuilt._build = { setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false }
+            console.log(`runSteps: Stop Preview - Running up to this point in the graph for all frames`, {
+                ...getEnabledNodeNames(_state.runtime),
+            })
+
+            for (const frameIndex of frameIndexes) {
+                changeFrame(frameIndex)
+                if (err.setFrameIndex) {
+                    err.setFrameIndex(frameIndex)
                 }
+
+                await _state.runtime.PROMPT()
             }
         }
-
-        await runStepsInner(stepsRegistry, frameIndexes)
     }
 
     return {

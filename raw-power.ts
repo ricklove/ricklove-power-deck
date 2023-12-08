@@ -1,5 +1,5 @@
 import { ComfyNode } from 'src/core/ComfyNode'
-import { AppState, StopError, disableNodesAfter } from './src/_appState'
+import { AppState, StopError, disableNodesAfterInclusive } from './src/_appState'
 import { cacheImage, cacheMask } from './src/_cache'
 import { showLoadingMessage } from './src/_loadingMessage'
 import { operation_mask } from './src/_maskPrefabs'
@@ -127,7 +127,9 @@ appOptimized({
 
         // steps
         const startImageStep = defineStep({
+            name: `startImageStep`,
             preview: form.imageSource.preview,
+            cacheParams: [],
             inputSteps: {},
             create: ({ graph, imageDirectory }) => {
                 const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
@@ -147,7 +149,9 @@ appOptimized({
         })
 
         const cropMaskStep = defineStep({
+            name: `cropMaskStep`,
             preview: form.previewCropMask,
+            cacheParams: [form.cropMaskOperations],
             inputSteps: { startImageStep },
             create: (state, { inputs }) => {
                 const { startImage } = inputs
@@ -163,7 +167,9 @@ appOptimized({
         })
 
         const cropStep = defineStep({
+            name: `cropStep`,
             preview: form.previewCrop,
+            cacheParams: [form.size, form.cropPadding],
             inputSteps: { startImageStep, cropMaskStep },
             create: ({ graph }, { inputs }) => {
                 const { startImage, cropMask } = inputs
@@ -178,20 +184,6 @@ appOptimized({
                           max_side_length: size,
                           padding: cropPadding,
                       }).outputs.cropped_image
-                // : await cacheImage(
-                //       state,
-                //       `croppedImage`,
-                //       frameIndex,
-                //       { size, cropPadding },
-                //       dependencyKeyRef,
-                //       async () =>
-                //           graph.RL$_Crop$_Resize({
-                //               image: startImage,
-                //               mask: cropMask,
-                //               max_side_length: size,
-                //               padding: cropPadding,
-                //           }).outputs.cropped_image,
-                //   )
 
                 return {
                     nodes: {},
@@ -204,7 +196,9 @@ appOptimized({
         })
 
         const replaceMaskStep = defineStep({
+            name: `replaceMaskStep`,
             preview: form.previewReplaceMask,
+            cacheParams: [form.replaceMaskOperations],
             inputSteps: { cropStep },
             create: (state, { inputs }) => {
                 const { croppedImage } = inputs
@@ -493,7 +487,7 @@ appOptimized({
             try {
                 await iterate(i)
                 loadingMain.delete()
-                disableNodesAfter(runtime, 0)
+                disableNodesAfterInclusive(runtime, 0)
             } catch (err) {
                 if (!(err instanceof StopError)) {
                     throw err
