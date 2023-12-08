@@ -921,9 +921,21 @@ appOptimized({
       modify,
       preview = false
     }) => {
+      const stepDefinition = {
+        inputSteps,
+        create,
+        modify,
+        preview,
+        $Outputs: void 0
+      };
+      stepsRegistry.push(stepDefinition);
+      return stepDefinition;
+    };
+    const buildStep = (stepDef) => {
+      const { inputSteps, create, modify, preview } = stepDef;
       const { nodes, outputs } = create(_state, {
         inputs: Object.fromEntries(
-          Object.values(inputSteps).flatMap((x) => Object.entries(x.outputs))
+          Object.values(inputSteps).flatMap((x) => Object.entries(x._build?.outputs ?? {}))
         )
       });
       const outputsList = Object.values(outputs);
@@ -945,25 +957,25 @@ appOptimized({
       };
       const cachableOutputs = outputsList.filter((x) => isCacheable(x));
       const canBeCached = outputsList.length === cachableOutputs.length;
-      const stepDefinition = {
+      const stepBuildDefinition = {
         setFrameIndex: (frameIndex) => modify({ nodes, frameIndex }),
         outputs,
         canBeCached,
         _nodes: nodes
       };
-      console.log(`defineStep: stepDefinition`, { stepDefinition, canBeCached, cachableOutputs });
-      stepsRegistry.push(stepDefinition);
+      stepDef._build = stepBuildDefinition;
+      console.log(`defineStep: stepDefinition`, { stepBuildDefinition, canBeCached, cachableOutputs });
       if (preview) {
         _state.graph.PreviewImage({ images: runtime.AUTO });
         throw new StopError(void 0);
       }
-      return stepDefinition;
+      return stepBuildDefinition;
     };
     const runSteps = async (stepsAll, frameIndexes2) => {
       const runGroups = [{ steps: [] }];
       stepsAll.forEach((x) => {
         runGroups[runGroups.length - 1].steps.push(x);
-        if (x.canBeCached) {
+        if (x._build?.canBeCached) {
           runGroups.push({ steps: [] });
         }
       });
@@ -971,73 +983,78 @@ appOptimized({
         const steps = g.steps;
         for (const frameIndex of frameIndexes2) {
           console.log(`runSteps: running ${frameIndex}`, { frameIndexes: frameIndexes2, steps });
-          stepsAll.forEach((s) => s.setFrameIndex(frameIndex));
+          stepsAll.forEach((s) => s._build?.setFrameIndex(frameIndex));
           await runtime.PROMPT();
           await new Promise((r) => setTimeout(r, 1e3));
         }
       }
     };
+    const startImageStep = defineStep({
+      preview: form.imageSource.preview,
+      inputSteps: {},
+      create: ({ graph, imageDirectory }) => {
+        const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
+          path: `${imageDirectory}/${form.imageSource.filePattern}`,
+          current_frame: 0
+        });
+        const startImage = loadImageNode.outputs.image;
+        return {
+          nodes: { loadImageNode },
+          outputs: { startImage }
+        };
+      },
+      modify: ({ nodes, frameIndex }) => {
+        nodes.loadImageNode.inputs.current_frame = frameIndex;
+      }
+    });
+    const cropMaskStep = defineStep({
+      preview: form.previewCropMask,
+      inputSteps: { startImageStep },
+      create: (state, { inputs }) => {
+        const { startImage } = inputs;
+        const cropMask = operation_mask.run(state, startImage, void 0, form.cropMaskOperations);
+        return {
+          nodes: {},
+          outputs: { cropMask }
+        };
+      },
+      modify: ({ nodes, frameIndex }) => {
+      }
+    });
+    const cropStep = defineStep({
+      preview: form.previewCrop,
+      inputSteps: { startImageStep, cropMaskStep },
+      create: ({ graph }, { inputs }) => {
+        const { startImage, cropMask } = inputs;
+        const { size: sizeInput, cropPadding } = form;
+        const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
+        const croppedImage = !cropMask ? startImage : graph.RL$_Crop$_Resize({
+          image: startImage,
+          mask: cropMask,
+          max_side_length: size,
+          padding: cropPadding
+        }).outputs.cropped_image;
+        return {
+          nodes: {},
+          outputs: { croppedImage }
+        };
+      },
+      modify: ({ nodes, frameIndex }) => {
+      }
+    });
     try {
-      const startImageStep = defineStep({
-        preview: form.imageSource.preview,
-        inputSteps: {},
-        create: ({ graph, imageDirectory }) => {
-          const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
-            path: `${imageDirectory}/${form.imageSource.filePattern}`,
-            current_frame: 0
-          });
-          const startImage = loadImageNode.outputs.image;
-          return {
-            nodes: { loadImageNode },
-            outputs: { startImage }
-          };
-        },
-        modify: ({ nodes, frameIndex }) => {
-          nodes.loadImageNode.inputs.current_frame = frameIndex;
-        }
-      });
-      const cropMaskStep = defineStep({
-        preview: form.previewCropMask,
-        inputSteps: { startImageStep },
-        create: (state, { inputs }) => {
-          const { startImage } = inputs;
-          const cropMask = operation_mask.run(state, startImage, void 0, form.cropMaskOperations);
-          return {
-            nodes: {},
-            outputs: { cropMask }
-          };
-        },
-        modify: ({ nodes, frameIndex }) => {
-        }
-      });
-      const cropStep = defineStep({
-        preview: form.previewCrop,
-        inputSteps: { startImageStep, cropMaskStep },
-        create: ({ graph }, { inputs }) => {
-          const { startImage, cropMask } = inputs;
-          const { size: sizeInput, cropPadding } = form;
-          const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
-          const croppedImage = !cropMask ? startImage : graph.RL$_Crop$_Resize({
-            image: startImage,
-            mask: cropMask,
-            max_side_length: size,
-            padding: cropPadding
-          }).outputs.cropped_image;
-          return {
-            nodes: {},
-            outputs: { croppedImage }
-          };
-        },
-        modify: ({ nodes, frameIndex }) => {
-        }
-      });
-      return;
+      for (const s of stepsRegistry) {
+        buildStep(s);
+      }
     } catch (err) {
       if (!(err instanceof StopError)) {
         throw err;
       }
       if (err.setFrameIndex) {
-        stepsRegistry.push({ setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false });
+        const firstUnbuilt = stepsRegistry.find((x) => !x._build);
+        if (firstUnbuilt) {
+          firstUnbuilt._build = { setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false };
+        }
       }
     }
     const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({

@@ -133,17 +133,61 @@ appOptimized({
         // >
         // const { a, b } = null as unknown as MergeFieldsTest
 
-        type OutputsOfInputSteps<TInputSteps extends Record<string, { outputs: Record<string, unknown> }>> = UnionToIntersection<
-            TInputSteps[keyof TInputSteps][`outputs`]
-        >
+        type OutputsOfInputSteps<TInputStepDefinitions extends Record<string, {} | { $Outputs: Record<string, unknown> }>> =
+            UnionToIntersection<
+                {
+                    [K in keyof TInputStepDefinitions]: TInputStepDefinitions[K] extends { $Outputs: Record<string, unknown> }
+                        ? TInputStepDefinitions[K][`$Outputs`]
+                        : never
+                }[keyof TInputStepDefinitions]
+            >
+        // const { a, b } = null as unknown as OutputsOfInputSteps<{
+        //     aObj: { outputs: { a: boolean } }
+        //     bObj: { outputs: { b: boolean } }
+        //     cObj: {}
+        // }>
 
         const stepsRegistry = [] as StepDefinition[]
+
         // type StepOutputType = undefined | ComfyNodeOutput<unknown> | Record<string, ComfyNodeOutput<unknown>> | (() => ComfyNodeOutput<unknown>)
         type StepOutputType = undefined | ComfyNodeOutput<unknown> | _IMAGE | _MASK
+        type StepDefinition<
+            TNodes extends Record<string, unknown> = Record<string, unknown>,
+            TInputStepDefinitions extends Record<
+                string,
+                {} | { $Outputs: Record<string, StepOutputType>; _build?: { outputs: TStepOutputs } }
+            > = Record<
+                string,
+                { $Outputs: Record<string, StepOutputType>; _build?: { outputs: Record<string, StepOutputType> } }
+            >,
+            TStepOutputs extends Record<string, StepOutputType> = Record<string, StepOutputType>,
+        > = {
+            inputSteps: TInputStepDefinitions
+            create: (
+                state: StepState,
+                args: { inputs: OutputsOfInputSteps<TInputStepDefinitions> },
+            ) => {
+                nodes: TNodes
+                outputs: TStepOutputs
+            }
+            modify: (args: { nodes: TNodes; frameIndex: number }) => void
+            preview?: boolean
+            $Outputs: TStepOutputs
+            _build?: StepBuild<TNodes, TStepOutputs>
+        }
+        type StepBuild<
+            TNodes extends Record<string, unknown> = Record<string, unknown>,
+            TStepOutputs extends Record<string, StepOutputType> = Record<string, StepOutputType>,
+        > = {
+            setFrameIndex: (frameIndex: number) => void
+            outputs: TStepOutputs
+            canBeCached: boolean
+            _nodes: TNodes
+        }
 
         const defineStep = <
             TNodes extends Record<string, unknown>,
-            TInputSteps extends Record<string, { outputs: Record<string, StepOutputType> }>,
+            TInputStepDefinitions extends Record<string, {} | { $Outputs: Record<string, StepOutputType> }>,
             TStepOutputs extends Record<string, StepOutputType>,
         >({
             inputSteps,
@@ -151,21 +195,34 @@ appOptimized({
             modify,
             preview = false,
         }: {
-            inputSteps: TInputSteps
+            inputSteps: TInputStepDefinitions
             create: (
                 state: StepState,
-                args: { inputs: OutputsOfInputSteps<TInputSteps> },
+                args: { inputs: OutputsOfInputSteps<TInputStepDefinitions> },
             ) => {
                 nodes: TNodes
                 outputs: TStepOutputs
             }
             modify: (args: { nodes: TNodes; frameIndex: number }) => void
             preview?: boolean
-        }) => {
+        }): StepDefinition<TNodes, TInputStepDefinitions, TStepOutputs> => {
+            const stepDefinition: StepDefinition<TNodes, TInputStepDefinitions, TStepOutputs> = {
+                inputSteps,
+                create,
+                modify,
+                preview,
+                $Outputs: undefined as unknown as TStepOutputs,
+            }
+            stepsRegistry.push(stepDefinition as unknown as StepDefinition)
+            return stepDefinition
+        }
+
+        const buildStep = (stepDef: StepDefinition) => {
+            const { inputSteps, create, modify, preview } = stepDef
             const { nodes, outputs } = create(_state, {
                 inputs: Object.fromEntries(
-                    Object.values(inputSteps).flatMap((x) => Object.entries(x.outputs)),
-                ) as OutputsOfInputSteps<TInputSteps>,
+                    Object.values(inputSteps).flatMap((x) => Object.entries(x._build?.outputs ?? {})),
+                ) as Record<string, StepOutputType>,
             })
 
             const outputsList = Object.values(outputs)
@@ -192,30 +249,30 @@ appOptimized({
 
             // return (frameIndex: number) => run(nodes, frameIndex)
             // const outputs = {}
-            const stepDefinition = {
+            const stepBuildDefinition = {
                 setFrameIndex: (frameIndex: number) => modify({ nodes, frameIndex }),
                 outputs,
                 canBeCached,
                 _nodes: nodes,
             }
-            console.log(`defineStep: stepDefinition`, { stepDefinition, canBeCached, cachableOutputs })
 
-            stepsRegistry.push(stepDefinition)
+            stepDef._build = stepBuildDefinition
+            console.log(`defineStep: stepDefinition`, { stepBuildDefinition, canBeCached, cachableOutputs })
 
             if (preview) {
                 _state.graph.PreviewImage({ images: runtime.AUTO })
                 throw new StopError(undefined)
             }
 
-            return stepDefinition
+            return stepBuildDefinition
         }
-        type StepDefinition = ReturnType<typeof defineStep>
+
         const runSteps = async (stepsAll: StepDefinition[], frameIndexes: number[]) => {
             // Group by cacheable
             const runGroups = [{ steps: [] as StepDefinition[] }]
             stepsAll.forEach((x) => {
                 runGroups[runGroups.length - 1].steps.push(x)
-                if (x.canBeCached) {
+                if (x._build?.canBeCached) {
                     runGroups.push({ steps: [] })
                 }
             })
@@ -224,92 +281,96 @@ appOptimized({
                 const steps = g.steps
                 for (const frameIndex of frameIndexes) {
                     console.log(`runSteps: running ${frameIndex}`, { frameIndexes, steps })
-                    stepsAll.forEach((s) => s.setFrameIndex(frameIndex))
+                    stepsAll.forEach((s) => s._build?.setFrameIndex(frameIndex))
                     await runtime.PROMPT()
                     await new Promise((r) => setTimeout(r, 1000))
                 }
             }
         }
 
+        // steps
+        const startImageStep = defineStep({
+            preview: form.imageSource.preview,
+            inputSteps: {},
+            create: ({ graph, imageDirectory }) => {
+                const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
+                    path: `${imageDirectory}/${form.imageSource.filePattern}`,
+                    current_frame: 0,
+                })
+                const startImage = loadImageNode.outputs.image
+
+                return {
+                    nodes: { loadImageNode },
+                    outputs: { startImage },
+                }
+            },
+            modify: ({ nodes, frameIndex }) => {
+                nodes.loadImageNode.inputs.current_frame = frameIndex
+            },
+        })
+
+        const cropMaskStep = defineStep({
+            preview: form.previewCropMask,
+            inputSteps: { startImageStep },
+            create: (state, { inputs }) => {
+                const { startImage } = inputs
+                const cropMask = operation_mask.run(state, startImage, undefined, form.cropMaskOperations)
+                return {
+                    nodes: {},
+                    outputs: { cropMask },
+                }
+            },
+            modify: ({ nodes, frameIndex }) => {
+                // nothing specific to the frameIndex
+            },
+        })
+
+        const cropStep = defineStep({
+            preview: form.previewCrop,
+            inputSteps: { startImageStep, cropMaskStep },
+            create: ({ graph }, { inputs }) => {
+                const { startImage, cropMask } = inputs
+
+                const { size: sizeInput, cropPadding } = form
+                const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
+                const croppedImage = !cropMask
+                    ? startImage
+                    : graph.RL$_Crop$_Resize({
+                          image: startImage,
+                          mask: cropMask,
+                          max_side_length: size,
+                          padding: cropPadding,
+                      }).outputs.cropped_image
+                // : await cacheImage(
+                //       state,
+                //       `croppedImage`,
+                //       frameIndex,
+                //       { size, cropPadding },
+                //       dependencyKeyRef,
+                //       async () =>
+                //           graph.RL$_Crop$_Resize({
+                //               image: startImage,
+                //               mask: cropMask,
+                //               max_side_length: size,
+                //               padding: cropPadding,
+                //           }).outputs.cropped_image,
+                //   )
+
+                return {
+                    nodes: {},
+                    outputs: { croppedImage },
+                }
+            },
+            modify: ({ nodes, frameIndex }) => {
+                // nothing specific to the frameIndex
+            },
+        })
+
+        // build steps
         try {
-            const startImageStep = defineStep({
-                preview: form.imageSource.preview,
-                inputSteps: {},
-                create: ({ graph, imageDirectory }) => {
-                    const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
-                        path: `${imageDirectory}/${form.imageSource.filePattern}`,
-                        current_frame: 0,
-                    })
-                    const startImage = loadImageNode.outputs.image
-
-                    return {
-                        nodes: { loadImageNode },
-                        outputs: { startImage },
-                    }
-                },
-                modify: ({ nodes, frameIndex }) => {
-                    nodes.loadImageNode.inputs.current_frame = frameIndex
-                },
-            })
-
-            const cropMaskStep = defineStep({
-                preview: form.previewCropMask,
-                inputSteps: { startImageStep },
-                create: (state, { inputs }) => {
-                    const { startImage } = inputs
-                    const cropMask = operation_mask.run(state, startImage, undefined, form.cropMaskOperations)
-                    return {
-                        nodes: {},
-                        outputs: { cropMask },
-                    }
-                },
-                modify: ({ nodes, frameIndex }) => {
-                    // nothing specific to the frameIndex
-                },
-            })
-
-            const cropStep = defineStep({
-                preview: form.previewCrop,
-                inputSteps: { startImageStep, cropMaskStep },
-                create: ({ graph }, { inputs }) => {
-                    const { startImage, cropMask } = inputs
-
-                    const { size: sizeInput, cropPadding } = form
-                    const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
-                    const croppedImage = !cropMask
-                        ? startImage
-                        : graph.RL$_Crop$_Resize({
-                              image: startImage,
-                              mask: cropMask,
-                              max_side_length: size,
-                              padding: cropPadding,
-                          }).outputs.cropped_image
-                    // : await cacheImage(
-                    //       state,
-                    //       `croppedImage`,
-                    //       frameIndex,
-                    //       { size, cropPadding },
-                    //       dependencyKeyRef,
-                    //       async () =>
-                    //           graph.RL$_Crop$_Resize({
-                    //               image: startImage,
-                    //               mask: cropMask,
-                    //               max_side_length: size,
-                    //               padding: cropPadding,
-                    //           }).outputs.cropped_image,
-                    //   )
-
-                    return {
-                        nodes: {},
-                        outputs: { croppedImage },
-                    }
-                },
-                modify: ({ nodes, frameIndex }) => {
-                    // nothing specific to the frameIndex
-                },
-            })
-
-            return
+            for (const s of stepsRegistry) {
+                buildStep(s)
+            }
         } catch (err) {
             if (!(err instanceof StopError)) {
                 throw err
@@ -317,7 +378,10 @@ appOptimized({
 
             // end definition early
             if (err.setFrameIndex) {
-                stepsRegistry.push({ setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false })
+                const firstUnbuilt = stepsRegistry.find((x) => !x._build)
+                if (firstUnbuilt) {
+                    firstUnbuilt._build = { setFrameIndex: err.setFrameIndex, _nodes: {}, outputs: {}, canBeCached: false }
+                }
             }
         }
 
