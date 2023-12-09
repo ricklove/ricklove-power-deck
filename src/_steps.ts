@@ -3,6 +3,7 @@ import { AppState, StopError, disableNodesAfterInclusive, getNextActiveNodeIndex
 import { cacheImage, cacheImageBuilder, cacheMaskBuilder } from './_cache'
 import { Widget } from 'src'
 import { ComfyNode } from 'src/core/ComfyNode'
+import { showLoadingMessage } from './_loadingMessage'
 
 type StepState = AppState
 
@@ -280,14 +281,9 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
                         kOutput,
                         stepDef,
                     })
-                    const iLoadCache = getNextActiveNodeIndex(_state.runtime)
-                    const { getOutput: getCachedOutput, modify: modifyCacheLoader } = cacheBuilderResult.loadCached()
                     const missingFrameIndexes = [] as number[]
                     for (const frameIndex of frameIndexes) {
-                        changeFrame(frameIndex)
-                        modifyCacheLoader(frameIndex)
-                        const result = await _state.runtime.PROMPT()
-                        if (result.data.error) {
+                        if (!(await cacheBuilderResult.exists(frameIndex))) {
                             missingFrameIndexes.push(frameIndex)
                         }
                     }
@@ -302,26 +298,40 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
                             ...getEnabledNodeNames(_state.runtime),
                         })
                         // remove load
-                        disableNodesAfterInclusive(_state.runtime, iLoadCache)
+                        // disableNodesAfterInclusive(_state.runtime, iLoadCache)
 
                         // create cache
                         const iCache = getNextActiveNodeIndex(_state.runtime)
                         const cacheResult = cacheBuilderResult.createCache(() => vOutput as IMAGE & MASK)
                         if (!cacheResult) {
+                            disableNodesAfterInclusive(_state.runtime, iCache)
+                            console.log(`runSteps: cacheResult is MISSING - cannot cache`, {
+                                stepName: stepDef.name,
+                                kOutput,
+                                stepDef,
+                                missingFrameIndexes,
+                                ...getEnabledNodeNames(_state.runtime),
+                            })
                             continue
                         }
 
                         const { getOutput: getCachedOutput, modify: modifyCacheLoader } = cacheResult
+                        const loadingMessage = showLoadingMessage(_state.runtime, `Generating cache`, {
+                            stepName: stepDef.name,
+                            kOutput,
+                            frameIndexes,
+                        })
+                        await new Promise((r) => setTimeout(r, 10))
 
                         for (const frameIndex of frameIndexes) {
                             changeFrame(frameIndex)
                             modifyCacheLoader(frameIndex)
                             await _state.runtime.PROMPT()
+                            await new Promise((r) => setTimeout(r, 10))
                         }
 
-                        // remove create cache and add load again
+                        // remove create cache
                         disableNodesAfterInclusive(_state.runtime, iCache)
-                        cacheBuilderResult.loadCached()
 
                         console.log(`runSteps: createCache END`, {
                             stepName: stepDef.name,
@@ -330,11 +340,14 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
                             missingFrameIndexes,
                             ...getEnabledNodeNames(_state.runtime),
                         })
+
+                        await new Promise((r) => setTimeout(r, 10))
+                        loadingMessage.delete()
                     }
 
                     // replace output with cached output
                     console.log(
-                        `runSteps: replace output with cached output ${
+                        `runSteps: loadCached - replace output with cached output ${
                             missingFrameIndexes.length ? `` : `NO Missing Frames to cache`
                         }`,
                         {
@@ -344,6 +357,8 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
                             missingFrameIndexes,
                         },
                     )
+
+                    const { getOutput: getCachedOutput, modify: modifyCacheLoader } = cacheBuilderResult.loadCached()
                     stepBuild.outputs[kOutput] = getCachedOutput()
                     stepBuild.setFrameIndex = modifyCacheLoader
 

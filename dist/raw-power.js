@@ -166,9 +166,9 @@ var rand = createRandomGenerator(`${Date.now()}`);
 var showLoadingMessage = (runtime, title, data) => {
   const message = `### Loading... 
     
-    ${title}
-    
-    ${!data ? `` : Object.entries(data).map(
+${title}
+
+${!data ? `` : Object.entries(data).map(
     ([k, v]) => typeof v === `string` && v.includes(`
 `) ? `- ${k}: 
 
@@ -177,21 +177,22 @@ var showLoadingMessage = (runtime, title, data) => {
     `)}` : `- ${k}: ${v}`
   ).join(`
 `)}
-    
-    ### Detailed Master Plan
-    
-    ${[...new Array(20)].map((_) => `- ${rand.randomItem(loadingMessages)}`).join(`
+
+### Detailed Master Plan
+
+${[...new Array(20)].map((_) => `- ${rand.randomItem(loadingMessages)}`).join(`
 `)}
-    
-    ### Oops...
-    
-    - If you are reading this somehting probably broke
-    - Manual intervention is likely required
-    - Not sure why you are still reading
-    - You should probably do something
+
+### Oops...
+
+- If you are reading this somehting probably broke
+- Manual intervention is likely required
+- Not sure why you are still reading
+- You should probably do something
     
     `;
-  let messageItem = runtime.output_Markdown(message);
+  console.log(`showLoadingMessage`, message);
+  let messageItem = runtime.output_text(message);
   const timeoutId = setTimeout(() => {
     messageItem.delete();
     messageItem = runtime.output_Markdown(message);
@@ -209,7 +210,16 @@ var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
   const { runtime, graph } = state;
   const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
   dependencyKeyRef.dependencyKey = paramsHash;
-  const paramsFilePattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}/#####.png`;
+  const paramsFolderPattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}`;
+  const location = `input`;
+  const paramsFilePattern = `../${location}/${paramsFolderPattern}/#####.png`;
+  const exists = async (frameIndex) => {
+    return await state.runtime.doesComfyImageExist({
+      type: location,
+      subfolder: paramsFolderPattern,
+      filename: `${`${frameIndex}`.padStart(5, `0`)}.png`
+    });
+  };
   const loadCached = () => {
     const loadImageNode = graph.RL$_LoadImageSequence({
       path: paramsFilePattern,
@@ -238,6 +248,9 @@ var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
       current_frame: 0,
       path: paramsFilePattern
     });
+    graph.PreviewImage({
+      images: image
+    });
     return {
       getOutput: () => image,
       modify: (frameIndex) => {
@@ -246,6 +259,7 @@ var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
     };
   };
   return {
+    exists,
     loadCached,
     createCache
   };
@@ -254,6 +268,7 @@ var cacheMaskBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
   const { graph } = state;
   const imageBuilder = cacheImageBuilder(state, folderPrefix, params, dependencyKeyRef);
   return {
+    exists: imageBuilder.exists,
     loadCached: () => {
       const loadCached_image = imageBuilder.loadCached();
       return {
@@ -999,14 +1014,9 @@ var createStepsSystem = (appState) => {
             kOutput,
             stepDef
           });
-          const iLoadCache = getNextActiveNodeIndex(_state.runtime);
-          const { getOutput: getCachedOutput, modify: modifyCacheLoader } = cacheBuilderResult.loadCached();
           const missingFrameIndexes = [];
           for (const frameIndex of frameIndexes) {
-            changeFrame(frameIndex);
-            modifyCacheLoader(frameIndex);
-            const result = await _state.runtime.PROMPT();
-            if (result.data.error) {
+            if (!await cacheBuilderResult.exists(frameIndex)) {
               missingFrameIndexes.push(frameIndex);
             }
           }
@@ -1018,20 +1028,33 @@ var createStepsSystem = (appState) => {
               missingFrameIndexes,
               ...getEnabledNodeNames(_state.runtime)
             });
-            disableNodesAfterInclusive(_state.runtime, iLoadCache);
             const iCache = getNextActiveNodeIndex(_state.runtime);
             const cacheResult = cacheBuilderResult.createCache(() => vOutput);
             if (!cacheResult) {
+              disableNodesAfterInclusive(_state.runtime, iCache);
+              console.log(`runSteps: cacheResult is MISSING - cannot cache`, {
+                stepName: stepDef.name,
+                kOutput,
+                stepDef,
+                missingFrameIndexes,
+                ...getEnabledNodeNames(_state.runtime)
+              });
               continue;
             }
             const { getOutput: getCachedOutput2, modify: modifyCacheLoader2 } = cacheResult;
+            const loadingMessage = showLoadingMessage(_state.runtime, `Generating cache`, {
+              stepName: stepDef.name,
+              kOutput,
+              frameIndexes
+            });
+            await new Promise((r) => setTimeout(r, 10));
             for (const frameIndex of frameIndexes) {
               changeFrame(frameIndex);
               modifyCacheLoader2(frameIndex);
               await _state.runtime.PROMPT();
+              await new Promise((r) => setTimeout(r, 10));
             }
             disableNodesAfterInclusive(_state.runtime, iCache);
-            cacheBuilderResult.loadCached();
             console.log(`runSteps: createCache END`, {
               stepName: stepDef.name,
               kOutput,
@@ -1039,9 +1062,11 @@ var createStepsSystem = (appState) => {
               missingFrameIndexes,
               ...getEnabledNodeNames(_state.runtime)
             });
+            await new Promise((r) => setTimeout(r, 10));
+            loadingMessage.delete();
           }
           console.log(
-            `runSteps: replace output with cached output ${missingFrameIndexes.length ? `` : `NO Missing Frames to cache`}`,
+            `runSteps: loadCached - replace output with cached output ${missingFrameIndexes.length ? `` : `NO Missing Frames to cache`}`,
             {
               stepName: stepDef.name,
               kOutput,
@@ -1049,6 +1074,7 @@ var createStepsSystem = (appState) => {
               missingFrameIndexes
             }
           );
+          const { getOutput: getCachedOutput, modify: modifyCacheLoader } = cacheBuilderResult.loadCached();
           stepBuild.outputs[kOutput] = getCachedOutput();
           stepBuild.setFrameIndex = modifyCacheLoader;
           cachedOutputs.push({
@@ -1225,7 +1251,7 @@ appOptimized({
       cacheParams: [],
       inputSteps: {},
       create: ({ graph, imageDirectory }) => {
-        const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
+        const loadImageNode = graph.RL$_LoadImageSequence({
           path: `${imageDirectory}/${form.imageSource.filePattern}`,
           current_frame: 0
         });
@@ -1445,6 +1471,9 @@ appOptimized({
           images: finalImage,
           filename_prefix: "cushy"
         });
+        graph.PreviewImage({
+          images: finalImage
+        });
         return {
           nodes: {},
           outputs: { finalImage }
@@ -1465,7 +1494,7 @@ appOptimized({
       const { imageDirectory, graph } = state;
       state.scopeStack = [{}];
       const frameIndex = form.imageSource.startIndex + iterationIndex * (form.imageSource.selectEveryNth ?? 1);
-      const startImage = graph.Load_Image_Sequence_$1mtb$2({
+      const startImage = graph.RL$_LoadImageSequence({
         path: `${imageDirectory}/${form.imageSource.filePattern}`,
         current_frame: frameIndex
       }).outputs.image;

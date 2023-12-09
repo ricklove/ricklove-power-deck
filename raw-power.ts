@@ -141,7 +141,7 @@ appOptimized({
             cacheParams: [],
             inputSteps: {},
             create: ({ graph, imageDirectory }) => {
-                const loadImageNode = graph.Load_Image_Sequence_$1mtb$2({
+                const loadImageNode = graph.RL$_LoadImageSequence({
                     path: `${imageDirectory}/${form.imageSource.filePattern}`,
                     current_frame: 0,
                 })
@@ -420,6 +420,10 @@ appOptimized({
                     filename_prefix: 'cushy',
                 })
 
+                graph.PreviewImage({
+                    images: finalImage,
+                })
+
                 return {
                     nodes: {},
                     outputs: { finalImage },
@@ -448,7 +452,7 @@ appOptimized({
             state.scopeStack = [{}]
 
             const frameIndex = form.imageSource.startIndex + iterationIndex * (form.imageSource.selectEveryNth ?? 1)
-            const startImage = graph.Load_Image_Sequence_$1mtb$2({
+            const startImage = graph.RL$_LoadImageSequence({
                 path: `${imageDirectory}/${form.imageSource.filePattern}`,
                 current_frame: frameIndex,
             }).outputs.image

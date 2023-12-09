@@ -10,6 +10,7 @@ export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
     params: (Widget[`$Output`] | Record<string, unknown>)[],
     dependencyKeyRef: { dependencyKey: string },
 ): {
+    exists: (frameIndex: number) => Promise<boolean>
     loadCached: () => { getOutput: () => _IMAGE; modify: (frameIndex: number) => void }
     createCache: (getValue: () => TIMAGE) => { getOutput: () => _IMAGE; modify: (frameIndex: number) => void }
 } => {
@@ -17,7 +18,17 @@ export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
     const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt()
     dependencyKeyRef.dependencyKey = paramsHash
 
-    const paramsFilePattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}/#####.png`
+    const paramsFolderPattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}`
+    const location = `input`
+    const paramsFilePattern = `../${location}/${paramsFolderPattern}/#####.png`
+
+    const exists = async (frameIndex: number) => {
+        return await state.runtime.doesComfyImageExist({
+            type: location,
+            subfolder: paramsFolderPattern,
+            filename: `${`${frameIndex}`.padStart(5, `0`)}.png`,
+        })
+    }
 
     const loadCached = () => {
         const loadImageNode = graph.RL$_LoadImageSequence({
@@ -48,6 +59,9 @@ export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
             current_frame: 0,
             path: paramsFilePattern,
         })
+        graph.PreviewImage({
+            images: image,
+        })
         return {
             getOutput: () => image,
             modify: (frameIndex: number) => {
@@ -57,6 +71,7 @@ export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
     }
 
     return {
+        exists,
         loadCached,
         createCache,
     }
@@ -68,6 +83,7 @@ export const cacheMaskBuilder = <TMASK extends undefined | _MASK>(
     params: Params,
     dependencyKeyRef: { dependencyKey: string },
 ): {
+    exists: (frameIndex: number) => Promise<boolean>
     loadCached: () => { getOutput: () => _MASK; modify: (frameIndex: number) => void }
     createCache: (getValue: () => TMASK) => undefined | { getOutput: () => _MASK; modify: (frameIndex: number) => void }
 } => {
@@ -76,6 +92,7 @@ export const cacheMaskBuilder = <TMASK extends undefined | _MASK>(
     const imageBuilder = cacheImageBuilder(state, folderPrefix, params, dependencyKeyRef)
 
     return {
+        exists: imageBuilder.exists,
         loadCached: () => {
             const loadCached_image = imageBuilder.loadCached()
             return {
