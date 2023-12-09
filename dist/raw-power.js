@@ -1224,7 +1224,14 @@ appOptimized({
         lcm: form.bool({ default: true }),
         config: form.float({ default: 1.5 }),
         add_noise: form.bool({ default: true }),
-        render: form.inlineRun({})
+        preview: form.inlineRun({})
+      })
+    }),
+    film: form.groupOpt({
+      items: () => ({
+        singleFramePyramidSize: form.intOpt({ default: 4 }),
+        // sideFrameDoubleBack: form.bool({}),
+        preview: form.inlineRun({})
       })
     }),
     testSeed: form.seed({}),
@@ -1368,10 +1375,10 @@ appOptimized({
       }
       return controlNetStepPrev;
     })();
-    const samplerStep = defineStep({
+    const samplerStep_create = (iRepeat) => defineStep({
       name: `samplerStep`,
-      preview: form.sampler.render,
-      cacheParams: [form.sampler],
+      preview: form.sampler.preview,
+      cacheParams: [form.sampler, iRepeat],
       inputSteps: { cropStep, replaceMaskStep, controlNetStackStep },
       create: ({ graph }, { inputs }) => {
         const { croppedImage, replaceMask, controlNetStack } = inputs;
@@ -1430,7 +1437,6 @@ appOptimized({
           graph.PreviewImage({ images: latentImage });
           throw new StopError(void 0);
         }
-        const seed = form.sampler.seed;
         const startStep = Math.max(
           0,
           Math.min(
@@ -1445,12 +1451,13 @@ appOptimized({
             form.sampler.endStep ? form.sampler.endStep : form.sampler.endStepFromEnd ? form.sampler.steps - form.sampler.endStepFromEnd : form.sampler.stepsToIterate ? startStep + form.sampler.stepsToIterate : form.sampler.steps
           )
         );
+        const seed = form.sampler.seed;
         const sampler = graph.KSampler_Adv$5_$1Efficient$2({
           add_noise: form.sampler.add_noise ? `enable` : `disable`,
           return_with_leftover_noise: `disable`,
           vae_decode: `true`,
           preview_method: `auto`,
-          noise_seed: seed,
+          noise_seed: seed + iRepeat,
           steps: form.sampler.steps,
           start_at_step: startStep,
           end_at_step: endStep,
@@ -1482,6 +1489,53 @@ appOptimized({
       modify: ({ nodes, frameIndex }) => {
       }
     });
+    const samplerSteps = [...new Array(form.film?.singleFramePyramidSize ?? 1)].map((_, i) => samplerStep_create(i));
+    if (form.film?.singleFramePyramidSize) {
+      const { singleFramePyramidSize } = form.film;
+      const filmStep = defineStep({
+        name: `filmStep`,
+        preview: form.film.preview,
+        cacheParams: [singleFramePyramidSize],
+        inputSteps: { samplerSteps },
+        create: (state, { inputs }) => {
+          const finalImages = samplerSteps.map((x) => x._build?.outputs.finalImage).filter((x) => x).map((x) => x);
+          const { graph } = state;
+          let images = finalImages[0];
+          for (const f of finalImages.slice(1)) {
+            images = graph.ImageBatch({
+              image1: images,
+              image2: f
+            }).outputs.IMAGE;
+          }
+          const filmModel = graph.Load_Film_Model_$1mtb$2({
+            film_model: `Style`
+          });
+          let oddFrames = images;
+          for (let iLayer = 0; iLayer < singleFramePyramidSize - 1; iLayer++) {
+            const filmFrames = graph.Film_Interpolation_$1mtb$2({
+              film_model: filmModel,
+              images: oddFrames,
+              interpolate: 1
+            });
+            graph.SaveImage({
+              images: filmFrames,
+              filename_prefix: `film`
+            });
+            oddFrames = graph.ImageBatchFork({
+              images: filmFrames,
+              priority: `first`
+            }).outputs.IMAGE_1;
+          }
+          const interpolatedFrame = oddFrames;
+          return {
+            nodes: {},
+            outputs: { interpolatedFrame }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+        }
+      });
+    }
     const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
       frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
     }));

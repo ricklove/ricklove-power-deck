@@ -108,7 +108,15 @@ appOptimized({
                 config: form.float({ default: 1.5 }),
                 add_noise: form.bool({ default: true }),
 
-                render: form.inlineRun({}),
+                preview: form.inlineRun({}),
+            }),
+        }),
+
+        film: form.groupOpt({
+            items: () => ({
+                singleFramePyramidSize: form.intOpt({ default: 4 }),
+                // sideFrameDoubleBack: form.bool({}),
+                preview: form.inlineRun({}),
             }),
         }),
 
@@ -289,150 +297,219 @@ appOptimized({
             return controlNetStepPrev
         })()
 
-        const samplerStep = defineStep({
-            name: `samplerStep`,
-            preview: form.sampler.render,
-            cacheParams: [form.sampler],
-            inputSteps: { cropStep, replaceMaskStep, controlNetStackStep },
-            create: ({ graph }, { inputs }) => {
-                const { croppedImage, replaceMask, controlNetStack } = inputs
+        const samplerStep_create = (iRepeat: number) =>
+            defineStep({
+                name: `samplerStep`,
+                preview: form.sampler.preview,
+                cacheParams: [form.sampler, iRepeat],
+                inputSteps: { cropStep, replaceMaskStep, controlNetStackStep },
+                create: ({ graph }, { inputs }) => {
+                    const { croppedImage, replaceMask, controlNetStack } = inputs
 
-                if (form.sampler.previewInputs) {
-                    graph.PreviewImage({ images: croppedImage })
-                    if (replaceMask) {
-                        const maskImage = graph.MaskToImage({ mask: replaceMask })
-                        graph.PreviewImage({ images: maskImage })
+                    if (form.sampler.previewInputs) {
+                        graph.PreviewImage({ images: croppedImage })
+                        if (replaceMask) {
+                            const maskImage = graph.MaskToImage({ mask: replaceMask })
+                            graph.PreviewImage({ images: maskImage })
+                        }
+                        throw new StopError(undefined)
                     }
-                    throw new StopError(undefined)
-                }
 
-                const loraStack = !form.sampler.lcm
-                    ? undefined
-                    : graph.LoRA_Stacker({
-                          input_mode: `simple`,
-                          lora_count: 1,
-                          lora_name_1: !form.sampler.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`,
-                      } as LoRA_Stacker_input)
+                    const loraStack = !form.sampler.lcm
+                        ? undefined
+                        : graph.LoRA_Stacker({
+                              input_mode: `simple`,
+                              lora_count: 1,
+                              lora_name_1: !form.sampler.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`,
+                          } as LoRA_Stacker_input)
 
-                const loader = graph.Efficient_Loader({
-                    ckpt_name: form.sampler.checkpoint,
-                    lora_stack: loraStack,
-                    cnet_stack: controlNetStack,
-                    // defaults
-                    lora_name: `None`,
-                    token_normalization: `none`,
-                    vae_name: `Baked VAE`,
-                    weight_interpretation: `comfy`,
-                    positive: form.sampler.positive,
-                    negative: form.sampler.negative,
-                })
+                    const loader = graph.Efficient_Loader({
+                        ckpt_name: form.sampler.checkpoint,
+                        lora_stack: loraStack,
+                        cnet_stack: controlNetStack,
+                        // defaults
+                        lora_name: `None`,
+                        token_normalization: `none`,
+                        vae_name: `Baked VAE`,
+                        weight_interpretation: `comfy`,
+                        positive: form.sampler.positive,
+                        negative: form.sampler.negative,
+                    })
 
-                const startLatent = (() => {
-                    if (replaceMask && form.sampler.useImpaintingEncode) {
-                        const imageList = graph.ImpactImageBatchToImageList({
-                            image: croppedImage,
+                    const startLatent = (() => {
+                        if (replaceMask && form.sampler.useImpaintingEncode) {
+                            const imageList = graph.ImpactImageBatchToImageList({
+                                image: croppedImage,
+                            })
+
+                            let maskList = graph.MasksToMaskList({
+                                masks: replaceMask,
+                            }).outputs.MASK as _MASK
+                            const latentList = graph.VAEEncodeForInpaint({ pixels: imageList, vae: loader, mask: maskList })
+
+                            return graph.RebatchLatents({
+                                latents: latentList,
+                            })
+                        }
+
+                        const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader })
+                        if (!replaceMask) {
+                            return startLatent0
+                        }
+                        const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask })
+                        return startLatent1
+                    })()
+
+                    let latent = startLatent._LATENT
+                    // latent = graph.LatentUpscaleBy({ samples: latent, scale_by: 1.1, upscale_method: `bicubic` }).outputs.LATENT
+                    // latent = graph.LatentCrop({ samples: latent, width: 1024, height: 1024, x: width* }).outputs.LATENT
+
+                    if (form.sampler.previewLatent) {
+                        if (replaceMask) {
+                            const maskImage = graph.MaskToImage({ mask: replaceMask })
+                            graph.PreviewImage({ images: maskImage })
+                        }
+
+                        const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE })
+                        graph.PreviewImage({ images: latentImage })
+                        throw new StopError(undefined)
+                    }
+
+                    // if (form.film?.singleFramePyramidSize) {
+                    //     latent = graph.RepeatLatentBatch({
+                    //         samples: latent,
+                    //         amount: form.film.singleFramePyramidSize,
+                    //     }).outputs.LATENT
+                    // }
+
+                    const startStep = Math.max(
+                        0,
+                        Math.min(
+                            form.sampler.steps - 1,
+                            form.sampler.startStep
+                                ? form.sampler.startStep
+                                : form.sampler.startStepFromEnd
+                                ? form.sampler.steps - form.sampler.startStepFromEnd
+                                : 0,
+                        ),
+                    )
+                    const endStep = Math.max(
+                        1,
+                        Math.min(
+                            form.sampler.steps,
+                            form.sampler.endStep
+                                ? form.sampler.endStep
+                                : form.sampler.endStepFromEnd
+                                ? form.sampler.steps - form.sampler.endStepFromEnd
+                                : form.sampler.stepsToIterate
+                                ? startStep + form.sampler.stepsToIterate
+                                : form.sampler.steps,
+                        ),
+                    )
+                    const seed = form.sampler.seed
+                    const sampler = graph.KSampler_Adv$5_$1Efficient$2({
+                        add_noise: form.sampler.add_noise ? `enable` : `disable`,
+                        return_with_leftover_noise: `disable`,
+                        vae_decode: `true`,
+                        preview_method: `auto`,
+                        noise_seed: seed + iRepeat,
+                        steps: form.sampler.steps,
+                        start_at_step: startStep,
+                        end_at_step: endStep,
+
+                        cfg: form.sampler.config,
+                        sampler_name: 'lcm',
+                        scheduler: 'normal',
+
+                        model: loader,
+                        positive: loader.outputs.CONDITIONING$6, //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
+                        negative: loader.outputs.CONDITIONING$7, //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
+                        // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
+                        // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
+                        latent_image: startLatent,
+                    })
+
+                    const finalImage = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE
+
+                    graph.SaveImage({
+                        images: finalImage,
+                        filename_prefix: 'cushy',
+                    })
+
+                    graph.PreviewImage({
+                        images: finalImage,
+                    })
+
+                    return {
+                        nodes: {},
+                        outputs: { finalImage: finalImage },
+                    }
+                },
+                modify: ({ nodes, frameIndex }) => {
+                    // nothing specific to the frameIndex
+                },
+            })
+
+        const samplerSteps = [...new Array(form.film?.singleFramePyramidSize ?? 1)].map((_, i) => samplerStep_create(i))
+
+        if (form.film?.singleFramePyramidSize) {
+            const { singleFramePyramidSize } = form.film
+            const filmStep = defineStep({
+                name: `filmStep`,
+                preview: form.film.preview,
+                cacheParams: [singleFramePyramidSize],
+                inputSteps: { samplerSteps },
+                create: (state, { inputs }) => {
+                    // const { croppedImage } = inputs
+                    const finalImages = samplerSteps
+                        .map((x) => x._build?.outputs.finalImage)
+                        .filter((x) => x)
+                        .map((x) => x!)
+                    const { graph } = state
+
+                    let images = finalImages[0] as _IMAGE
+                    for (const f of finalImages.slice(1)) {
+                        images = graph.ImageBatch({
+                            image1: images,
+                            image2: f,
+                        }).outputs.IMAGE
+                    }
+
+                    const filmModel = graph.Load_Film_Model_$1mtb$2({
+                        film_model: `Style`,
+                    })
+
+                    let oddFrames = images
+                    for (let iLayer = 0; iLayer < singleFramePyramidSize - 1; iLayer++) {
+                        const filmFrames = graph.Film_Interpolation_$1mtb$2({
+                            film_model: filmModel,
+                            images: oddFrames,
+                            interpolate: 1,
                         })
 
-                        let maskList = graph.MasksToMaskList({
-                            masks: replaceMask,
-                        }).outputs.MASK as _MASK
-                        const latentList = graph.VAEEncodeForInpaint({ pixels: imageList, vae: loader, mask: maskList })
-
-                        return graph.RebatchLatents({
-                            latents: latentList,
+                        graph.SaveImage({
+                            images: filmFrames,
+                            filename_prefix: `film`,
                         })
+
+                        oddFrames = graph.ImageBatchFork({
+                            images: filmFrames,
+                            priority: `first`,
+                        }).outputs.IMAGE_1
                     }
 
-                    const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader })
-                    if (!replaceMask) {
-                        return startLatent0
+                    const interpolatedFrame = oddFrames
+
+                    return {
+                        nodes: {},
+                        outputs: { interpolatedFrame },
                     }
-                    const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask })
-                    return startLatent1
-                })()
-
-                let latent = startLatent._LATENT
-                // latent = graph.LatentUpscaleBy({ samples: latent, scale_by: 1.1, upscale_method: `bicubic` }).outputs.LATENT
-                // latent = graph.LatentCrop({ samples: latent, width: 1024, height: 1024, x: width* }).outputs.LATENT
-
-                if (form.sampler.previewLatent) {
-                    if (replaceMask) {
-                        const maskImage = graph.MaskToImage({ mask: replaceMask })
-                        graph.PreviewImage({ images: maskImage })
-                    }
-
-                    const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE })
-                    graph.PreviewImage({ images: latentImage })
-                    throw new StopError(undefined)
-                }
-
-                const seed = form.sampler.seed
-                const startStep = Math.max(
-                    0,
-                    Math.min(
-                        form.sampler.steps - 1,
-                        form.sampler.startStep
-                            ? form.sampler.startStep
-                            : form.sampler.startStepFromEnd
-                            ? form.sampler.steps - form.sampler.startStepFromEnd
-                            : 0,
-                    ),
-                )
-                const endStep = Math.max(
-                    1,
-                    Math.min(
-                        form.sampler.steps,
-                        form.sampler.endStep
-                            ? form.sampler.endStep
-                            : form.sampler.endStepFromEnd
-                            ? form.sampler.steps - form.sampler.endStepFromEnd
-                            : form.sampler.stepsToIterate
-                            ? startStep + form.sampler.stepsToIterate
-                            : form.sampler.steps,
-                    ),
-                )
-                const sampler = graph.KSampler_Adv$5_$1Efficient$2({
-                    add_noise: form.sampler.add_noise ? `enable` : `disable`,
-                    return_with_leftover_noise: `disable`,
-                    vae_decode: `true`,
-                    preview_method: `auto`,
-                    noise_seed: seed,
-                    steps: form.sampler.steps,
-                    start_at_step: startStep,
-                    end_at_step: endStep,
-
-                    cfg: form.sampler.config,
-                    sampler_name: 'lcm',
-                    scheduler: 'normal',
-
-                    model: loader,
-                    positive: loader.outputs.CONDITIONING$6, //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
-                    negative: loader.outputs.CONDITIONING$7, //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
-                    // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
-                    // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
-                    latent_image: startLatent,
-                })
-
-                const finalImage = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE
-
-                graph.SaveImage({
-                    images: finalImage,
-                    filename_prefix: 'cushy',
-                })
-
-                graph.PreviewImage({
-                    images: finalImage,
-                })
-
-                return {
-                    nodes: {},
-                    outputs: { finalImage },
-                }
-            },
-            modify: ({ nodes, frameIndex }) => {
-                // nothing specific to the frameIndex
-            },
-        })
+                },
+                modify: ({ nodes, frameIndex }) => {
+                    // nothing specific to the frameIndex
+                },
+            })
+        }
 
         // testing steps
         const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
