@@ -3,6 +3,9 @@ import { createRandomGenerator } from './_random'
 import { showLoadingMessage } from './_loadingMessage'
 import { Widget } from 'src'
 
+let history = {
+    writtenFormSerialWithPath: new Set<string>(),
+}
 type Params = Widget[`$Output`] | Record<string, unknown>
 export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
     state: AppState,
@@ -21,6 +24,29 @@ export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
     const paramsFolderPattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}`
     const location = `input`
     const paramsFilePattern = `../${location}/${paramsFolderPattern}/#####.png`
+
+    // save formSerial
+    const saveFormSerial = () => {
+        // TODO: save this through comfyUi
+        const { comfyUiInputRelativePath } = state
+        if (!comfyUiInputRelativePath) {
+            return
+        }
+
+        const formSerialHash = `` + createRandomGenerator(`${JSON.stringify(runtime.formSerial)}`).randomInt()
+        const formSerialSavePath = runtime.path.join(comfyUiInputRelativePath, paramsFolderPattern, `${formSerialHash}.json`)
+        const formSerialWithPath = `${formSerialHash}:${formSerialSavePath}`
+
+        if (history.writtenFormSerialWithPath.has(`${formSerialWithPath}`)) {
+            return
+        }
+        history.writtenFormSerialWithPath.add(formSerialWithPath)
+
+        console.log(`formSerialSavePath`, { formSerialSavePath })
+        runtime.fs.mkdirSync(runtime.path.dirname(formSerialSavePath), { recursive: true })
+        runtime.fs.writeFileSync(formSerialSavePath, JSON.stringify(runtime.formSerial))
+    }
+    saveFormSerial()
 
     const exists = async (frameIndex: number) => {
         return await state.runtime.doesComfyImageExist({

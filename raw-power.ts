@@ -8,6 +8,7 @@ import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { ComfyNodeOutput } from 'src/core/Slot'
 import { StepDefinition, createStepsSystem } from './src/_steps'
 import { Image } from 'konva/lib/shapes/Image'
+import { createRandomGenerator } from './src/_random'
 
 appOptimized({
     ui: (form) => ({
@@ -141,6 +142,7 @@ appOptimized({
         } = createStepsSystem({
             runtime: runtime,
             imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+            comfyUiInputRelativePath: `../comfyui/ComfyUI/input`,
             graph: runtime.nodes,
             scopeStack: [{}],
         })
@@ -185,6 +187,8 @@ appOptimized({
                 // nothing specific to the frameIndex
             },
         })
+
+        // TODO: Interpolate the crop masks to smooth frame to frame jerking
 
         const cropStep = defineStep({
             name: `cropStep`,

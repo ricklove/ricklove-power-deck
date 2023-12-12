@@ -12,6 +12,7 @@ export type AppState = {
     graph: ComfyWorkflowBuilder
     imageDirectory: string
     workingDirectory: string
+    comfyUiInputRelativePath?: string
     scopeStack: Record<string, unknown>[]
 }
 

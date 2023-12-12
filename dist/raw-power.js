@@ -206,6 +206,9 @@ ${[...new Array(20)].map((_) => `- ${rand.randomItem(loadingMessages)}`).join(`
 };
 
 // library/ricklove/my-cushy-deck/src/_cache.ts
+var history = {
+  writtenFormSerialWithPath: /* @__PURE__ */ new Set()
+};
 var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
   const { runtime, graph } = state;
   const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
@@ -213,6 +216,23 @@ var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
   const paramsFolderPattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}`;
   const location = `input`;
   const paramsFilePattern = `../${location}/${paramsFolderPattern}/#####.png`;
+  const saveFormSerial = () => {
+    const { comfyUiInputRelativePath } = state;
+    if (!comfyUiInputRelativePath) {
+      return;
+    }
+    const formSerialHash = `` + createRandomGenerator(`${JSON.stringify(runtime.formSerial)}`).randomInt();
+    const formSerialSavePath = runtime.path.join(comfyUiInputRelativePath, paramsFolderPattern, `${formSerialHash}.json`);
+    const formSerialWithPath = `${formSerialHash}:${formSerialSavePath}`;
+    if (history.writtenFormSerialWithPath.has(`${formSerialWithPath}`)) {
+      return;
+    }
+    history.writtenFormSerialWithPath.add(formSerialWithPath);
+    console.log(`formSerialSavePath`, { formSerialSavePath });
+    runtime.fs.mkdirSync(runtime.path.dirname(formSerialSavePath), { recursive: true });
+    runtime.fs.writeFileSync(formSerialSavePath, JSON.stringify(runtime.formSerial));
+  };
+  saveFormSerial();
   const exists = async (frameIndex) => {
     return await state.runtime.doesComfyImageExist({
       type: location,
@@ -1251,6 +1271,7 @@ appOptimized({
     } = createStepsSystem({
       runtime,
       imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+      comfyUiInputRelativePath: `../comfyui/ComfyUI/input`,
       graph: runtime.nodes,
       scopeStack: [{}]
     });
