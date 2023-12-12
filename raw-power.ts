@@ -246,6 +246,8 @@ appOptimized({
                     ? `zoe-depth`
                     : c.controlNet.toLowerCase().includes(`normal`)
                     ? `bae-normal`
+                    : c.controlNet.toLowerCase().includes(`sketch`) || c.controlNet.toLowerCase().includes(`canny`)
+                    ? `hed`
                     : undefined
 
                 const preprocessorStep = defineStep({
@@ -261,6 +263,8 @@ appOptimized({
                                 ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }).outputs.IMAGE
                                 : preprocessorKind === `bae-normal`
                                 ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }).outputs.IMAGE
+                                : preprocessorKind === `hed`
+                                ? graph.HEDPreprocessor({ image: croppedImage, safe: `enable`, version: `v1.1` }).outputs.IMAGE
                                 : croppedImage
 
                         return {
@@ -557,7 +561,7 @@ appOptimized({
         const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
             frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1),
         }))
-        await runSteps(frameIndexes.map((x) => x.frameIndex))
+        const dependecyKeyRef1 = await runSteps(frameIndexes.map((x) => x.frameIndex))
 
         if (form.film?.sideFrameDoubleBackIterations) {
             const { sideFrameDoubleBackIterations } = form.film
@@ -578,12 +582,12 @@ appOptimized({
 
             const minCurrentFrame = Math.min(...frameIndexes.map((x) => x.frameIndex))
             const maxCurrentFrame = Math.max(...frameIndexes.map((x) => x.frameIndex))
-            const size = 7
+            const size = 5
             const sizeHalf = (size / 2) | 0
             defineStep({
                 name: `sideFrameDoubleBack`,
                 // preview: form.film.preview,
-                cacheParams: [sideFrameDoubleBackIterations],
+                cacheParams: [sideFrameDoubleBackIterations, size, dependecyKeyRef1.dependencyKey],
                 inputSteps: {},
                 create: (state, { inputs }) => {
                     const { graph } = state

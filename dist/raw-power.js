@@ -1149,6 +1149,7 @@ var createStepsSystem = (appState) => {
         await _state.runtime.PROMPT();
       }
     }
+    return dependencyKeyRef;
   };
   return {
     state: _state,
@@ -1355,7 +1356,7 @@ appOptimized({
     const controlNetStackStep = (() => {
       let controlNetStepPrev = void 0;
       for (const c of form.controlNet) {
-        const preprocessorKind = c.controlNet.toLowerCase().includes(`depth`) ? `zoe-depth` : c.controlNet.toLowerCase().includes(`normal`) ? `bae-normal` : void 0;
+        const preprocessorKind = c.controlNet.toLowerCase().includes(`depth`) ? `zoe-depth` : c.controlNet.toLowerCase().includes(`normal`) ? `bae-normal` : c.controlNet.toLowerCase().includes(`sketch`) || c.controlNet.toLowerCase().includes(`canny`) ? `hed` : void 0;
         const preprocessorStep = defineStep({
           name: `preprocessorStep`,
           preview: c.preview,
@@ -1363,7 +1364,7 @@ appOptimized({
           inputSteps: { cropStep },
           create: ({ graph }, { inputs }) => {
             const { croppedImage } = inputs;
-            const imagePre = preprocessorKind === `zoe-depth` ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }).outputs.IMAGE : preprocessorKind === `bae-normal` ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }).outputs.IMAGE : croppedImage;
+            const imagePre = preprocessorKind === `zoe-depth` ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }).outputs.IMAGE : preprocessorKind === `bae-normal` ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }).outputs.IMAGE : preprocessorKind === `hed` ? graph.HEDPreprocessor({ image: croppedImage, safe: `enable`, version: `v1.1` }).outputs.IMAGE : croppedImage;
             return {
               nodes: {},
               outputs: { imagePre }
@@ -1592,7 +1593,7 @@ appOptimized({
     const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
       frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
     }));
-    await runSteps(frameIndexes.map((x) => x.frameIndex));
+    const dependecyKeyRef1 = await runSteps(frameIndexes.map((x) => x.frameIndex));
     if (form.film?.sideFrameDoubleBackIterations) {
       const { sideFrameDoubleBackIterations } = form.film;
       console.log(`sideFrameDoubleBack START`);
@@ -1609,12 +1610,12 @@ appOptimized({
       });
       const minCurrentFrame = Math.min(...frameIndexes.map((x) => x.frameIndex));
       const maxCurrentFrame = Math.max(...frameIndexes.map((x) => x.frameIndex));
-      const size = 7;
+      const size = 5;
       const sizeHalf = size / 2 | 0;
       defineStep2({
         name: `sideFrameDoubleBack`,
         // preview: form.film.preview,
-        cacheParams: [sideFrameDoubleBackIterations],
+        cacheParams: [sideFrameDoubleBackIterations, size, dependecyKeyRef1.dependencyKey],
         inputSteps: {},
         create: (state, { inputs }) => {
           const { graph } = state;

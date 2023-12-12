@@ -429,6 +429,8 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
                 await _state.runtime.PROMPT()
             }
         }
+
+        return dependencyKeyRef
     }
 
     return {
