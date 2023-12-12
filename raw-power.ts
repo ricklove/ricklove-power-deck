@@ -124,6 +124,24 @@ appOptimized({
             }),
         }),
 
+        upscale: form.groupOpt({
+            items: () => ({
+                upscaleBy: form.float({ default: 2, min: 0, max: 10 }),
+                steps: form.int({ default: 20, min: 0, max: 100 }),
+                denoise: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+                tileStrength: form.float({ default: 1.0, min: 0, max: 1 }),
+                sdxl: form.bool({ default: false }),
+                lcm: form.bool({ default: true }),
+                // mask: form.bool({ default: true }),
+                config: form.float({ default: 7, min: 0, max: 20 }),
+                checkpoint: form.enum({
+                    enumName: 'Enum_CheckpointLoaderSimple_ckpt_name',
+                    default: 'realisticVisionV51_v51VAE-inpainting.safetensors',
+                }),
+                preview: form.inlineRun({}),
+            }),
+        }),
+
         testSeed: form.seed({}),
         test: form.custom({
             Component: OptimizerComponent,
@@ -561,7 +579,7 @@ appOptimized({
         const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
             frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1),
         }))
-        const dependecyKeyRef1 = await runSteps(frameIndexes.map((x) => x.frameIndex))
+        let dependecyKeyRef = await runSteps(frameIndexes.map((x) => x.frameIndex))
 
         if (form.film?.sideFrameDoubleBackIterations) {
             const { sideFrameDoubleBackIterations } = form.film
@@ -587,7 +605,7 @@ appOptimized({
             defineStep({
                 name: `sideFrameDoubleBack`,
                 // preview: form.film.preview,
-                cacheParams: [sideFrameDoubleBackIterations, size, dependecyKeyRef1.dependencyKey],
+                cacheParams: [sideFrameDoubleBackIterations, size, dependecyKeyRef.dependencyKey],
                 inputSteps: {},
                 create: (state, { inputs }) => {
                     const { graph } = state
@@ -661,8 +679,14 @@ appOptimized({
                     })
                     const mainImage = mainImageNode.outputs.IMAGE
 
+                    const saveImageNode = graph.RL$_SaveImageSequence({
+                        images: mainImage,
+                        current_frame: 0,
+                        path: `../input/${state.workingDirectory}/_final-film/#####.png`,
+                    })
+
                     return {
-                        nodes: { loadImageBatchNode, mainImageNode },
+                        nodes: { loadImageBatchNode, mainImageNode, saveImageNode },
                         outputs: { mainImage },
                     }
                 },
@@ -674,10 +698,126 @@ appOptimized({
                     nodes.loadImageBatchNode.inputs.current_frame = cStart
                     nodes.loadImageBatchNode.inputs.count = cCount
                     nodes.mainImageNode.inputs.index = frameIndex - cStart + 1 // 1-based
+
+                    nodes.saveImageNode.inputs.current_frame = frameIndex
                 },
             })
-            await runSteps(frameIndexes.map((x) => x.frameIndex))
+            dependecyKeyRef = await runSteps(frameIndexes.map((x) => x.frameIndex))
         }
+
+        if (form.upscale) {
+            const formUpscale = form.upscale
+            console.log(`upscale START`)
+            disableNodesAfterInclusive(runtime, 0)
+
+            const finalDir = form.film?.sideFrameDoubleBackIterations ? `_final-film` : `_final`
+
+            // new steps system
+            const {
+                defineStep,
+                runSteps,
+                state: _state,
+            } = createStepsSystem({
+                runtime: runtime,
+                imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+                graph: runtime.nodes,
+                scopeStack: [{}],
+            })
+            defineStep({
+                name: `upscale`,
+                // preview: form.film.preview,
+                cacheParams: [formUpscale, dependecyKeyRef.dependencyKey],
+                inputSteps: {},
+                create: (state, { inputs }) => {
+                    const { graph } = state
+
+                    const loadImageNode = graph.RL$_LoadImageSequence({
+                        path: `${state.workingDirectory}/${finalDir}/#####.png`,
+                        current_frame: 0,
+                    })
+
+                    // TODO: crop to mask, restore unmasked
+                    // const cropToMask = graph.RL$_Crop$_Resize({
+                    //     image: loadImageNode,
+                    //     mask:
+                    // })
+
+                    const controlNetStack = formUpscale.sdxl
+                        ? undefined
+                        : graph.Control_Net_Stacker({
+                              control_net: graph.ControlNetLoader({
+                                  control_net_name: `control_v11f1e_sd15_tile.pth`,
+                              }),
+                              image: loadImageNode,
+                              strength: formUpscale.tileStrength,
+                          })
+
+                    const loraStack = !formUpscale.lcm
+                        ? undefined
+                        : graph.LoRA_Stacker({
+                              input_mode: `simple`,
+                              lora_count: 1,
+                              lora_name_1: !formUpscale.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`,
+                          } as LoRA_Stacker_input)
+
+                    const loader = graph.Efficient_Loader({
+                        ckpt_name: formUpscale.checkpoint,
+                        cnet_stack: controlNetStack,
+                        lora_stack: loraStack,
+                        // defaults
+                        lora_name: `None`,
+                        token_normalization: `none`,
+                        vae_name: `Baked VAE`,
+                        weight_interpretation: `comfy`,
+                        positive: form.sampler.positive,
+                        negative: form.sampler.negative,
+                    })
+
+                    const upscaleNode = graph.UltimateSDUpscale({
+                        image: loadImageNode,
+                        force_uniform_tiles: `enable`,
+                        mode_type: `Linear`,
+                        seam_fix_mode: `None`,
+
+                        model: loader,
+                        vae: loader,
+                        positive: loader.outputs.CONDITIONING$6,
+                        negative: loader.outputs.CONDITIONING$7,
+                        upscale_model: graph.UpscaleModelLoader({
+                            model_name: `8x_NMKD-Superscale_150000_G.pth`,
+                        }),
+                        sampler_name: formUpscale.lcm ? `lcm` : `dpmpp_2m_sde_gpu`,
+                        scheduler: formUpscale.lcm ? `normal` : `karras`,
+                        denoise: formUpscale.denoise,
+                        cfg: formUpscale.config,
+                        seed: form.sampler.seed,
+                        tile_width: formUpscale.sdxl ? (form.sizeWidth ?? 1024) * formUpscale.upscaleBy : 576,
+                        tile_height: formUpscale.sdxl ? (form.sizeHeight ?? 1024) * formUpscale.upscaleBy : 768,
+                        steps: formUpscale.steps,
+                        // tile_width: 1536,
+                        // tile_height: 2048,
+
+                        upscale_by: formUpscale.upscaleBy,
+                    })
+                    const upscaledImage = upscaleNode.outputs.IMAGE
+
+                    graph.SaveImage({
+                        images: upscaledImage,
+                        filename_prefix: `upscale`,
+                    })
+
+                    return {
+                        nodes: { loadImageNode },
+                        outputs: { upscaledImage },
+                    }
+                },
+                modify: ({ nodes, frameIndex }) => {
+                    nodes.loadImageNode.inputs.current_frame = frameIndex
+                },
+            })
+            dependecyKeyRef = await runSteps(frameIndexes.map((x) => x.frameIndex))
+        }
+
         return
 
         // old
