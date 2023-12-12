@@ -1168,9 +1168,11 @@ appOptimized({
           default: { id: `512` },
           choices: [{ id: `384` }, { id: `512` }, { id: `768` }, { id: `1024` }, { id: `1280` }, { id: `1920` }]
         }),
-        custom: form.number({ default: 512, min: 32, max: 8096 })
+        custom: form.int({ default: 512, min: 32, max: 8096 })
       })
     }),
+    sizeWidth: form.intOpt({ default: 512, min: 32, max: 8096 }),
+    sizeHeight: form.intOpt({ default: 512, min: 32, max: 8096 }),
     previewCropMask: form.inlineRun({}),
     previewCrop: form.inlineRun({}),
     _2: form.markdown({
@@ -1230,7 +1232,7 @@ appOptimized({
     film: form.groupOpt({
       items: () => ({
         singleFramePyramidSize: form.intOpt({ default: 4 }),
-        // sideFrameDoubleBack: form.bool({}),
+        sideFrameDoubleBackIterations: form.intOpt({ default: 1 }),
         preview: form.inlineRun({})
       })
     }),
@@ -1291,16 +1293,18 @@ appOptimized({
     const cropStep = defineStep({
       name: `cropStep`,
       preview: form.previewCrop,
-      cacheParams: [form.size, form.cropPadding],
+      cacheParams: [form.size, form.cropPadding, form.sizeWidth, form.sizeHeight],
       inputSteps: { startImageStep, cropMaskStep },
       create: ({ graph }, { inputs }) => {
         const { startImage, cropMask } = inputs;
-        const { size: sizeInput, cropPadding } = form;
+        const { size: sizeInput, cropPadding, sizeWidth, sizeHeight } = form;
         const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
         const croppedImage = !cropMask ? startImage : graph.RL$_Crop$_Resize({
           image: startImage,
           mask: cropMask,
           max_side_length: size,
+          width: sizeWidth ?? void 0,
+          height: sizeHeight ?? void 0,
           padding: cropPadding
         }).outputs.cropped_image;
         return {
@@ -1490,15 +1494,16 @@ appOptimized({
       }
     });
     const samplerSteps = [...new Array(form.film?.singleFramePyramidSize ?? 1)].map((_, i) => samplerStep_create(i));
+    let finalStep = samplerSteps[0];
     if (form.film?.singleFramePyramidSize) {
       const { singleFramePyramidSize } = form.film;
-      const filmStep = defineStep({
+      finalStep = defineStep({
         name: `filmStep`,
         preview: form.film.preview,
         cacheParams: [singleFramePyramidSize],
         inputSteps: { samplerSteps },
         create: (state, { inputs }) => {
-          const finalImages = samplerSteps.map((x) => x._build?.outputs.finalImage).filter((x) => x).map((x) => x);
+          const finalImages = samplerSteps.map((x) => () => x._build?.outputs.finalImage).filter((x) => x).map((x) => x);
           const { graph } = state;
           let images = finalImages[0];
           for (const f of finalImages.slice(1)) {
@@ -1521,25 +1526,156 @@ appOptimized({
               images: filmFrames,
               filename_prefix: `film`
             });
-            oddFrames = graph.ImageBatchFork({
+            const filmframes_removedFirst = graph.ImageBatchRemove({
               images: filmFrames,
-              priority: `first`
-            }).outputs.IMAGE_1;
+              index: 1
+            });
+            oddFrames = graph.VHS$_SelectEveryNthImage({
+              images: filmframes_removedFirst,
+              select_every_nth: 2
+            }).outputs.IMAGE;
           }
           const interpolatedFrame = oddFrames;
           return {
             nodes: {},
-            outputs: { interpolatedFrame }
+            outputs: { finalImage: interpolatedFrame, interpolatedFrame }
           };
         },
         modify: ({ nodes, frameIndex }) => {
         }
       });
     }
+    defineStep({
+      name: `finalSave`,
+      // preview: form.film.preview,
+      cacheParams: [],
+      inputSteps: { finalStep },
+      create: (state, { inputs }) => {
+        const { finalImage } = inputs;
+        const { graph } = state;
+        const saveImageNode = graph.RL$_SaveImageSequence({
+          images: finalImage,
+          current_frame: 0,
+          path: `../input/${state.workingDirectory}/_final/#####.png`
+        });
+        return {
+          nodes: { saveImageNode },
+          outputs: { finalSavedImage: finalImage }
+        };
+      },
+      modify: ({ nodes, frameIndex }) => {
+        console.log(`finalSave: modify`, { frameIndex });
+        nodes.saveImageNode.inputs.current_frame = frameIndex;
+      }
+    });
     const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
       frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
     }));
     await runSteps(frameIndexes.map((x) => x.frameIndex));
+    if (form.film?.sideFrameDoubleBackIterations) {
+      const { sideFrameDoubleBackIterations } = form.film;
+      console.log(`sideFrameDoubleBack START`);
+      disableNodesAfterInclusive(runtime, 0);
+      const {
+        defineStep: defineStep2,
+        runSteps: runSteps2,
+        state: _state2
+      } = createStepsSystem({
+        runtime,
+        imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+        graph: runtime.nodes,
+        scopeStack: [{}]
+      });
+      const minCurrentFrame = Math.min(...frameIndexes.map((x) => x.frameIndex));
+      const maxCurrentFrame = Math.max(...frameIndexes.map((x) => x.frameIndex));
+      const size = 7;
+      const sizeHalf = size / 2 | 0;
+      defineStep2({
+        name: `sideFrameDoubleBack`,
+        // preview: form.film.preview,
+        cacheParams: [sideFrameDoubleBackIterations],
+        inputSteps: {},
+        create: (state, { inputs }) => {
+          const { graph } = state;
+          const loadImageBatchNode = graph.RL$_LoadImageSequence({
+            path: `${state.workingDirectory}/_final/#####.png`,
+            current_frame: 0,
+            count: size
+          });
+          const filmModel = graph.Load_Film_Model_$1mtb$2({
+            film_model: `Style`
+          });
+          let currentImages = loadImageBatchNode.outputs.image;
+          for (let i = 0; i < sideFrameDoubleBackIterations; i++) {
+            const filmFrames = graph.Film_Interpolation_$1mtb$2({
+              film_model: filmModel,
+              images: currentImages,
+              interpolate: 1
+            });
+            const filmframes_removedFirst = graph.ImageBatchRemove({
+              images: filmFrames,
+              index: 1
+            });
+            const middleFrames = graph.VHS$_SelectEveryNthImage({
+              images: filmframes_removedFirst,
+              select_every_nth: 2
+            });
+            const middleFrames_withFirst = graph.ImageBatchJoin({
+              images_a: graph.ImageBatchGet({
+                images: filmFrames,
+                index: 1
+              }),
+              images_b: middleFrames
+            });
+            const middleFrames_withFirstAndLast = graph.ImageBatchJoin({
+              images_a: middleFrames_withFirst,
+              images_b: graph.ImageBatchGet({
+                images: filmFrames,
+                index: graph.ImpactImageInfo({
+                  value: filmFrames
+                }).outputs.batch
+              })
+            });
+            const filmFrames2 = graph.Film_Interpolation_$1mtb$2({
+              film_model: filmModel,
+              images: middleFrames_withFirstAndLast,
+              interpolate: 1
+            });
+            const filmframes2_removedFirst = graph.ImageBatchRemove({
+              images: filmFrames2,
+              index: 1
+            });
+            const middleFrames2 = graph.VHS$_SelectEveryNthImage({
+              images: filmframes2_removedFirst,
+              select_every_nth: 2
+            });
+            currentImages = middleFrames2.outputs.IMAGE;
+          }
+          graph.SaveImage({
+            images: currentImages,
+            filename_prefix: `film`
+          });
+          const mainImageNode = graph.ImageBatchGet({
+            images: currentImages,
+            index: sizeHalf + 1
+          });
+          const mainImage = mainImageNode.outputs.IMAGE;
+          return {
+            nodes: { loadImageBatchNode, mainImageNode },
+            outputs: { mainImage }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+          const cStart = Math.max(minCurrentFrame, frameIndex - sizeHalf);
+          const cEnd = Math.min(maxCurrentFrame, frameIndex + sizeHalf);
+          const cCount = cEnd - cStart + 1;
+          nodes.loadImageBatchNode.inputs.current_frame = cStart;
+          nodes.loadImageBatchNode.inputs.count = cCount;
+          nodes.mainImageNode.inputs.index = frameIndex - cStart + 1;
+        }
+      });
+      await runSteps2(frameIndexes.map((x) => x.frameIndex));
+    }
     return;
     const iterate = async (iterationIndex) => {
       runtime.print(`${JSON.stringify(form)}`);
