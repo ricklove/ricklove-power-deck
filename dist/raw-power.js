@@ -1091,6 +1091,90 @@ var createStepsSystem = (appState) => {
 };
 
 // library/ricklove/my-cushy-deck/src/_imageOperations.ts
+var createFrameOperation = (op) => op;
+var createFrameOperationValue = (op) => op;
+var createFrameOperationsList = (operations) => createFrameOperationValue({
+  ui: (form) => form.list({
+    element: () => form.group({
+      layout: "V",
+      items: () => ({
+        ...Object.fromEntries(
+          Object.entries(operations).map(([k, v]) => {
+            return [
+              k,
+              form.groupOpt({
+                items: () => v.ui(form)
+              })
+            ];
+          })
+        ),
+        preview: form.inlineRun({})
+      })
+    })
+  }),
+  run: (state, frame, form) => {
+    const { runtime, graph } = state;
+    console.log(`createFrameOperationsList run`, { operations, form });
+    for (const listItem of form) {
+      const listItemGroupOptFields = listItem;
+      for (const [opName, op] of Object.entries(operations)) {
+        const opGroupOptValue = listItemGroupOptFields[opName];
+        console.log(`createFrameOperationsList loop operations`, {
+          opGroupOptValue,
+          operations,
+          listItemGroupOptFields,
+          form
+        });
+        if (opGroupOptValue == null) {
+          continue;
+        }
+        frame = {
+          ...frame,
+          ...op.run(state, frame, opGroupOptValue)
+        };
+      }
+      if (listItem.preview) {
+        graph.PreviewImage({ images: frame.image });
+        throw new StopError(void 0);
+      }
+    }
+    return frame;
+  }
+});
+var zoeDepth = createFrameOperation({
+  ui: (form) => ({
+    cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 1e-3 }),
+    cutoffRadius: form.float({ default: 0.1, min: 0, max: 1, step: 1e-3 })
+    // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
+    // normMax: form.float({ default: 85, min: 0, max: 100, step: 0.1 }),
+  }),
+  run: ({ runtime, graph }, { image }, form) => {
+    const zoeRaw = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Infer({
+      image
+    });
+    const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
+      zoeRaw,
+      cutoffMid: form.cutoffMid,
+      cutoffRadius: form.cutoffRadius,
+      normMin: 0,
+      //form.zoeDepth.normMin,
+      normMax: 100
+      //form.zoeDepth.normMax,
+    });
+    const zoeImage = graph.ImageBatchGet({
+      images: zoeImages,
+      index: 2
+    }).outputs.IMAGE;
+    const zoeRgbImage = graph.Images_to_RGB({
+      images: zoeImage
+    });
+    return { image: zoeRgbImage };
+  }
+});
+var imageOperations = {
+  zoeDepth
+};
+var imageOperationsList = createFrameOperationsList(imageOperations);
 var createImageOperation = (op) => op;
 var createImageOperationValue = (op) => op;
 var operation_zoeDepthPreprocessor = createImageOperation({
@@ -1491,6 +1575,8 @@ appOptimized({
         preview: form.inlineRun({})
       })
     }),
+    testImageOperationsList: imageOperationsList.ui(form),
+    testImageOperationsListPreview: form.inlineRun({}),
     _1: form.markdown({
       markdown: () => `# Crop Image`
     }),
@@ -1641,6 +1727,27 @@ appOptimized({
         modify: ({ nodes, frameIndex }) => {
           nodes.loadImageNode.inputs.current_frame = frameIndex;
           nodes.saveImageNode.inputs.current_frame = frameIndex;
+        }
+      });
+      const testImageOperationsListStep = defineStep({
+        name: `testImageOperationsListStep`,
+        preview: form.testImageOperationsListPreview,
+        cacheParams: [form.testImageOperationsList],
+        inputSteps: { startImageStep },
+        create: (state, { inputs }) => {
+          const { startImage } = inputs;
+          const emptyMask = state.graph.SolidMask({});
+          const result = imageOperationsList.run(
+            state,
+            { image: startImage, mask: emptyMask },
+            form.testImageOperationsList
+          );
+          return {
+            nodes: {},
+            outputs: { testImageOperationsListImage: result.image }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
         }
       });
       const cropPreImageStep = defineStep({

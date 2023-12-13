@@ -9,7 +9,7 @@ import { ComfyNodeOutput } from 'src/core/Slot'
 import { StepDefinition, createStepsSystem } from './src/_steps'
 import { Image } from 'konva/lib/shapes/Image'
 import { createRandomGenerator } from './src/_random'
-import { operation_image } from './src/_imageOperations'
+import { imageOperationsList, operation_image } from './src/_imageOperations'
 
 appOptimized({
     ui: (form) => ({
@@ -29,6 +29,10 @@ appOptimized({
                 preview: form.inlineRun({}),
             }),
         }),
+
+        testImageOperationsList: imageOperationsList.ui(form),
+        testImageOperationsListPreview: form.inlineRun({}),
+
         _1: form.markdown({
             markdown: () => `# Crop Image`,
         }),
@@ -206,6 +210,29 @@ appOptimized({
                 modify: ({ nodes, frameIndex }) => {
                     nodes.loadImageNode.inputs.current_frame = frameIndex
                     nodes.saveImageNode.inputs.current_frame = frameIndex
+                },
+            })
+
+            const testImageOperationsListStep = defineStep({
+                name: `testImageOperationsListStep`,
+                preview: form.testImageOperationsListPreview,
+                cacheParams: [form.testImageOperationsList],
+                inputSteps: { startImageStep },
+                create: (state, { inputs }) => {
+                    const { startImage } = inputs
+                    const emptyMask = state.graph.SolidMask({})
+                    const result = imageOperationsList.run(
+                        state,
+                        { image: startImage, mask: emptyMask },
+                        form.testImageOperationsList,
+                    )
+                    return {
+                        nodes: {},
+                        outputs: { testImageOperationsListImage: result.image },
+                    }
+                },
+                modify: ({ nodes, frameIndex }) => {
+                    // nothing specific to the frameIndex
                 },
             })
 

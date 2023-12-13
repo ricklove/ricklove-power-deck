@@ -1,7 +1,117 @@
-import { FormBuilder, Runtime, Widget } from 'src'
+import { FormBuilder, Runtime, Widget, Widget_groupOpt, Widget_group_output } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { WidgetDict } from 'src/cards/Card'
 import { AppState, StopError, storeInScope, loadFromScope } from './_appState'
+
+type Frame = {
+    image: _IMAGE
+    mask: _MASK
+}
+type FrameOperation<TFields extends WidgetDict> = {
+    ui: (form: FormBuilder) => TFields
+    run: (state: AppState, frame: Frame, form: { [k in keyof TFields]: TFields[k]['$Output'] }) => Partial<Frame>
+}
+const createFrameOperation = <TFields extends WidgetDict>(op: FrameOperation<TFields>): FrameOperation<TFields> => op
+const createFrameOperationValue = <TValue extends Widget>(op: {
+    ui: (form: FormBuilder) => TValue
+    run: (state: AppState, frame: Frame, form: TValue['$Output']) => Frame
+}) => op
+const createFrameOperationsList = <TOperations extends Record<string, FrameOperation<any>>>(operations: TOperations) =>
+    createFrameOperationValue({
+        ui: (form) =>
+            form.list({
+                element: () =>
+                    form.group({
+                        layout: 'V',
+                        items: () => ({
+                            ...Object.fromEntries(
+                                Object.entries(operations).map(([k, v]) => {
+                                    return [
+                                        k,
+                                        form.groupOpt({
+                                            items: () => v.ui(form),
+                                        }),
+                                    ]
+                                }),
+                            ),
+                            preview: form.inlineRun({}),
+                        }),
+                    }),
+            }),
+        run: (state, frame, form) => {
+            const { runtime, graph } = state
+
+            console.log(`createFrameOperationsList run`, { operations, form })
+
+            for (const listItem of form) {
+                const listItemGroupOptFields = listItem as unknown as Widget_group_output<
+                    Record<string, Widget_groupOpt<Record<string, Widget>>>
+                >
+                for (const [opName, op] of Object.entries(operations)) {
+                    const opGroupOptValue = listItemGroupOptFields[opName]
+                    console.log(`createFrameOperationsList loop operations`, {
+                        opGroupOptValue,
+                        operations,
+                        listItemGroupOptFields,
+                        form,
+                    })
+
+                    if (opGroupOptValue == null) {
+                        continue
+                    }
+
+                    frame = {
+                        ...frame,
+                        ...op.run(state, frame, opGroupOptValue),
+                    }
+                }
+
+                if (listItem.preview) {
+                    graph.PreviewImage({ images: frame.image })
+                    throw new StopError(undefined)
+                }
+            }
+
+            return frame
+        },
+    })
+
+const zoeDepth = createFrameOperation({
+    ui: (form) => ({
+        cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 0.001 }),
+        cutoffRadius: form.float({ default: 0.1, min: 0, max: 1, step: 0.001 }),
+        // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
+        // normMax: form.float({ default: 85, min: 0, max: 100, step: 0.1 }),
+    }),
+    run: ({ runtime, graph }, { image }, form) => {
+        const zoeRaw = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Infer({
+            image,
+        })
+
+        const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
+            zoeRaw,
+            cutoffMid: form.cutoffMid,
+            cutoffRadius: form.cutoffRadius,
+            normMin: 0, //form.zoeDepth.normMin,
+            normMax: 100, //form.zoeDepth.normMax,
+        })
+        const zoeImage = graph.ImageBatchGet({
+            images: zoeImages,
+            index: 2,
+        }).outputs.IMAGE
+
+        const zoeRgbImage = graph.Images_to_RGB({
+            images: zoeImage,
+        })
+
+        return { image: zoeRgbImage }
+    },
+})
+
+const imageOperations = {
+    zoeDepth,
+}
+export const imageOperationsList = createFrameOperationsList(imageOperations)
 
 type ImageOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields
