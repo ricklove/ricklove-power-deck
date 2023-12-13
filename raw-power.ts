@@ -9,7 +9,8 @@ import { ComfyNodeOutput } from 'src/core/Slot'
 import { StepDefinition, createStepsSystem } from './src/_steps'
 import { Image } from 'konva/lib/shapes/Image'
 import { createRandomGenerator } from './src/_random'
-import { imageOperationsList, operation_image } from './src/_imageOperations'
+import { operation_image } from './src/_imageOperations'
+import { imageOperationsList } from './src/_operations/image'
 
 appOptimized({
     ui: (form) => ({
@@ -221,11 +222,10 @@ appOptimized({
                 create: (state, { inputs }) => {
                     const { startImage } = inputs
                     const emptyMask = state.graph.SolidMask({})
-                    const result = imageOperationsList.run(
-                        state,
-                        { image: startImage, mask: emptyMask },
-                        form.testImageOperationsList,
-                    )
+                    const result = imageOperationsList.run(state, form.testImageOperationsList, {
+                        image: startImage,
+                        mask: emptyMask,
+                    })
                     return {
                         nodes: {},
                         outputs: { testImageOperationsListImage: result.image },

@@ -1091,90 +1091,6 @@ var createStepsSystem = (appState) => {
 };
 
 // library/ricklove/my-cushy-deck/src/_imageOperations.ts
-var createFrameOperation = (op) => op;
-var createFrameOperationValue = (op) => op;
-var createFrameOperationsList = (operations) => createFrameOperationValue({
-  ui: (form) => form.list({
-    element: () => form.group({
-      layout: "V",
-      items: () => ({
-        ...Object.fromEntries(
-          Object.entries(operations).map(([k, v]) => {
-            return [
-              k,
-              form.groupOpt({
-                items: () => v.ui(form)
-              })
-            ];
-          })
-        ),
-        preview: form.inlineRun({})
-      })
-    })
-  }),
-  run: (state, frame, form) => {
-    const { runtime, graph } = state;
-    console.log(`createFrameOperationsList run`, { operations, form });
-    for (const listItem of form) {
-      const listItemGroupOptFields = listItem;
-      for (const [opName, op] of Object.entries(operations)) {
-        const opGroupOptValue = listItemGroupOptFields[opName];
-        console.log(`createFrameOperationsList loop operations`, {
-          opGroupOptValue,
-          operations,
-          listItemGroupOptFields,
-          form
-        });
-        if (opGroupOptValue == null) {
-          continue;
-        }
-        frame = {
-          ...frame,
-          ...op.run(state, frame, opGroupOptValue)
-        };
-      }
-      if (listItem.preview) {
-        graph.PreviewImage({ images: frame.image });
-        throw new StopError(void 0);
-      }
-    }
-    return frame;
-  }
-});
-var zoeDepth = createFrameOperation({
-  ui: (form) => ({
-    cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 1e-3 }),
-    cutoffRadius: form.float({ default: 0.1, min: 0, max: 1, step: 1e-3 })
-    // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
-    // normMax: form.float({ default: 85, min: 0, max: 100, step: 0.1 }),
-  }),
-  run: ({ runtime, graph }, { image }, form) => {
-    const zoeRaw = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Infer({
-      image
-    });
-    const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
-      zoeRaw,
-      cutoffMid: form.cutoffMid,
-      cutoffRadius: form.cutoffRadius,
-      normMin: 0,
-      //form.zoeDepth.normMin,
-      normMax: 100
-      //form.zoeDepth.normMax,
-    });
-    const zoeImage = graph.ImageBatchGet({
-      images: zoeImages,
-      index: 2
-    }).outputs.IMAGE;
-    const zoeRgbImage = graph.Images_to_RGB({
-      images: zoeImage
-    });
-    return { image: zoeRgbImage };
-  }
-});
-var imageOperations = {
-  zoeDepth
-};
-var imageOperationsList = createFrameOperationsList(imageOperations);
 var createImageOperation = (op) => op;
 var createImageOperationValue = (op) => op;
 var operation_zoeDepthPreprocessor = createImageOperation({
@@ -1556,6 +1472,352 @@ var operation_image = createImageOperationValue({
   run: (state, image, form) => operations_all2.run(state, image, { imageOperations: form })
 });
 
+// library/ricklove/my-cushy-deck/src/_operations/_frame.ts
+var createFrameOperation = (op) => op;
+var createFrameOperationValue = (op) => op;
+var createFrameOperationsList = (operations) => createFrameOperationValue({
+  ui: (form) => form.list({
+    element: () => form.group({
+      layout: "V",
+      items: () => ({
+        ...Object.fromEntries(
+          Object.entries(operations).map(([k, v]) => {
+            return [
+              k,
+              form.groupOpt({
+                items: () => v.ui(form)
+              })
+            ];
+          })
+        ),
+        preview: form.inlineRun({})
+      })
+    })
+  }),
+  run: (state, form, frame) => {
+    const { runtime, graph } = state;
+    console.log(`createFrameOperationsList run`, { operations, form });
+    for (const listItem of form) {
+      const listItemGroupOptFields = listItem;
+      for (const [opName, op] of Object.entries(operations)) {
+        const opGroupOptValue = listItemGroupOptFields[opName];
+        console.log(`createFrameOperationsList loop operations`, {
+          opGroupOptValue,
+          operations,
+          listItemGroupOptFields,
+          form
+        });
+        if (opGroupOptValue == null) {
+          continue;
+        }
+        frame = {
+          ...frame,
+          ...op.run(state, opGroupOptValue, frame)
+        };
+      }
+      if (listItem.preview) {
+        graph.PreviewImage({ images: frame.image });
+        throw new StopError(void 0);
+      }
+    }
+    return frame;
+  }
+});
+
+// library/ricklove/my-cushy-deck/src/_operations/image.ts
+var zoeDepth = createFrameOperation({
+  ui: (form) => ({
+    cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 1e-3 }),
+    cutoffRadius: form.float({ default: 0.1, min: 0, max: 1, step: 1e-3 }),
+    invertCutoffMax: form.bool({ default: false }),
+    invertCutoffMin: form.bool({ default: false })
+    // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
+    // normMax: form.float({ default: 85, min: 0, max: 100, step: 0.1 }),
+  }),
+  run: ({ runtime, graph }, form, { image }) => {
+    const zoeRaw = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Infer({
+      image
+    });
+    const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
+      zoeRaw,
+      cutoffMid: form.cutoffMid,
+      cutoffRadius: form.cutoffRadius,
+      normMin: 0,
+      //form.zoeDepth.normMin,
+      normMax: 100
+      //form.zoeDepth.normMax,
+    });
+    const zoeImage = graph.ImageBatchGet({
+      images: zoeImages,
+      index: 2
+    }).outputs.IMAGE;
+    const zoeRgbImage = graph.Images_to_RGB({
+      images: zoeImage
+    });
+    let resultImage = zoeRgbImage.outputs.IMAGE;
+    if (!form.invertCutoffMax && !form.invertCutoffMin) {
+      return { image: resultImage };
+    }
+    const invertedImage = graph.InvertImage({ image: resultImage });
+    if (form.invertCutoffMax) {
+      const removeMask = graph.ImageColorToMask({
+        image: resultImage,
+        color: 16777215
+      });
+      resultImage = graph.Image_Blend_by_Mask({
+        image_a: resultImage,
+        image_b: invertedImage,
+        mask: graph.MaskToImage({ mask: removeMask }),
+        blend_percentage: 1
+      }).outputs.IMAGE;
+    }
+    if (form.invertCutoffMin) {
+      const removeMask = graph.ImageColorToMask({
+        image: resultImage,
+        color: 0
+      });
+      resultImage = graph.Image_Blend_by_Mask({
+        image_a: resultImage,
+        image_b: invertedImage,
+        mask: graph.MaskToImage({ mask: removeMask }),
+        blend_percentage: 1
+      }).outputs.IMAGE;
+    }
+    return { image: resultImage };
+  }
+});
+var hedEdge = createFrameOperation({
+  ui: (form) => ({}),
+  run: ({ runtime, graph }, form, { image }) => {
+    const resultImage = graph.HEDPreprocessor({
+      image,
+      safe: `enable`,
+      version: `v1.1`
+    }).outputs.IMAGE;
+    return { image: resultImage };
+  }
+});
+var pidiEdge = createFrameOperation({
+  ui: (form) => ({}),
+  run: ({ runtime, graph }, form, { image }) => {
+    const resultImage = graph.PiDiNetPreprocessor({
+      image,
+      safe: `enable`
+    }).outputs.IMAGE;
+    return { image: resultImage };
+  }
+});
+var scribbleEdge = createFrameOperation({
+  ui: (form) => ({}),
+  run: ({ runtime, graph }, form, { image }) => {
+    const resultImage = graph.ScribblePreprocessor({
+      image
+    }).outputs.IMAGE;
+    return { image: resultImage };
+  }
+});
+var threshold = createFrameOperation({
+  ui: (form) => ({
+    threshold: form.int({ default: 128, min: 0, max: 255 })
+  }),
+  run: ({ runtime, graph }, form, { image }) => {
+    const resultImage = graph.BinaryPreprocessor({
+      image,
+      threshold: form.threshold
+    }).outputs.IMAGE;
+    return { image: resultImage };
+  }
+});
+var baeNormal = createFrameOperation({
+  ui: (form) => ({}),
+  run: ({ runtime, graph }, form, { image }) => {
+    const resultImage = graph.BAE$7NormalMapPreprocessor({
+      image
+    }).outputs.IMAGE;
+    return { image: resultImage };
+  }
+});
+var openPose = createFrameOperation({
+  ui: (form) => ({
+    body: form.bool({}),
+    face: form.bool({}),
+    hand: form.bool({})
+  }),
+  run: ({ runtime, graph }, form, { image }) => {
+    const resultImage = graph.OpenposePreprocessor({
+      image,
+      detect_body: form.body ? "enable" : `disable`,
+      detect_face: form.face ? "enable" : `disable`,
+      detect_hand: form.hand ? "enable" : `disable`
+    }).outputs.IMAGE;
+    return { image: resultImage };
+  }
+});
+var enhanceLighting = createFrameOperation({
+  ui: (form) => ({
+    // previewAll: form.inlineRun({}),
+    preview: form.groupOpt({
+      items: () => ({
+        img_all: form.inlineRun({}),
+        img_intensity: form.inlineRun({}),
+        img_gamma: form.inlineRun({}),
+        img_log: form.inlineRun({}),
+        img_rescale: form.inlineRun({}),
+        out_shadows: form.inlineRun({}),
+        out_highlights: form.inlineRun({}),
+        out_mid: form.inlineRun({}),
+        img_eq: form.inlineRun({}),
+        img_adaptive: form.inlineRun({}),
+        img_eq_local: form.inlineRun({})
+      })
+    }),
+    selected: form.selectOne({
+      choices: [
+        `img_intensity`,
+        `img_gamma`,
+        `img_log`,
+        `img_rescale`,
+        `out_shadows`,
+        `out_highlights`,
+        `out_mid`,
+        `img_eq`,
+        `img_adaptive`,
+        `img_eq_local`
+      ].map((x) => ({ id: x }))
+    }),
+    previewSelected: form.inlineRun({})
+  }),
+  run: ({ runtime, graph }, form, { image }) => {
+    const imageShadowNode = graph.RL$_Image$_Shadow({
+      image
+    });
+    const activiatePreviewKey = Object.entries(form.preview ?? {}).find(
+      ([k, v]) => v
+    )?.[0];
+    if (activiatePreviewKey) {
+      graph.PreviewImage({
+        images: imageShadowNode.outputs[activiatePreviewKey]
+      });
+      throw new StopError(() => {
+      });
+    }
+    const selectedImage = imageShadowNode.outputs[form.selected.id] ?? image;
+    if (form.previewSelected) {
+      graph.PreviewImage({
+        images: selectedImage
+      });
+      throw new StopError(() => {
+      });
+    }
+    return { image: selectedImage };
+  }
+});
+var blendImages = createFrameOperation({
+  ui: (form) => ({
+    // operation: form.selectOne({
+    //     choices: [{ id: `union` }, { id: `intersection` }],
+    // }),
+    a: form.group({
+      layout: `V`,
+      items: () => ({
+        name: form.string({ default: `a` })
+        // inverse: form.empt,
+        // inverse: form.bool({ default: false }),
+      })
+    }),
+    b: form.group({
+      layout: `V`,
+      items: () => ({
+        name: form.string({ default: `b` }),
+        inverse: form.bool({ default: false }),
+        blendRatio: form.float({ default: 0.5, min: 0, max: 1, step: 0.01 }),
+        blendMode: form.enum({ enumName: `Enum_ImageBlend_blend_mode`, default: `normal` })
+      })
+    })
+    // c: form.groupOpt({
+    //     layout: `V`,
+    //     items: () => ({
+    //         name: form.string({ default: `c` }),
+    //         inverse: form.bool({ default: false }),
+    //     }),
+    // }),
+    // d: form.groupOpt({
+    //     layout: `V`,
+    //     items: () => ({
+    //         name: form.string({ default: `d` }),
+    //         inverse: form.bool({ default: false }),
+    //     }),
+    // }),
+    // e: form.groupOpt({
+    //     layout: `V`,
+    //     items: () => ({
+    //         name: form.string({ default: `d` }),
+    //         inverse: form.bool({ default: false }),
+    //     }),
+    // }),
+  }),
+  run: (state, form, { image }) => {
+    image = loadFromScope(state, form.a.name) ?? image;
+    const otherImages = [
+      form.b
+      // form.blendImages.c, form.blendImages.d, form.blendImages.e
+    ].filter((x) => x).map((x) => x);
+    const { graph } = state;
+    for (const item of otherImages) {
+      let itemImage = loadFromScope(state, item.name);
+      if (!itemImage) {
+        continue;
+      }
+      itemImage = !item.inverse ? itemImage : graph.ImageInvert({ image: itemImage });
+      if (!image) {
+        image = itemImage;
+        continue;
+      }
+      if (item === form.a) {
+        continue;
+      }
+      image = graph.ImageBlend({
+        image1: image,
+        image2: itemImage,
+        blend_mode: item.blendMode,
+        blend_factor: item.blendRatio
+      });
+    }
+    return { image };
+  }
+});
+var storeImage = createFrameOperation({
+  ui: (form) => ({
+    name: form.string({ default: `a` })
+  }),
+  run: (state, form, { image }) => {
+    storeInScope(state, form.name, image);
+    return { image };
+  }
+});
+var loadImage = createFrameOperation({
+  ui: (form) => ({
+    name: form.string({ default: `a` })
+  }),
+  run: (state, form, { image }) => {
+    return { image: loadFromScope(state, form.name) ?? image };
+  }
+});
+var imageOperations = {
+  loadImage,
+  enhanceLighting,
+  zoeDepth,
+  hedEdge,
+  pidiEdge,
+  scribbleEdge,
+  baeNormal,
+  openPose,
+  threshold,
+  blendImages,
+  storeImage
+};
+var imageOperationsList = createFrameOperationsList(imageOperations);
+
 // library/ricklove/my-cushy-deck/raw-power.ts
 appOptimized({
   ui: (form) => ({
@@ -1737,11 +1999,10 @@ appOptimized({
         create: (state, { inputs }) => {
           const { startImage } = inputs;
           const emptyMask = state.graph.SolidMask({});
-          const result = imageOperationsList.run(
-            state,
-            { image: startImage, mask: emptyMask },
-            form.testImageOperationsList
-          );
+          const result = imageOperationsList.run(state, form.testImageOperationsList, {
+            image: startImage,
+            mask: emptyMask
+          });
           return {
             nodes: {},
             outputs: { testImageOperationsListImage: result.image }
