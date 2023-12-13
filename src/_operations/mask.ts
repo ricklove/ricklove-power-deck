@@ -132,25 +132,6 @@ const sam = createFrameOperation({
     },
 })
 
-const storeMaskVariable = createFrameOperation({
-    ui: (form) => ({
-        name: form.string({ default: `a` }),
-    }),
-    run: (state, form, { image, mask }) => {
-        storeInScope(state, form.name, mask ?? null)
-        return { mask }
-    },
-})
-
-const loadMaskVariable = createFrameOperation({
-    ui: (form) => ({
-        name: form.string({ default: `a` }),
-    }),
-    run: (state, form, { mask }) => {
-        return { mask: loadFromScope(state, form.name) ?? mask }
-    },
-})
-
 const combineMasks = createFrameOperation({
     ui: (form) => ({
         operation: form.selectOne({
@@ -231,14 +212,12 @@ const combineMasks = createFrameOperation({
 })
 
 export const maskOperations = {
-    loadMaskVariable,
     imageToMask,
     maskToImage,
     clipSeg,
     segment,
     sam,
     erodeOrDilate,
-    storeMaskVariable,
     combineMasks,
 }
 export const maskOperationsList = createFrameOperationsGroupList(maskOperations)

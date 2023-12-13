@@ -1855,25 +1855,7 @@ var blendImages = createFrameOperation({
     return { image };
   }
 });
-var storeImageVarible = createFrameOperation({
-  ui: (form) => ({
-    name: form.string({ default: `a` })
-  }),
-  run: (state, form, { image }) => {
-    storeInScope(state, form.name, image);
-    return { image };
-  }
-});
-var loadImageVariable = createFrameOperation({
-  ui: (form) => ({
-    name: form.string({ default: `a` })
-  }),
-  run: (state, form, { image }) => {
-    return { image: loadFromScope(state, form.name) ?? image };
-  }
-});
 var imageOperations = {
-  loadImageVariable,
   enhanceLighting,
   zoeDepth,
   hedEdge,
@@ -1883,8 +1865,7 @@ var imageOperations = {
   openPose,
   threshold,
   colorSelect,
-  blendImages,
-  storeImageVarible
+  blendImages
 };
 var imageOperationsList = createFrameOperationsGroupList(imageOperations);
 
@@ -1997,23 +1978,6 @@ var sam = createFrameOperation({
     return { mask: resultMask };
   }
 });
-var storeMaskVariable = createFrameOperation({
-  ui: (form) => ({
-    name: form.string({ default: `a` })
-  }),
-  run: (state, form, { image, mask }) => {
-    storeInScope(state, form.name, mask ?? null);
-    return { mask };
-  }
-});
-var loadMaskVariable = createFrameOperation({
-  ui: (form) => ({
-    name: form.string({ default: `a` })
-  }),
-  run: (state, form, { mask }) => {
-    return { mask: loadFromScope(state, form.name) ?? mask };
-  }
-});
 var combineMasks = createFrameOperation({
   ui: (form) => ({
     operation: form.selectOne({
@@ -2089,17 +2053,87 @@ var combineMasks = createFrameOperation({
   }
 });
 var maskOperations = {
-  loadMaskVariable,
   imageToMask,
   maskToImage,
   clipSeg,
   segment,
   sam,
   erodeOrDilate,
-  storeMaskVariable,
   combineMasks
 };
 var maskOperationsList = createFrameOperationsGroupList(maskOperations);
+
+// library/ricklove/my-cushy-deck/src/_operations/storage.ts
+var storeImageVarible = createFrameOperation({
+  ui: (form) => ({
+    name: form.string({ default: `a` })
+  }),
+  run: (state, form, { image }) => {
+    storeInScope(state, form.name, image);
+    return { image };
+  }
+});
+var loadImageVariable = createFrameOperation({
+  ui: (form) => ({
+    name: form.string({ default: `a` })
+  }),
+  run: (state, form, { image }) => {
+    return { image: loadFromScope(state, form.name) ?? image };
+  }
+});
+var storeMaskVariable = createFrameOperation({
+  ui: (form) => ({
+    name: form.string({ default: `a` })
+  }),
+  run: (state, form, { image, mask }) => {
+    storeInScope(state, form.name, mask);
+    return { mask };
+  }
+});
+var loadMaskVariable = createFrameOperation({
+  ui: (form) => ({
+    name: form.string({ default: `a` })
+  }),
+  run: (state, form, { mask }) => {
+    return { mask: loadFromScope(state, form.name) ?? mask };
+  }
+});
+var storeVariables = createFrameOperation({
+  ui: (form) => ({
+    image: form.stringOpt({ default: `a` }),
+    mask: form.stringOpt({ default: `a` })
+  }),
+  run: (state, form, { image, mask }) => {
+    if (form.image) {
+      storeInScope(state, form.image, mask);
+    }
+    if (form.mask) {
+      storeInScope(state, form.mask, mask);
+    }
+    return {};
+  }
+});
+var loadVariables = createFrameOperation({
+  ui: (form) => ({
+    image: form.stringOpt({ default: `a` }),
+    mask: form.stringOpt({ default: `a` })
+  }),
+  run: (state, form, {}) => {
+    return {
+      image: form.image ? loadFromScope(state, form.image) : void 0,
+      mask: form.mask ? loadFromScope(state, form.mask) : void 0
+    };
+  }
+});
+var storageOperations = {
+  loadImageVariable,
+  storeImageVarible,
+  storeMaskVariable,
+  loadMaskVariable,
+  loadVariables,
+  storeVariables
+};
+var storageOperationsList = createFrameOperationsGroupList(storageOperations);
 
 // library/ricklove/my-cushy-deck/src/_operations/resizing.ts
 var cropResizeByMask = createFrameOperation({
@@ -2115,9 +2149,20 @@ var cropResizeByMask = createFrameOperation({
           })
         })
       })
+    }),
+    storeVariables: form.groupOpt({
+      items: () => ({
+        startImage: form.strOpt({ default: `beforeCropImage` }),
+        startMask: form.strOpt({ default: `beforeCropMask` }),
+        cropAreaMask: form.strOpt({ default: `cropArea` }),
+        endImage: form.strOpt({ default: `afterCropImage` }),
+        endMask: form.strOpt({ default: `afterCropMask` })
+      })
     })
   }),
-  run: ({ runtime, graph }, form, { image, mask }) => {
+  run: (state, form, frame) => {
+    const { runtime, graph } = state;
+    const { image, mask } = frame;
     const startImage = image;
     const cropMask = mask;
     const {
@@ -2135,6 +2180,57 @@ var cropResizeByMask = createFrameOperation({
       width: form.size.target?.width ?? void 0,
       height: form.size.target?.height ?? void 0
     }).outputs;
+    const startImageSize = graph.Get_Image_Size({
+      image: startImage
+    });
+    const blackImage = graph.EmptyImage({
+      color: 0,
+      width: startImageSize.outputs.INT,
+      height: startImageSize.outputs.INT_1,
+      batch_size: 1
+    });
+    const whiteImage = graph.EmptyImage({
+      color: 16777215,
+      width: startImageSize.outputs.INT,
+      height: startImageSize.outputs.INT_1,
+      batch_size: 1
+    });
+    const cropAreaImage = graph.Image_Paste_Crop_by_Location({
+      image: blackImage,
+      crop_image: whiteImage,
+      crop_blending: 0,
+      left: left_source,
+      right: right_source,
+      top: top_source,
+      bottom: bottom_source
+    }).outputs.IMAGE;
+    const cropAreaMask = graph.Image_To_Mask({
+      image: cropAreaImage,
+      method: `intensity`
+    });
+    if (form.storeVariables?.startImage) {
+      storageOperations.storeImageVarible.run(state, { name: form.storeVariables.startImage }, { ...frame, image });
+    }
+    if (form.storeVariables?.endImage) {
+      storageOperations.storeImageVarible.run(
+        state,
+        { name: form.storeVariables.endImage },
+        { ...frame, image: croppedImage }
+      );
+    }
+    if (form.storeVariables?.startMask) {
+      storageOperations.storeMaskVariable.run(state, { name: form.storeVariables.startMask }, { ...frame, mask });
+    }
+    if (form.storeVariables?.endMask) {
+      storageOperations.storeMaskVariable.run(state, { name: form.storeVariables.endMask }, { ...frame, mask: croppedMask });
+    }
+    if (form.storeVariables?.cropAreaMask) {
+      storageOperations.storeMaskVariable.run(
+        state,
+        { name: form.storeVariables.cropAreaMask },
+        { ...frame, mask: cropAreaMask }
+      );
+    }
     return { image: croppedImage, mask: croppedMask };
   }
 });
@@ -2147,7 +2243,8 @@ var resizingOperationsList = createFrameOperationsGroupList(resizingOperations);
 var allOperationsList = createFrameOperationsChoiceList({
   ...imageOperations,
   ...maskOperations,
-  ...resizingOperations
+  ...resizingOperations,
+  ...storageOperations
 });
 
 // library/ricklove/my-cushy-deck/raw-power.ts

@@ -331,27 +331,7 @@ const blendImages = createFrameOperation({
     },
 })
 
-const storeImageVarible = createFrameOperation({
-    ui: (form) => ({
-        name: form.string({ default: `a` }),
-    }),
-    run: (state, form, { image }) => {
-        storeInScope(state, form.name, image)
-        return { image }
-    },
-})
-
-const loadImageVariable = createFrameOperation({
-    ui: (form) => ({
-        name: form.string({ default: `a` }),
-    }),
-    run: (state, form, { image }) => {
-        return { image: loadFromScope(state, form.name) ?? image }
-    },
-})
-
 export const imageOperations = {
-    loadImageVariable,
     enhanceLighting,
     zoeDepth,
     hedEdge,
@@ -362,6 +342,5 @@ export const imageOperations = {
     threshold,
     colorSelect,
     blendImages,
-    storeImageVarible,
 }
 export const imageOperationsList = createFrameOperationsGroupList(imageOperations)
