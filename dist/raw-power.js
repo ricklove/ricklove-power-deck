@@ -1475,7 +1475,7 @@ var operation_image = createImageOperationValue({
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
 var createFrameOperation = (op) => op;
 var createFrameOperationValue = (op) => op;
-var createFrameOperationsList = (operations) => createFrameOperationValue({
+var createFrameOperationsGroupList = (operations) => createFrameOperationValue({
   ui: (form) => form.list({
     element: () => form.group({
       layout: "V",
@@ -1496,12 +1496,51 @@ var createFrameOperationsList = (operations) => createFrameOperationValue({
   }),
   run: (state, form, frame) => {
     const { runtime, graph } = state;
-    console.log(`createFrameOperationsList run`, { operations, form });
     for (const listItem of form) {
       const listItemGroupOptFields = listItem;
       for (const [opName, op] of Object.entries(operations)) {
         const opGroupOptValue = listItemGroupOptFields[opName];
-        console.log(`createFrameOperationsList loop operations`, {
+        if (opGroupOptValue == null) {
+          continue;
+        }
+        frame = {
+          ...frame,
+          ...op.run(state, opGroupOptValue, frame)
+        };
+      }
+      if (listItem.preview) {
+        graph.PreviewImage({ images: frame.image });
+        throw new StopError(void 0);
+      }
+    }
+    return frame;
+  }
+});
+var createFrameOperationsChoiceList = (operations) => createFrameOperationValue({
+  ui: (form) => form.list({
+    element: () => form.choice({
+      items: () => ({
+        ...Object.fromEntries(
+          Object.entries(operations).map(([k, v]) => {
+            return [
+              k,
+              form.group({
+                items: () => ({ ...v.ui(form), __preview: form.inlineRun({}) })
+              })
+            ];
+          })
+        )
+      })
+    })
+  }),
+  run: (state, form, frame) => {
+    const { runtime, graph } = state;
+    console.log(`createFrameOperationsChoiceList: run`, { operations, form });
+    for (const listItem of form) {
+      const listItemGroupOptFields = listItem;
+      for (const [opName, op] of Object.entries(operations)) {
+        const opGroupOptValue = listItemGroupOptFields[opName];
+        console.log(`createFrameOperationsChoiceList: loop operations`, {
           opGroupOptValue,
           operations,
           listItemGroupOptFields,
@@ -1514,10 +1553,19 @@ var createFrameOperationsList = (operations) => createFrameOperationValue({
           ...frame,
           ...op.run(state, opGroupOptValue, frame)
         };
-      }
-      if (listItem.preview) {
-        graph.PreviewImage({ images: frame.image });
-        throw new StopError(void 0);
+        if (opGroupOptValue.__preview) {
+          graph.PreviewImage({ images: frame.image });
+          graph.PreviewImage({ images: graph.MaskToImage({ mask: frame.mask }) });
+          graph.PreviewImage({
+            images: graph.ImageBlend({
+              image1: frame.image,
+              image2: graph.MaskToImage({ mask: frame.mask }),
+              blend_mode: `normal`,
+              blend_factor: 0.5
+            })
+          });
+          throw new StopError(void 0);
+        }
       }
     }
     return frame;
@@ -1816,7 +1864,219 @@ var imageOperations = {
   blendImages,
   storeImage
 };
-var imageOperationsList = createFrameOperationsList(imageOperations);
+var imageOperationsList = createFrameOperationsGroupList(imageOperations);
+
+// library/ricklove/my-cushy-deck/src/_operations/mask.ts
+var hedEdge2 = createFrameOperation({
+  ui: (form) => ({}),
+  run: ({ runtime, graph }, form, { image }) => {
+    const resultImage = graph.HEDPreprocessor({
+      image,
+      safe: `enable`,
+      version: `v1.1`
+    }).outputs.IMAGE;
+    return { image: resultImage };
+  }
+});
+var clipSeg = createFrameOperation({
+  ui: (form) => ({
+    prompt: form.str({ default: `ball` }),
+    threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+    dilation: form.int({ default: 4, min: 0 }),
+    blur: form.float({ default: 1, min: 0 })
+  }),
+  run: ({ runtime, graph }, form, { image, mask }) => {
+    const resultMask = graph.CLIPSeg({
+      image,
+      text: form.prompt,
+      threshold: form.threshold,
+      dilation_factor: form.dilation,
+      blur: form.blur
+    }).outputs.Mask;
+    return { mask: resultMask };
+  }
+});
+var colorToMask = createFrameOperation({
+  ui: (form) => ({
+    color: form.color({ default: `#000000` })
+  }),
+  run: ({ runtime, graph }, form, { image, mask }) => {
+    const colorMask = graph.ImageColorToMask({
+      image,
+      color: Number.parseInt(form.color, 16)
+    });
+    const resultMask = graph.Mask_Dilate_Region({
+      masks: colorMask,
+      iterations: 1
+    }).outputs.MASKS;
+    return { mask: resultMask };
+  }
+});
+var erodeOrDilate = createFrameOperation({
+  ui: (form) => ({
+    erodeOrDilate: form.int({ min: -64, max: 64 })
+  }),
+  run: ({ runtime, graph }, form, { image, mask }) => {
+    const resultMask = form.erodeOrDilate > 0 ? graph.Mask_Dilate_Region({ masks: mask, iterations: form.erodeOrDilate }).outputs.MASKS : form.erodeOrDilate < 0 ? graph.Mask_Erode_Region({ masks: mask, iterations: -form.erodeOrDilate }).outputs.MASKS : mask;
+    return { mask: resultMask };
+  }
+});
+var segment = createFrameOperation({
+  ui: (form) => ({
+    segmentIndex: form.int({ min: 0, max: 10 })
+  }),
+  run: ({ runtime, graph }, form, { image, mask }) => {
+    const segs = graph.MaskToSEGS({
+      mask
+    });
+    const segsFilter = graph.ImpactSEGSOrderedFilter({
+      segs,
+      target: `area(=w*h)`,
+      take_start: form.segmentIndex
+    });
+    const resultMask = graph.SegsToCombinedMask({ segs: segsFilter.outputs.filtered_SEGS }).outputs.MASK;
+    return { mask: resultMask };
+  }
+});
+var sam = createFrameOperation({
+  ui: (form) => ({
+    // prompt: form.str({ default: `ball` }),
+    threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+    detection_hint: form.enum({
+      enumName: `Enum_SAMDetectorCombined_detection_hint`,
+      default: `center-1`
+    }),
+    mask_hint_use_negative: form.enum({
+      enumName: `Enum_SAMDetectorCombined_mask_hint_use_negative`,
+      default: `False`
+    })
+    // dilation: form.int({ default: 4, min: 0 }),
+    // blur: form.float({ default: 1, min: 0 }),
+  }),
+  run: ({ runtime, graph }, form, { image, mask }) => {
+    const samModel = graph.SAMLoader({
+      model_name: `sam_vit_b_01ec64.pth`,
+      device_mode: `Prefer GPU`
+    });
+    const segs = graph.MaskToSEGS({
+      mask
+    });
+    const resultMask = graph.SAMDetectorSegmented({
+      segs,
+      sam_model: samModel,
+      image,
+      detection_hint: form.detection_hint,
+      mask_hint_use_negative: form.mask_hint_use_negative,
+      threshold: form.threshold
+    }).outputs.combined_mask;
+    return { mask: resultMask };
+  }
+});
+var storeMask = createFrameOperation({
+  ui: (form) => ({
+    name: form.string({ default: `a` })
+  }),
+  run: (state, form, { image, mask }) => {
+    storeInScope(state, form.name, mask ?? null);
+    return { mask };
+  }
+});
+var loadMask = createFrameOperation({
+  ui: (form) => ({
+    name: form.string({ default: `a` })
+  }),
+  run: (state, form, { mask }) => {
+    return { mask: loadFromScope(state, form.name) ?? mask };
+  }
+});
+var combineMasks = createFrameOperation({
+  ui: (form) => ({
+    operation: form.selectOne({
+      choices: [{ id: `union` }, { id: `intersection` }]
+    }),
+    a: form.group({
+      layout: `V`,
+      items: () => ({
+        name: form.string({ default: `a` }),
+        inverse: form.bool({ default: false })
+      })
+    }),
+    b: form.group({
+      layout: `V`,
+      items: () => ({
+        name: form.string({ default: `b` }),
+        inverse: form.bool({ default: false })
+      })
+    }),
+    c: form.groupOpt({
+      layout: `V`,
+      items: () => ({
+        name: form.string({ default: `c` }),
+        inverse: form.bool({ default: false })
+      })
+    }),
+    d: form.groupOpt({
+      layout: `V`,
+      items: () => ({
+        name: form.string({ default: `d` }),
+        inverse: form.bool({ default: false })
+      })
+    }),
+    e: form.groupOpt({
+      layout: `V`,
+      items: () => ({
+        name: form.string({ default: `d` }),
+        inverse: form.bool({ default: false })
+      })
+    })
+  }),
+  run: (state, form, { image, mask }) => {
+    const { graph } = state;
+    const getModifiedMask = (item) => {
+      const m = loadFromScope(state, item.name);
+      if (!m) {
+        return void 0;
+      }
+      return !item.inverse ? m : graph.InvertMask({ mask: m });
+    };
+    let resultMask = getModifiedMask(form.a);
+    const otherMasks = [form.b, form.c, form.d, form.e].filter((x) => x).map((x) => x);
+    for (const mItem of otherMasks) {
+      const mMask = getModifiedMask(mItem);
+      if (!mMask) {
+        continue;
+      }
+      if (!resultMask) {
+        resultMask = mMask;
+        continue;
+      }
+      resultMask = graph.ImageToMask$_AS({
+        image: graph.Combine_Masks({
+          image1: graph.MaskToImage({ mask: resultMask }),
+          image2: graph.MaskToImage({ mask: mMask }),
+          op: form.operation.id === `union` ? `union (max)` : `intersection (min)`,
+          clamp_result: `yes`,
+          round_result: `no`
+        }).outputs.IMAGE
+      }).outputs.MASK;
+    }
+    return { mask: resultMask };
+  }
+});
+var maskOperations = {
+  loadMask,
+  clipSeg,
+  colorToMask,
+  segment,
+  sam,
+  erodeOrDilate,
+  storeMask,
+  combineMasks
+};
+var maskOperationsList = createFrameOperationsGroupList(maskOperations);
+
+// library/ricklove/my-cushy-deck/src/_operations/chooser.ts
+var allOperationsList = createFrameOperationsChoiceList({ ...imageOperations, ...maskOperations });
 
 // library/ricklove/my-cushy-deck/raw-power.ts
 appOptimized({
@@ -1837,8 +2097,8 @@ appOptimized({
         preview: form.inlineRun({})
       })
     }),
-    testImageOperationsList: imageOperationsList.ui(form),
-    testImageOperationsListPreview: form.inlineRun({}),
+    testAllOperationsList: allOperationsList.ui(form),
+    preview_testAllOperationsList: form.inlineRun({}),
     _1: form.markdown({
       markdown: () => `# Crop Image`
     }),
@@ -1991,21 +2251,26 @@ appOptimized({
           nodes.saveImageNode.inputs.current_frame = frameIndex;
         }
       });
-      const testImageOperationsListStep = defineStep({
-        name: `testImageOperationsListStep`,
-        preview: form.testImageOperationsListPreview,
-        cacheParams: [form.testImageOperationsList],
+      const testAllOperationsListStep = defineStep({
+        name: `testAllOperationsListStep`,
+        preview: form.preview_testAllOperationsList,
+        cacheParams: [form.testAllOperationsList],
         inputSteps: { startImageStep },
         create: (state, { inputs }) => {
           const { startImage } = inputs;
-          const emptyMask = state.graph.SolidMask({});
-          const result = imageOperationsList.run(state, form.testImageOperationsList, {
+          const imageSize = state.graph.Get_image_size({ image: startImage });
+          const fullMask = state.graph.SolidMask({
+            width: imageSize.outputs.INT,
+            height: imageSize.outputs.INT_1,
+            value: 16777215
+          });
+          const result = allOperationsList.run(state, form.testAllOperationsList, {
             image: startImage,
-            mask: emptyMask
+            mask: fullMask
           });
           return {
             nodes: {},
-            outputs: { testImageOperationsListImage: result.image }
+            outputs: { image_testAllOperationsList: result.image, mask_testAllOperationsList: result.mask }
           };
         },
         modify: ({ nodes, frameIndex }) => {
@@ -2051,7 +2316,7 @@ appOptimized({
         create: ({ graph, workingDirectory }, { inputs }) => {
           const { startImage, cropMask } = inputs;
           const { size: sizeInput, cropPadding, sizeWidth, sizeHeight } = form;
-          const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
+          const size = sizeInput.custom ?? Number(sizeInput.common?.id);
           const startImageSize = graph.Get_Image_Size({
             image: startImage
           });

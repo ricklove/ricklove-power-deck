@@ -11,6 +11,7 @@ import { Image } from 'konva/lib/shapes/Image'
 import { createRandomGenerator } from './src/_random'
 import { operation_image } from './src/_imageOperations'
 import { imageOperationsList } from './src/_operations/image'
+import { allOperationsList } from './src/_operations/chooser'
 
 appOptimized({
     ui: (form) => ({
@@ -31,8 +32,8 @@ appOptimized({
             }),
         }),
 
-        testImageOperationsList: imageOperationsList.ui(form),
-        testImageOperationsListPreview: form.inlineRun({}),
+        testAllOperationsList: allOperationsList.ui(form),
+        preview_testAllOperationsList: form.inlineRun({}),
 
         _1: form.markdown({
             markdown: () => `# Crop Image`,
@@ -214,21 +215,26 @@ appOptimized({
                 },
             })
 
-            const testImageOperationsListStep = defineStep({
-                name: `testImageOperationsListStep`,
-                preview: form.testImageOperationsListPreview,
-                cacheParams: [form.testImageOperationsList],
+            const testAllOperationsListStep = defineStep({
+                name: `testAllOperationsListStep`,
+                preview: form.preview_testAllOperationsList,
+                cacheParams: [form.testAllOperationsList],
                 inputSteps: { startImageStep },
                 create: (state, { inputs }) => {
                     const { startImage } = inputs
-                    const emptyMask = state.graph.SolidMask({})
-                    const result = imageOperationsList.run(state, form.testImageOperationsList, {
+                    const imageSize = state.graph.Get_image_size({ image: startImage })
+                    const fullMask = state.graph.SolidMask({
+                        width: imageSize.outputs.INT,
+                        height: imageSize.outputs.INT_1,
+                        value: 0xffffff,
+                    })
+                    const result = allOperationsList.run(state, form.testAllOperationsList, {
                         image: startImage,
-                        mask: emptyMask,
+                        mask: fullMask,
                     })
                     return {
                         nodes: {},
-                        outputs: { testImageOperationsListImage: result.image },
+                        outputs: { image_testAllOperationsList: result.image, mask_testAllOperationsList: result.mask },
                     }
                 },
                 modify: ({ nodes, frameIndex }) => {
@@ -283,7 +289,7 @@ appOptimized({
                     const { startImage, cropMask } = inputs
 
                     const { size: sizeInput, cropPadding, sizeWidth, sizeHeight } = form
-                    const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
+                    const size = sizeInput.custom ?? Number(sizeInput.common?.id)
                     const startImageSize = graph.Get_Image_Size({
                         image: startImage,
                     })

@@ -1,5 +1,5 @@
 import { StopError, loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsList } from './_frame'
+import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
 
 const zoeDepth = createFrameOperation({
     ui: (form) => ({
@@ -312,7 +312,7 @@ const loadImage = createFrameOperation({
     },
 })
 
-const imageOperations = {
+export const imageOperations = {
     loadImage,
     enhanceLighting,
     zoeDepth,
@@ -325,4 +325,4 @@ const imageOperations = {
     blendImages,
     storeImage,
 }
-export const imageOperationsList = createFrameOperationsList(imageOperations)
+export const imageOperationsList = createFrameOperationsGroupList(imageOperations)
