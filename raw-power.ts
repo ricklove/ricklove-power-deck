@@ -142,6 +142,12 @@ appOptimized({
             }),
         }),
 
+        uncrop: form.groupOpt({
+            items: () => ({
+                preview: form.inlineRun({}),
+            }),
+        }),
+
         testSeed: form.seed({}),
         test: form.custom({
             Component: OptimizerComponent,
@@ -166,25 +172,33 @@ appOptimized({
         })
 
         // steps
+
         const startImageStep = defineStep({
             name: `startImageStep`,
             preview: form.imageSource.preview,
             cacheParams: [],
             inputSteps: {},
-            create: ({ graph, imageDirectory }) => {
+            create: ({ graph, imageDirectory, workingDirectory }, {}) => {
                 const loadImageNode = graph.RL$_LoadImageSequence({
                     path: `${imageDirectory}/${form.imageSource.filePattern}`,
                     current_frame: 0,
                 })
                 const startImage = loadImageNode.outputs.image
 
+                const saveImageNode = graph.RL$_SaveImageSequence({
+                    images: startImage,
+                    current_frame: 0,
+                    path: `../input/${workingDirectory}/_start-image/#####.png`,
+                })
+
                 return {
-                    nodes: { loadImageNode },
+                    nodes: { loadImageNode, saveImageNode },
                     outputs: { startImage },
                 }
             },
             modify: ({ nodes, frameIndex }) => {
                 nodes.loadImageNode.inputs.current_frame = frameIndex
+                nodes.saveImageNode.inputs.current_frame = frameIndex
             },
         })
 
@@ -213,13 +227,29 @@ appOptimized({
             preview: form.previewCrop,
             cacheParams: [form.size, form.cropPadding, form.sizeWidth, form.sizeHeight],
             inputSteps: { startImageStep, cropMaskStep },
-            create: ({ graph }, { inputs }) => {
+            create: ({ graph, workingDirectory }, { inputs }) => {
                 const { startImage, cropMask } = inputs
 
                 const { size: sizeInput, cropPadding, sizeWidth, sizeHeight } = form
                 const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id)
-                const croppedImage = !cropMask
-                    ? startImage
+                const startImageSize = graph.Get_Image_Size({
+                    image: startImage,
+                })
+
+                const {
+                    cropped_image: croppedImage,
+                    left_source,
+                    right_source,
+                    top_source,
+                    bottom_source,
+                } = !cropMask
+                    ? {
+                          cropped_image: startImage,
+                          left_source: 0,
+                          right_source: startImageSize.outputs.INT,
+                          top_source: 0,
+                          bottom_source: startImageSize.outputs.INT_1,
+                      }
                     : graph.RL$_Crop$_Resize({
                           image: startImage,
                           mask: cropMask,
@@ -227,15 +257,42 @@ appOptimized({
                           width: sizeWidth ?? undefined,
                           height: sizeHeight ?? undefined,
                           padding: cropPadding,
-                      }).outputs.cropped_image
+                      }).outputs
 
+                const blackImage = graph.EmptyImage({
+                    color: 0,
+                    width: startImageSize.outputs.INT,
+                    height: startImageSize.outputs.INT_1,
+                    batch_size: 1,
+                })
+                const whiteImage = graph.EmptyImage({
+                    color: 0xffffff,
+                    width: startImageSize.outputs.INT,
+                    height: startImageSize.outputs.INT_1,
+                    batch_size: 1,
+                })
+                const cropAreaImage = graph.Image_Paste_Crop_by_Location({
+                    image: blackImage,
+                    crop_image: whiteImage,
+                    crop_blending: 0,
+                    left: left_source,
+                    right: right_source,
+                    top: top_source,
+                    bottom: bottom_source,
+                }).outputs.IMAGE
+
+                const saveCropAreaImageNode = graph.RL$_SaveImageSequence({
+                    images: cropAreaImage,
+                    current_frame: 0,
+                    path: `../input/${workingDirectory}/_crop-area/#####.png`,
+                })
                 return {
-                    nodes: {},
+                    nodes: { saveCropAreaImageNode },
                     outputs: { croppedImage },
                 }
             },
             modify: ({ nodes, frameIndex }) => {
-                // nothing specific to the frameIndex
+                nodes.saveCropAreaImageNode.inputs.current_frame = frameIndex
             },
         })
 
@@ -247,13 +304,33 @@ appOptimized({
             create: (state, { inputs }) => {
                 const { croppedImage } = inputs
                 const replaceMask = operation_mask.run(state, croppedImage, undefined, form.replaceMaskOperations)
+
+                const s = state.graph.Get_image_size({
+                    image: croppedImage,
+                })
+                const solidMask = state.graph.SolidMask({
+                    value: 1,
+                    width: s.outputs.INT,
+                    height: s.outputs.INT_1,
+                })
+                const replaceMaskImage = state.graph.MaskToImage({
+                    mask: replaceMask ?? solidMask,
+                })
+
+                const saveReplaceMaskImageNode = state.graph.RL$_SaveImageSequence({
+                    images: replaceMaskImage,
+                    current_frame: 0,
+                    path: `../input/${state.workingDirectory}/_replace-mask/#####.png`,
+                })
                 return {
-                    nodes: {},
+                    nodes: {
+                        saveReplaceMaskImageNode,
+                    },
                     outputs: { replaceMask },
                 }
             },
             modify: ({ nodes, frameIndex }) => {
-                // nothing specific to the frameIndex
+                nodes.saveReplaceMaskImageNode.inputs.current_frame = frameIndex
             },
         })
 
@@ -725,7 +802,7 @@ appOptimized({
             })
             defineStep({
                 name: `upscale`,
-                // preview: form.film.preview,
+                preview: formUpscale.preview,
                 cacheParams: [formUpscale, dependecyKeyRef.dependencyKey],
                 inputSteps: {},
                 create: (state, { inputs }) => {
@@ -806,13 +883,128 @@ appOptimized({
                         filename_prefix: `upscale`,
                     })
 
+                    const saveImageNode = graph.RL$_SaveImageSequence({
+                        images: upscaledImage,
+                        current_frame: 0,
+                        path: `../input/${state.workingDirectory}/_final-upscale/#####.png`,
+                    })
+
                     return {
-                        nodes: { loadImageNode },
+                        nodes: { loadImageNode, saveImageNode },
                         outputs: { upscaledImage },
                     }
                 },
                 modify: ({ nodes, frameIndex }) => {
                     nodes.loadImageNode.inputs.current_frame = frameIndex
+                    nodes.saveImageNode.inputs.current_frame = frameIndex
+                },
+            })
+            dependecyKeyRef = await runSteps(frameIndexes.map((x) => x.frameIndex))
+        }
+
+        if (form.uncrop) {
+            const formUncrop = form.uncrop
+            console.log(`uncrop START`)
+            disableNodesAfterInclusive(runtime, 0)
+
+            const startDir = `_start-image`
+            const finalDir = form.upscale ? `_final-upscale` : form.film?.sideFrameDoubleBackIterations ? `_final-film` : `_final`
+            const cropAreaDir = `_crop-area`
+            const replaceMaskDir = `_replace-mask`
+
+            // new steps system
+            const {
+                defineStep,
+                runSteps,
+                state: _state,
+            } = createStepsSystem({
+                runtime: runtime,
+                imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+                graph: runtime.nodes,
+                scopeStack: [{}],
+            })
+            defineStep({
+                name: `upscale`,
+                preview: formUncrop.preview,
+                cacheParams: [formUncrop, dependecyKeyRef.dependencyKey],
+                inputSteps: {},
+                create: (state, { inputs }) => {
+                    const { graph } = state
+
+                    const loadStartImageNode = graph.RL$_LoadImageSequence({
+                        path: `${state.workingDirectory}/${startDir}/#####.png`,
+                        current_frame: 0,
+                    })
+                    const loadFinalImageNode = graph.RL$_LoadImageSequence({
+                        path: `${state.workingDirectory}/${finalDir}/#####.png`,
+                        current_frame: 0,
+                    })
+                    const loadCropAreaImageNode = graph.RL$_LoadImageSequence({
+                        path: `${state.workingDirectory}/${cropAreaDir}/#####.png`,
+                        current_frame: 0,
+                    })
+                    const loadReplaceMaskImageNode = graph.RL$_LoadImageSequence({
+                        path: `${state.workingDirectory}/${replaceMaskDir}/#####.png`,
+                        current_frame: 0,
+                    })
+
+                    const uncroppedReplaceMaskImage = graph.Paste_By_Mask({
+                        image_base: loadCropAreaImageNode,
+                        image_to_paste: loadReplaceMaskImageNode,
+                        mask: loadCropAreaImageNode,
+                        resize_behavior: `resize`,
+                    }).outputs.IMAGE
+
+                    const uncroppedFinalImage = graph.Paste_By_Mask({
+                        image_base: loadStartImageNode,
+                        image_to_paste: loadFinalImageNode,
+                        mask: loadCropAreaImageNode,
+                        resize_behavior: `resize`,
+                    }).outputs.IMAGE
+
+                    const restoredImage = graph.Image_Blend_by_Mask({
+                        image_a: loadStartImageNode,
+                        image_b: uncroppedFinalImage,
+                        mask: uncroppedReplaceMaskImage,
+                        blend_percentage: 1,
+                    }).outputs.IMAGE
+
+                    // const uncroppedImage = graph.Paste_By_Mask({
+                    //     image_base: loadStartImageNode,
+                    //     image_to_paste: loadFinalImageNode,
+                    //     mask: uncroppedReplaceMaskImage,
+                    //     resize_behavior: `resize`,
+                    // })
+
+                    // graph.Paste_By_Mask({
+                    //     image_base: loadStartImageNode,
+                    //     image_to_paste: loadFinalImageNode,
+                    //     mask:
+                    // })
+
+                    // graph.RL$_Uncrop({
+                    //     image: loadStartImageNode,
+                    //     cropped_image: loadFinalImageNode,
+                    //     box:
+                    // })
+
+                    const uncroppedImage = restoredImage
+
+                    graph.SaveImage({
+                        images: uncroppedImage,
+                        filename_prefix: `uncropped`,
+                    })
+
+                    return {
+                        nodes: { loadStartImageNode, loadFinalImageNode, loadCropAreaImageNode, loadReplaceMaskImageNode },
+                        outputs: { uncroppedImage, uncroppedReplaceMaskImage, uncroppedFinalImage },
+                    }
+                },
+                modify: ({ nodes, frameIndex }) => {
+                    nodes.loadStartImageNode.inputs.current_frame = frameIndex
+                    nodes.loadFinalImageNode.inputs.current_frame = frameIndex
+                    nodes.loadCropAreaImageNode.inputs.current_frame = frameIndex
+                    nodes.loadReplaceMaskImageNode.inputs.current_frame = frameIndex
                 },
             })
             dependecyKeyRef = await runSteps(frameIndexes.map((x) => x.frameIndex))
