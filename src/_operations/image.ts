@@ -17,7 +17,8 @@ const zoeDepth = createFrameOperation({
 
         const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
             zoeRaw,
-            cutoffMid: form.cutoffMid,
+            // This makes more sense reversed
+            cutoffMid: 1 - form.cutoffMid,
             cutoffRadius: form.cutoffRadius,
             normMin: 0, //form.zoeDepth.normMin,
             normMax: 100, //form.zoeDepth.normMax,
@@ -210,6 +211,43 @@ const enhanceLighting = createFrameOperation({
     },
 })
 
+const colorSelect = createFrameOperation({
+    ui: (form) => ({
+        color: form.color({ default: `#000000` }),
+        variance: form.int({ default: 10, min: 0, max: 255 }),
+    }),
+    run: ({ runtime, graph }, form, { image, mask }) => {
+        const rgb = Number.parseInt(form.color.slice(1), 16)
+        const r = ((rgb / 256 / 256) | 0) % 256
+        const g = ((rgb / 256) | 0) % 256
+        const b = (rgb | 0) % 256
+
+        const colorImage = graph.Image_Select_Color({
+            image,
+            red: r,
+            green: g,
+            blue: b,
+            variance: form.variance,
+        })
+
+        // const colorMask = graph.Image_To_Mask({
+        //     image: colorImage,
+        //     method: `intensity`,
+        // })
+
+        // const colorMask = graph.ImageColorToMask({
+        //     image,
+        //     color: Number.parseInt(form.color, 16),
+        // })
+        // const resultMask = graph.Mask_Dilate_Region({
+        //     masks: colorMask,
+        //     iterations: 1,
+        // }).outputs.MASKS
+
+        return { image: colorImage }
+    },
+})
+
 const blendImages = createFrameOperation({
     ui: (form) => ({
         // operation: form.selectOne({
@@ -293,7 +331,7 @@ const blendImages = createFrameOperation({
     },
 })
 
-const storeImage = createFrameOperation({
+const storeImageVarible = createFrameOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -303,7 +341,7 @@ const storeImage = createFrameOperation({
     },
 })
 
-const loadImage = createFrameOperation({
+const loadImageVariable = createFrameOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -313,7 +351,7 @@ const loadImage = createFrameOperation({
 })
 
 export const imageOperations = {
-    loadImage,
+    loadImageVariable,
     enhanceLighting,
     zoeDepth,
     hedEdge,
@@ -322,7 +360,8 @@ export const imageOperations = {
     baeNormal,
     openPose,
     threshold,
+    colorSelect,
     blendImages,
-    storeImage,
+    storeImageVarible,
 }
 export const imageOperationsList = createFrameOperationsGroupList(imageOperations)

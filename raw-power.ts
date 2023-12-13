@@ -11,7 +11,7 @@ import { Image } from 'konva/lib/shapes/Image'
 import { createRandomGenerator } from './src/_random'
 import { operation_image } from './src/_imageOperations'
 import { imageOperationsList } from './src/_operations/image'
-import { allOperationsList } from './src/_operations/chooser'
+import { allOperationsList } from './src/_operations/allOperations'
 
 appOptimized({
     ui: (form) => ({

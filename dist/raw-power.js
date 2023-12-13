@@ -1588,7 +1588,8 @@ var zoeDepth = createFrameOperation({
     });
     const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
       zoeRaw,
-      cutoffMid: form.cutoffMid,
+      // This makes more sense reversed
+      cutoffMid: 1 - form.cutoffMid,
       cutoffRadius: form.cutoffRadius,
       normMin: 0,
       //form.zoeDepth.normMin,
@@ -1760,6 +1761,26 @@ var enhanceLighting = createFrameOperation({
     return { image: selectedImage };
   }
 });
+var colorSelect = createFrameOperation({
+  ui: (form) => ({
+    color: form.color({ default: `#000000` }),
+    variance: form.int({ default: 10, min: 0, max: 255 })
+  }),
+  run: ({ runtime, graph }, form, { image, mask }) => {
+    const rgb = Number.parseInt(form.color.slice(1), 16);
+    const r = (rgb / 256 / 256 | 0) % 256;
+    const g = (rgb / 256 | 0) % 256;
+    const b = (rgb | 0) % 256;
+    const colorImage = graph.Image_Select_Color({
+      image,
+      red: r,
+      green: g,
+      blue: b,
+      variance: form.variance
+    });
+    return { image: colorImage };
+  }
+});
 var blendImages = createFrameOperation({
   ui: (form) => ({
     // operation: form.selectOne({
@@ -1834,7 +1855,7 @@ var blendImages = createFrameOperation({
     return { image };
   }
 });
-var storeImage = createFrameOperation({
+var storeImageVarible = createFrameOperation({
   ui: (form) => ({
     name: form.string({ default: `a` })
   }),
@@ -1843,7 +1864,7 @@ var storeImage = createFrameOperation({
     return { image };
   }
 });
-var loadImage = createFrameOperation({
+var loadImageVariable = createFrameOperation({
   ui: (form) => ({
     name: form.string({ default: `a` })
   }),
@@ -1852,7 +1873,7 @@ var loadImage = createFrameOperation({
   }
 });
 var imageOperations = {
-  loadImage,
+  loadImageVariable,
   enhanceLighting,
   zoeDepth,
   hedEdge,
@@ -1861,8 +1882,9 @@ var imageOperations = {
   baeNormal,
   openPose,
   threshold,
+  colorSelect,
   blendImages,
-  storeImage
+  storeImageVarible
 };
 var imageOperationsList = createFrameOperationsGroupList(imageOperations);
 
@@ -1896,20 +1918,23 @@ var clipSeg = createFrameOperation({
     return { mask: resultMask };
   }
 });
-var colorToMask = createFrameOperation({
-  ui: (form) => ({
-    color: form.color({ default: `#000000` })
-  }),
+var imageToMask = createFrameOperation({
+  ui: (form) => ({}),
   run: ({ runtime, graph }, form, { image, mask }) => {
-    const colorMask = graph.ImageColorToMask({
+    const imageMask = graph.Image_To_Mask({
       image,
-      color: Number.parseInt(form.color, 16)
+      method: `intensity`
     });
-    const resultMask = graph.Mask_Dilate_Region({
-      masks: colorMask,
-      iterations: 1
-    }).outputs.MASKS;
-    return { mask: resultMask };
+    return { mask: imageMask };
+  }
+});
+var maskToImage = createFrameOperation({
+  ui: (form) => ({}),
+  run: ({ runtime, graph }, form, { image, mask }) => {
+    const maskImage = graph.MaskToImage({
+      mask
+    });
+    return { image: maskImage };
   }
 });
 var erodeOrDilate = createFrameOperation({
@@ -1972,7 +1997,7 @@ var sam = createFrameOperation({
     return { mask: resultMask };
   }
 });
-var storeMask = createFrameOperation({
+var storeMaskVariable = createFrameOperation({
   ui: (form) => ({
     name: form.string({ default: `a` })
   }),
@@ -1981,7 +2006,7 @@ var storeMask = createFrameOperation({
     return { mask };
   }
 });
-var loadMask = createFrameOperation({
+var loadMaskVariable = createFrameOperation({
   ui: (form) => ({
     name: form.string({ default: `a` })
   }),
@@ -2064,19 +2089,66 @@ var combineMasks = createFrameOperation({
   }
 });
 var maskOperations = {
-  loadMask,
+  loadMaskVariable,
+  imageToMask,
+  maskToImage,
   clipSeg,
-  colorToMask,
   segment,
   sam,
   erodeOrDilate,
-  storeMask,
+  storeMaskVariable,
   combineMasks
 };
 var maskOperationsList = createFrameOperationsGroupList(maskOperations);
 
-// library/ricklove/my-cushy-deck/src/_operations/chooser.ts
-var allOperationsList = createFrameOperationsChoiceList({ ...imageOperations, ...maskOperations });
+// library/ricklove/my-cushy-deck/src/_operations/resizing.ts
+var cropResizeByMask = createFrameOperation({
+  ui: (form) => ({
+    padding: form.int({ default: 0 }),
+    size: form.choice({
+      items: () => ({
+        maxSideLength: form.intOpt({ default: 1024 }),
+        target: form.group({
+          items: () => ({
+            width: form.intOpt({ default: 1024 }),
+            height: form.floatOpt({ default: 1024 })
+          })
+        })
+      })
+    })
+  }),
+  run: ({ runtime, graph }, form, { image, mask }) => {
+    const startImage = image;
+    const cropMask = mask;
+    const {
+      cropped_image: croppedImage,
+      cropped_mask: croppedMask,
+      left_source,
+      right_source,
+      top_source,
+      bottom_source
+    } = graph.RL$_Crop$_Resize({
+      image: startImage,
+      mask: cropMask,
+      padding: form.padding,
+      max_side_length: form.size.maxSideLength ?? void 0,
+      width: form.size.target?.width ?? void 0,
+      height: form.size.target?.height ?? void 0
+    }).outputs;
+    return { image: croppedImage, mask: croppedMask };
+  }
+});
+var resizingOperations = {
+  cropResizeByMask
+};
+var resizingOperationsList = createFrameOperationsGroupList(resizingOperations);
+
+// library/ricklove/my-cushy-deck/src/_operations/allOperations.ts
+var allOperationsList = createFrameOperationsChoiceList({
+  ...imageOperations,
+  ...maskOperations,
+  ...resizingOperations
+});
 
 // library/ricklove/my-cushy-deck/raw-power.ts
 appOptimized({

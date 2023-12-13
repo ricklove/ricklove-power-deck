@@ -35,21 +35,26 @@ const clipSeg = createFrameOperation({
     },
 })
 
-const colorToMask = createFrameOperation({
-    ui: (form) => ({
-        color: form.color({ default: `#000000` }),
-    }),
+const imageToMask = createFrameOperation({
+    ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image, mask }) => {
-        const colorMask = graph.ImageColorToMask({
-            image,
-            color: Number.parseInt(form.color, 16),
+        const imageMask = graph.Image_To_Mask({
+            image: image,
+            method: `intensity`,
         })
-        const resultMask = graph.Mask_Dilate_Region({
-            masks: colorMask,
-            iterations: 1,
-        }).outputs.MASKS
 
-        return { mask: resultMask }
+        return { mask: imageMask }
+    },
+})
+
+const maskToImage = createFrameOperation({
+    ui: (form) => ({}),
+    run: ({ runtime, graph }, form, { image, mask }) => {
+        const maskImage = graph.MaskToImage({
+            mask: mask,
+        })
+
+        return { image: maskImage }
     },
 })
 
@@ -127,7 +132,7 @@ const sam = createFrameOperation({
     },
 })
 
-const storeMask = createFrameOperation({
+const storeMaskVariable = createFrameOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -137,7 +142,7 @@ const storeMask = createFrameOperation({
     },
 })
 
-const loadMask = createFrameOperation({
+const loadMaskVariable = createFrameOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -226,13 +231,14 @@ const combineMasks = createFrameOperation({
 })
 
 export const maskOperations = {
-    loadMask,
+    loadMaskVariable,
+    imageToMask,
+    maskToImage,
     clipSeg,
-    colorToMask,
     segment,
     sam,
     erodeOrDilate,
-    storeMask,
+    storeMaskVariable,
     combineMasks,
 }
 export const maskOperationsList = createFrameOperationsGroupList(maskOperations)
