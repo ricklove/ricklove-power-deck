@@ -30,3 +30,23 @@ export const getEnabledNodeNames = (runtime: Runtime) => {
         disabledNodes: runtime.workflow.nodes.filter((x) => x.disabled).map((x) => x.$schema.nameInCushy),
     }
 }
+
+export const storeInScope = <T extends null | Object>(state: AppState, name: string, value: T) => {
+    const { scopeStack } = state
+    scopeStack[scopeStack.length - 1][name] = value
+}
+
+export const loadFromScope = <T extends null | Object>(state: AppState, name: string): undefined | T => {
+    const { scopeStack } = state
+
+    let i = scopeStack.length
+    while (i >= 0) {
+        const v = scopeStack[scopeStack.length - 1][name]
+        if (v !== undefined) {
+            return v as T
+        }
+        i--
+    }
+
+    return undefined
+}

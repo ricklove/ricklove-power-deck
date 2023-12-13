@@ -26,382 +26,6 @@ var getEnabledNodeNames = (runtime) => {
     disabledNodes: runtime.workflow.nodes.filter((x) => x.disabled).map((x) => x.$schema.nameInCushy)
   };
 };
-
-// library/ricklove/my-cushy-deck/src/_random.ts
-function xmur3(str) {
-  let h = 1779033703 ^ str.length;
-  for (let i = 0; i < str.length; i++) {
-    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-    h = h << 13 | h >>> 19;
-  }
-  return () => {
-    h = Math.imul(h ^ h >>> 16, 2246822507);
-    h = Math.imul(h ^ h >>> 13, 3266489909);
-    return (h ^= h >>> 16) >>> 0;
-  };
-}
-function mulberry32(a) {
-  return () => {
-    let t = a += 1831565813;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-var createRandomGenerator = (hash) => {
-  const seed = xmur3(hash)();
-  const random = mulberry32(seed);
-  const randomInt = (minInclusive = 0, maxExclusive = Number.MAX_SAFE_INTEGER) => Math.min(minInclusive + Math.floor(random() * (maxExclusive - minInclusive)), maxExclusive - 1);
-  const randomItem = (items) => items[randomInt(0, items.length)];
-  return { random, randomInt, randomItem };
-};
-
-// library/ricklove/my-cushy-deck/src/humor/_loading.ts
-var loadingMessages = `
-"Calibrating the hyperdrive with unicorn whispers."
-"Translating alien emojis into Earthly emotions."
-"Dancing the binary code at the intergalactic disco."
-"Inflating space bubbles for zero-gravity pillow fights."
-"Convincing black holes to join a sing-along choir."
-"Wrestling quantum particles for a game of subatomic tag."
-"Tickling extraterrestrial amoebas just for kicks."
-"Polishing time-travel mirrors to see reflections from tomorrow."
-"Juggling antimatter snowflakes in a cosmic blizzard."
-"Babysitting baby star clusters during naptime."
-"Bottling the laughter of wormholes for later enjoyment."
-"Teaching interstellar crabs the moonwalk."
-"Balancing the cosmic equation with rubber duckies."
-"Dusting off ancient alien artifacts with laser feather dusters."
-"Organizing a parallel universe hide-and-seek tournament."
-"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
-"Negotiating peace treaties between parallel universe pandas and robots."
-"Training intergalactic snails for the great space race."
-"Herding quantum sheep through the fabric of spacetime."
-"Reciting Vogon poetry in an attempt to repel invaders."
-"Hosting a telepathic tea party for sentient clouds."
-"Coaxing malfunctioning robots with lullabies and oil massages."
-"Moonwalking on the event horizon of a cosmic donut."
-"Conducting a symphony of alien frequencies with a light saber baton."
-"Negotiating a trade deal between time-traveling pirates and space ninjas."
-"Babbling in an ancient alien dialect to confuse rogue AIs."
-"Playing hopscotch on the rings of Saturn with zero-gravity boots."
-"Befriending interdimensional dolphins fluent in binary."
-"Convincing dark matter to attend a glow-in-the-dark party."
-"Practicing levitation with levitating space jellyfish."
-"Hitching a ride on a comet while juggling star clusters."
-"Teaching a robot dance crew the art of emotional expression."
-"Summoning UFOs with interpretative dance rituals."
-"Creating crop circles in zero-gravity fields with tractor beams."
-"Impersonating a solar flare to confuse sunspot observers."
-"Diplomacy with alien diplomats through interpretive dance-offs."
-"Playing chess with a sentient nebula and losing gracefully."
-"Negotiating peace treaties between time-traveling dinosaurs and future robots."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Conducting an orchestra of alien bug symphonies."
-"Teleporting through dimensions with a rainbow-colored pogo stick."
-"Translating Morse code messages from extraterrestrial fireflies."
-"Attending a zero-gravity synchronized swimming competition."
-"Participating in a relay race across the rings of Jupiter."
-"Defying gravity by hosting upside-down picnics on magnetic asteroids."
-"Exchanging love letters with parallel universe versions of oneself."
-"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
-"Playing hide-and-seek with the shadows of dark matter."
-"Having a tea party with time-traveling dinosaurs and robot butlers."
-"Juggling quantum entangled particles while riding a quantum unicycle."
-"Hosting a holographic game night with ghostly entities."
-"Impersonating a comet to get a front-row seat at a cosmic concert."
-"Negotiating peace treaties between time-traveling pirates and space ninjas."
-"Having a conversation with extraterrestrial rock formations using telepathic vibrations."
-"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
-"Participating in a zero-gravity synchronized swimming competition."
-"Attempting to communicate with intergalactic space chickens using semaphore signals."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Convincing black holes to participate in a gravity-defying dance-off."
-"Befriending time-traveling flamingos in a temporal oasis."
-"Wrestling quantum particles for a game of subatomic tag."
-"Polishing the interstellar mirror for a reflection of parallel selves."
-"Organizing a parallel universe hide-and-seek tournament."
-"Playing chess with a sentient nebula and losing gracefully."
-"Hosting a telepathic tea party for sentient clouds."
-"Creating crop circles in zero-gravity fields with tractor beams."
-"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
-"Conducting an orchestra of alien bug symphonies."
-"Summoning UFOs with interpretative dance rituals."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Practicing levitation with levitating space jellyfish."
-"Attending a zero-gravity synchronized swimming competition."
-"Participating in a relay race across the rings of Jupiter."
-"Defying gravity by hosting upside-down picnics on magnetic asteroids."
-"Negotiating peace treaties between time-traveling dinosaurs and future robots."
-"Juggling quantum entangled particles while riding a quantum unicycle."
-"Having a tea party with time-traveling dinosaurs and robot butlers."
-"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
-"Playing hide-and-seek with the shadows of dark matter."
-"Exchanging love letters with parallel universe versions of oneself."
-"Impersonating a comet to get a front-row seat at a cosmic concert."
-"Negotiating peace treaties between time-traveling pirates and space ninjas."
-"Having a conversation with extraterrestrial rock formations using telepathic vibrations."
-"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
-"Participating in a zero-gravity synchronized swimming competition."
-"Attempting to communicate with intergalactic space chickens using semaphore signals."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Convincing black holes to participate in a gravity-defying dance-off."
-"Befriending time-traveling flamingos in a temporal oasis."
-"Wrestling quantum particles for a game of subatomic tag."
-"Polishing the interstellar mirror for a reflection of parallel selves."
-"Organizing a parallel universe hide-and-seek tournament."
-"Playing chess with a sentient nebula and losing gracefully."
-"Hosting a telepathic tea party for sentient clouds."
-"Creating crop circles in zero-gravity fields with tractor beams."
-"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
-"Conducting an orchestra of alien bug symphonies."
-"Summoning UFOs with interpretative dance rituals."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Practicing levitation with levitating space jellyfish."
-`.split(`
-`).map((x) => x.trim().replace(/"/g, ``)).filter((x) => x);
-
-// library/ricklove/my-cushy-deck/src/_loadingMessage.ts
-var rand = createRandomGenerator(`${Date.now()}`);
-var showLoadingMessage = (runtime, title, data) => {
-  const message = `### Loading... 
-    
-${title}
-
-${!data ? `` : Object.entries(data).map(
-    ([k, v]) => typeof v === `string` && v.includes(`
-`) ? `- ${k}: 
-
-    ${v.split(`
-`).join(`
-    `)}` : `- ${k}: ${v}`
-  ).join(`
-`)}
-
-### Detailed Master Plan
-
-${[...new Array(20)].map((_) => `- ${rand.randomItem(loadingMessages)}`).join(`
-`)}
-
-### Oops...
-
-- If you are reading this somehting probably broke
-- Manual intervention is likely required
-- Not sure why you are still reading
-- You should probably do something
-    
-    `;
-  console.log(`showLoadingMessage`, message);
-  let messageItem = runtime.output_text(message);
-  const timeoutId = setTimeout(() => {
-    messageItem.delete();
-    messageItem = runtime.output_Markdown(message);
-  }, 1e3);
-  return {
-    delete: () => {
-      clearTimeout(timeoutId);
-      messageItem.delete();
-    }
-  };
-};
-
-// library/ricklove/my-cushy-deck/src/_cache.ts
-var history = {
-  writtenFormSerialWithPath: /* @__PURE__ */ new Set()
-};
-var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
-  const { runtime, graph } = state;
-  const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
-  dependencyKeyRef.dependencyKey = paramsHash;
-  const paramsFolderPattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}`;
-  const location = `input`;
-  const paramsFilePattern = `../${location}/${paramsFolderPattern}/#####.png`;
-  const saveFormSerial = () => {
-    const { comfyUiInputRelativePath } = state;
-    if (!comfyUiInputRelativePath) {
-      return;
-    }
-    const formSerialHash = `` + createRandomGenerator(`${JSON.stringify(runtime.formSerial)}`).randomInt();
-    const formSerialSavePath = runtime.path.join(comfyUiInputRelativePath, paramsFolderPattern, `${formSerialHash}.json`);
-    const formSerialWithPath = `${formSerialHash}:${formSerialSavePath}`;
-    if (history.writtenFormSerialWithPath.has(`${formSerialWithPath}`)) {
-      return;
-    }
-    history.writtenFormSerialWithPath.add(formSerialWithPath);
-    console.log(`formSerialSavePath`, { formSerialSavePath });
-    runtime.fs.mkdirSync(runtime.path.dirname(formSerialSavePath), { recursive: true });
-    runtime.fs.writeFileSync(formSerialSavePath, JSON.stringify(runtime.formSerial));
-  };
-  saveFormSerial();
-  const exists = async (frameIndex) => {
-    return await state.runtime.doesComfyImageExist({
-      type: location,
-      subfolder: paramsFolderPattern,
-      filename: `${`${frameIndex}`.padStart(5, `0`)}.png`
-    });
-  };
-  const loadCached = () => {
-    const loadImageNode = graph.RL$_LoadImageSequence({
-      path: paramsFilePattern,
-      current_frame: 0
-    });
-    const imageReloaded = loadImageNode.outputs.image;
-    return {
-      getOutput: () => imageReloaded,
-      modify: (frameIndex) => {
-        loadImageNode.inputs.current_frame = frameIndex;
-      }
-    };
-  };
-  const createCache = (getValue) => {
-    const image = getValue();
-    if (!image) {
-      return {
-        // undefined
-        getOutput: () => image,
-        modify: (frameIndex) => {
-        }
-      };
-    }
-    const saveImageNode = graph.RL$_SaveImageSequence({
-      images: image,
-      current_frame: 0,
-      path: paramsFilePattern
-    });
-    graph.PreviewImage({
-      images: image
-    });
-    return {
-      getOutput: () => image,
-      modify: (frameIndex) => {
-        saveImageNode.inputs.current_frame = frameIndex;
-      }
-    };
-  };
-  return {
-    exists,
-    loadCached,
-    createCache
-  };
-};
-var cacheMaskBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
-  const { graph } = state;
-  const imageBuilder = cacheImageBuilder(state, folderPrefix, params, dependencyKeyRef);
-  return {
-    exists: imageBuilder.exists,
-    loadCached: () => {
-      const loadCached_image = imageBuilder.loadCached();
-      return {
-        getOutput: () => {
-          const reloadedMaskImage = loadCached_image.getOutput();
-          const maskReloaded = graph.Image_To_Mask({
-            image: reloadedMaskImage,
-            method: `intensity`
-          }).outputs.MASK;
-          return maskReloaded;
-        },
-        modify: (frameIndex) => loadCached_image.modify(frameIndex)
-      };
-    },
-    createCache: (getValue) => {
-      const mask = getValue();
-      if (!mask) {
-        return void 0;
-      }
-      const createCache_image = imageBuilder.createCache(() => {
-        const maskImage = graph.MaskToImage({ mask });
-        return maskImage;
-      });
-      return {
-        getOutput: () => {
-          return mask;
-        },
-        modify: (frameIndex) => createCache_image.modify(frameIndex)
-      };
-    }
-  };
-};
-var cacheImage = async (state, folderPrefix, frameIndex, params, dependencyKeyRef, createGraph) => {
-  const { runtime, graph } = state;
-  const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
-  dependencyKeyRef.dependencyKey = paramsHash;
-  const paramsFilePattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}/#####.png`;
-  const loadImage_graph = () => {
-    const imageReloaded = graph.RL$_LoadImageSequence({
-      path: paramsFilePattern,
-      current_frame: frameIndex
-    }).outputs.image;
-    return imageReloaded;
-  };
-  const createImage_execute = async () => {
-    const image = await createGraph();
-    if (!image) {
-      return void 0;
-    }
-    graph.RL$_SaveImageSequence({
-      images: image,
-      current_frame: frameIndex,
-      path: paramsFilePattern
-    });
-    const result = await runtime.PROMPT();
-    if (result.data.error) {
-      throw new Error(`cacheImage: Failed to create image`);
-    }
-  };
-  const iNextInitial = getNextActiveNodeIndex(runtime);
-  const loadingMessage = showLoadingMessage(runtime, `cacheImage( ${frameIndex} )`, { frameIndex, params });
-  try {
-    const image = loadImage_graph();
-    const result = await runtime.PROMPT();
-    if (result.data.error) {
-      result.delete();
-      throw new Error(`ignore`);
-    }
-    loadingMessage.delete();
-    console.log(
-      `cacheImage: Load Success`,
-      JSON.parse(
-        JSON.stringify({
-          data: result.data,
-          finished: result.finished
-        })
-      )
-    );
-    return { image };
-  } catch {
-    disableNodesAfterInclusive(runtime, iNextInitial);
-  }
-  console.log(`cacheImage: Failed to load - creating`, {
-    paramsFilePattern,
-    frameIndex,
-    params
-  });
-  await createImage_execute();
-  disableNodesAfterInclusive(runtime, iNextInitial);
-  loadingMessage.delete();
-  return { image: loadImage_graph() };
-};
-var cacheMask = async (state, folderPrefix, frameIndex, params, dependencyKeyRef, createGraph) => {
-  const { graph } = state;
-  const { image: reloadedMaskImage } = await cacheImage(state, folderPrefix, frameIndex, params, dependencyKeyRef, async () => {
-    const mask = await createGraph();
-    if (!mask) {
-      return void 0;
-    }
-    const maskImage = graph.MaskToImage({ mask });
-    return maskImage;
-  });
-  if (!reloadedMaskImage) {
-    return { mask: void 0 };
-  }
-  const maskReloaded = graph.Image_To_Mask({
-    image: reloadedMaskImage,
-    method: `intensity`
-  }).outputs.MASK;
-  return { mask: maskReloaded };
-};
-
-// library/ricklove/my-cushy-deck/src/_maskPrefabs.ts
 var storeInScope = (state, name, value) => {
   const { scopeStack } = state;
   scopeStack[scopeStack.length - 1][name] = value;
@@ -414,9 +38,12 @@ var loadFromScope = (state, name) => {
     if (v !== void 0) {
       return v;
     }
+    i--;
   }
   return void 0;
 };
+
+// library/ricklove/my-cushy-deck/src/_maskPrefabs.ts
 var createMaskOperation = (op) => op;
 var createMaskOperationValue = (op) => op;
 var operation_clipSeg = createMaskOperation({
@@ -510,7 +137,15 @@ var operation_sam = createMaskOperation({
     sam: form.groupOpt({
       items: () => ({
         // prompt: form.str({ default: `ball` }),
-        threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 })
+        threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+        detection_hint: form.enum({
+          enumName: `Enum_SAMDetectorCombined_detection_hint`,
+          default: `center-1`
+        }),
+        mask_hint_use_negative: form.enum({
+          enumName: `Enum_SAMDetectorCombined_mask_hint_use_negative`,
+          default: `False`
+        })
         // dilation: form.int({ default: 4, min: 0 }),
         // blur: form.float({ default: 1, min: 0 }),
       })
@@ -534,8 +169,8 @@ var operation_sam = createMaskOperation({
       segs,
       sam_model: samModel,
       image,
-      detection_hint: `center-1`,
-      mask_hint_use_negative: `False`,
+      detection_hint: form.sam.detection_hint,
+      mask_hint_use_negative: form.sam.mask_hint_use_negative,
       threshold: form.sam.threshold
     }).outputs.combined_mask;
     return mask;
@@ -938,6 +573,301 @@ var appOptimized = ({ ui, run }) => {
   });
 };
 
+// library/ricklove/my-cushy-deck/src/_random.ts
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = h << 13 | h >>> 19;
+  }
+  return () => {
+    h = Math.imul(h ^ h >>> 16, 2246822507);
+    h = Math.imul(h ^ h >>> 13, 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+function mulberry32(a) {
+  return () => {
+    let t = a += 1831565813;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+var createRandomGenerator = (hash) => {
+  const seed = xmur3(hash)();
+  const random = mulberry32(seed);
+  const randomInt = (minInclusive = 0, maxExclusive = Number.MAX_SAFE_INTEGER) => Math.min(minInclusive + Math.floor(random() * (maxExclusive - minInclusive)), maxExclusive - 1);
+  const randomItem = (items) => items[randomInt(0, items.length)];
+  return { random, randomInt, randomItem };
+};
+
+// library/ricklove/my-cushy-deck/src/humor/_loading.ts
+var loadingMessages = `
+"Calibrating the hyperdrive with unicorn whispers."
+"Translating alien emojis into Earthly emotions."
+"Dancing the binary code at the intergalactic disco."
+"Inflating space bubbles for zero-gravity pillow fights."
+"Convincing black holes to join a sing-along choir."
+"Wrestling quantum particles for a game of subatomic tag."
+"Tickling extraterrestrial amoebas just for kicks."
+"Polishing time-travel mirrors to see reflections from tomorrow."
+"Juggling antimatter snowflakes in a cosmic blizzard."
+"Babysitting baby star clusters during naptime."
+"Bottling the laughter of wormholes for later enjoyment."
+"Teaching interstellar crabs the moonwalk."
+"Balancing the cosmic equation with rubber duckies."
+"Dusting off ancient alien artifacts with laser feather dusters."
+"Organizing a parallel universe hide-and-seek tournament."
+"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
+"Negotiating peace treaties between parallel universe pandas and robots."
+"Training intergalactic snails for the great space race."
+"Herding quantum sheep through the fabric of spacetime."
+"Reciting Vogon poetry in an attempt to repel invaders."
+"Hosting a telepathic tea party for sentient clouds."
+"Coaxing malfunctioning robots with lullabies and oil massages."
+"Moonwalking on the event horizon of a cosmic donut."
+"Conducting a symphony of alien frequencies with a light saber baton."
+"Negotiating a trade deal between time-traveling pirates and space ninjas."
+"Babbling in an ancient alien dialect to confuse rogue AIs."
+"Playing hopscotch on the rings of Saturn with zero-gravity boots."
+"Befriending interdimensional dolphins fluent in binary."
+"Convincing dark matter to attend a glow-in-the-dark party."
+"Practicing levitation with levitating space jellyfish."
+"Hitching a ride on a comet while juggling star clusters."
+"Teaching a robot dance crew the art of emotional expression."
+"Summoning UFOs with interpretative dance rituals."
+"Creating crop circles in zero-gravity fields with tractor beams."
+"Impersonating a solar flare to confuse sunspot observers."
+"Diplomacy with alien diplomats through interpretive dance-offs."
+"Playing chess with a sentient nebula and losing gracefully."
+"Negotiating peace treaties between time-traveling dinosaurs and future robots."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Conducting an orchestra of alien bug symphonies."
+"Teleporting through dimensions with a rainbow-colored pogo stick."
+"Translating Morse code messages from extraterrestrial fireflies."
+"Attending a zero-gravity synchronized swimming competition."
+"Participating in a relay race across the rings of Jupiter."
+"Defying gravity by hosting upside-down picnics on magnetic asteroids."
+"Exchanging love letters with parallel universe versions of oneself."
+"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
+"Playing hide-and-seek with the shadows of dark matter."
+"Having a tea party with time-traveling dinosaurs and robot butlers."
+"Juggling quantum entangled particles while riding a quantum unicycle."
+"Hosting a holographic game night with ghostly entities."
+"Impersonating a comet to get a front-row seat at a cosmic concert."
+"Negotiating peace treaties between time-traveling pirates and space ninjas."
+"Having a conversation with extraterrestrial rock formations using telepathic vibrations."
+"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
+"Participating in a zero-gravity synchronized swimming competition."
+"Attempting to communicate with intergalactic space chickens using semaphore signals."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Convincing black holes to participate in a gravity-defying dance-off."
+"Befriending time-traveling flamingos in a temporal oasis."
+"Wrestling quantum particles for a game of subatomic tag."
+"Polishing the interstellar mirror for a reflection of parallel selves."
+"Organizing a parallel universe hide-and-seek tournament."
+"Playing chess with a sentient nebula and losing gracefully."
+"Hosting a telepathic tea party for sentient clouds."
+"Creating crop circles in zero-gravity fields with tractor beams."
+"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
+"Conducting an orchestra of alien bug symphonies."
+"Summoning UFOs with interpretative dance rituals."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Practicing levitation with levitating space jellyfish."
+"Attending a zero-gravity synchronized swimming competition."
+"Participating in a relay race across the rings of Jupiter."
+"Defying gravity by hosting upside-down picnics on magnetic asteroids."
+"Negotiating peace treaties between time-traveling dinosaurs and future robots."
+"Juggling quantum entangled particles while riding a quantum unicycle."
+"Having a tea party with time-traveling dinosaurs and robot butlers."
+"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
+"Playing hide-and-seek with the shadows of dark matter."
+"Exchanging love letters with parallel universe versions of oneself."
+"Impersonating a comet to get a front-row seat at a cosmic concert."
+"Negotiating peace treaties between time-traveling pirates and space ninjas."
+"Having a conversation with extraterrestrial rock formations using telepathic vibrations."
+"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
+"Participating in a zero-gravity synchronized swimming competition."
+"Attempting to communicate with intergalactic space chickens using semaphore signals."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Convincing black holes to participate in a gravity-defying dance-off."
+"Befriending time-traveling flamingos in a temporal oasis."
+"Wrestling quantum particles for a game of subatomic tag."
+"Polishing the interstellar mirror for a reflection of parallel selves."
+"Organizing a parallel universe hide-and-seek tournament."
+"Playing chess with a sentient nebula and losing gracefully."
+"Hosting a telepathic tea party for sentient clouds."
+"Creating crop circles in zero-gravity fields with tractor beams."
+"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
+"Conducting an orchestra of alien bug symphonies."
+"Summoning UFOs with interpretative dance rituals."
+"Building sandcastles on exoplanets with cosmic ocean waves."
+"Practicing levitation with levitating space jellyfish."
+`.split(`
+`).map((x) => x.trim().replace(/"/g, ``)).filter((x) => x);
+
+// library/ricklove/my-cushy-deck/src/_loadingMessage.ts
+var rand = createRandomGenerator(`${Date.now()}`);
+var showLoadingMessage = (runtime, title, data) => {
+  const message = `### Loading... 
+    
+${title}
+
+${!data ? `` : Object.entries(data).map(
+    ([k, v]) => typeof v === `string` && v.includes(`
+`) ? `- ${k}: 
+
+    ${v.split(`
+`).join(`
+    `)}` : `- ${k}: ${v}`
+  ).join(`
+`)}
+
+### Detailed Master Plan
+
+${[...new Array(20)].map((_) => `- ${rand.randomItem(loadingMessages)}`).join(`
+`)}
+
+### Oops...
+
+- If you are reading this somehting probably broke
+- Manual intervention is likely required
+- Not sure why you are still reading
+- You should probably do something
+    
+    `;
+  console.log(`showLoadingMessage`, message);
+  let messageItem = runtime.output_text(message);
+  const timeoutId = setTimeout(() => {
+    messageItem.delete();
+    messageItem = runtime.output_Markdown(message);
+  }, 1e3);
+  return {
+    delete: () => {
+      clearTimeout(timeoutId);
+      messageItem.delete();
+    }
+  };
+};
+
+// library/ricklove/my-cushy-deck/src/_cache.ts
+var history = {
+  writtenFormSerialWithPath: /* @__PURE__ */ new Set()
+};
+var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
+  const { runtime, graph } = state;
+  const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
+  dependencyKeyRef.dependencyKey = paramsHash;
+  const paramsFolderPattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}`;
+  const location = `input`;
+  const paramsFilePattern = `../${location}/${paramsFolderPattern}/#####.png`;
+  const saveFormSerial = () => {
+    const { comfyUiInputRelativePath } = state;
+    if (!comfyUiInputRelativePath) {
+      return;
+    }
+    const formSerialHash = `` + createRandomGenerator(`${JSON.stringify(runtime.formSerial)}`).randomInt();
+    const formSerialSavePath = runtime.path.join(comfyUiInputRelativePath, paramsFolderPattern, `${formSerialHash}.json`);
+    const formSerialWithPath = `${formSerialHash}:${formSerialSavePath}`;
+    if (history.writtenFormSerialWithPath.has(`${formSerialWithPath}`)) {
+      return;
+    }
+    history.writtenFormSerialWithPath.add(formSerialWithPath);
+    console.log(`formSerialSavePath`, { formSerialSavePath });
+    runtime.fs.mkdirSync(runtime.path.dirname(formSerialSavePath), { recursive: true });
+    runtime.fs.writeFileSync(formSerialSavePath, JSON.stringify(runtime.formSerial));
+  };
+  saveFormSerial();
+  const exists = async (frameIndex) => {
+    return await state.runtime.doesComfyImageExist({
+      type: location,
+      subfolder: paramsFolderPattern,
+      filename: `${`${frameIndex}`.padStart(5, `0`)}.png`
+    });
+  };
+  const loadCached = () => {
+    const loadImageNode = graph.RL$_LoadImageSequence({
+      path: paramsFilePattern,
+      current_frame: 0
+    });
+    const imageReloaded = loadImageNode.outputs.image;
+    return {
+      getOutput: () => imageReloaded,
+      modify: (frameIndex) => {
+        loadImageNode.inputs.current_frame = frameIndex;
+      }
+    };
+  };
+  const createCache = (getValue) => {
+    const image = getValue();
+    if (!image) {
+      return {
+        // undefined
+        getOutput: () => image,
+        modify: (frameIndex) => {
+        }
+      };
+    }
+    const saveImageNode = graph.RL$_SaveImageSequence({
+      images: image,
+      current_frame: 0,
+      path: paramsFilePattern
+    });
+    graph.PreviewImage({
+      images: image
+    });
+    return {
+      getOutput: () => image,
+      modify: (frameIndex) => {
+        saveImageNode.inputs.current_frame = frameIndex;
+      }
+    };
+  };
+  return {
+    exists,
+    loadCached,
+    createCache
+  };
+};
+var cacheMaskBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
+  const { graph } = state;
+  const imageBuilder = cacheImageBuilder(state, folderPrefix, params, dependencyKeyRef);
+  return {
+    exists: imageBuilder.exists,
+    loadCached: () => {
+      const loadCached_image = imageBuilder.loadCached();
+      return {
+        getOutput: () => {
+          const reloadedMaskImage = loadCached_image.getOutput();
+          const maskReloaded = graph.Image_To_Mask({
+            image: reloadedMaskImage,
+            method: `intensity`
+          }).outputs.MASK;
+          return maskReloaded;
+        },
+        modify: (frameIndex) => loadCached_image.modify(frameIndex)
+      };
+    },
+    createCache: (getValue) => {
+      const mask = getValue();
+      if (!mask) {
+        return void 0;
+      }
+      const createCache_image = imageBuilder.createCache(() => {
+        const maskImage = graph.MaskToImage({ mask });
+        return maskImage;
+      });
+      return {
+        getOutput: () => {
+          return mask;
+        },
+        modify: (frameIndex) => createCache_image.modify(frameIndex)
+      };
+    }
+  };
+};
+
 // library/ricklove/my-cushy-deck/src/_steps.ts
 var createStepsSystem = (appState) => {
   const _state = appState;
@@ -1148,6 +1078,8 @@ var createStepsSystem = (appState) => {
         }
         await _state.runtime.PROMPT();
       }
+      throw new StopError(() => {
+      });
     }
     return dependencyKeyRef;
   };
@@ -1157,6 +1089,388 @@ var createStepsSystem = (appState) => {
     runSteps
   };
 };
+
+// library/ricklove/my-cushy-deck/src/_imageOperations.ts
+var createImageOperation = (op) => op;
+var createImageOperationValue = (op) => op;
+var operation_zoeDepthPreprocessor = createImageOperation({
+  ui: (form) => ({
+    zoeDepth: form.groupOpt({
+      items: () => ({
+        cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 1e-3 }),
+        cutoffRadius: form.float({ default: 0.1, min: 0, max: 1, step: 1e-3 })
+        // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
+        // normMax: form.float({ default: 85, min: 0, max: 100, step: 0.1 }),
+        // minDepth
+        // maxDepth
+        // prompt: form.str({ default: `ball` }),
+        // threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+        // dilation: form.int({ default: 4, min: 0 }),
+        // blur: form.float({ default: 1, min: 0 }),
+      })
+    })
+  }),
+  run: ({ runtime, graph }, image, form) => {
+    if (form.zoeDepth == null) {
+      return image;
+    }
+    const zoeRaw = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Infer({
+      image
+    });
+    const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
+      zoeRaw,
+      cutoffMid: form.zoeDepth.cutoffMid,
+      cutoffRadius: form.zoeDepth.cutoffRadius,
+      normMin: 0,
+      //form.zoeDepth.normMin,
+      normMax: 100
+      //form.zoeDepth.normMax,
+    });
+    const zoeImage = graph.ImageBatchGet({
+      images: zoeImages,
+      index: 2
+    }).outputs.IMAGE;
+    const zoeRgbImage = graph.Images_to_RGB({
+      images: zoeImage
+    });
+    return zoeRgbImage;
+  }
+});
+var operation_hedEdgePreprocessor = createImageOperation({
+  ui: (form) => ({
+    hedEdge: form.groupOpt({
+      items: () => ({})
+    })
+  }),
+  run: ({ runtime, graph }, image, form) => {
+    if (form.hedEdge == null) {
+      return image;
+    }
+    const hedImage = graph.HEDPreprocessor({
+      image,
+      safe: `enable`,
+      version: `v1.1`
+    }).outputs.IMAGE;
+    return hedImage;
+  }
+});
+var operation_pidiEdgePreprocessor = createImageOperation({
+  ui: (form) => ({
+    pidiEdge: form.groupOpt({
+      items: () => ({})
+    })
+  }),
+  run: ({ runtime, graph }, image, form) => {
+    if (form.pidiEdge == null) {
+      return image;
+    }
+    const pidiEdgeImage = graph.PiDiNetPreprocessor({
+      image,
+      safe: `enable`
+    }).outputs.IMAGE;
+    return pidiEdgeImage;
+  }
+});
+var operation_scribbleEdgePreprocessor = createImageOperation({
+  ui: (form) => ({
+    scribbleEdge: form.groupOpt({
+      items: () => ({})
+    })
+  }),
+  run: ({ runtime, graph }, image, form) => {
+    if (form.scribbleEdge == null) {
+      return image;
+    }
+    const resultImage = graph.ScribblePreprocessor({
+      image
+    }).outputs.IMAGE;
+    return resultImage;
+  }
+});
+var operation_thresholdPreprocessor = createImageOperation({
+  ui: (form) => ({
+    threshold: form.groupOpt({
+      items: () => ({
+        threshold: form.int({ default: 128, min: 0, max: 255 })
+      })
+    })
+  }),
+  run: ({ runtime, graph }, image, form) => {
+    if (form.threshold == null) {
+      return image;
+    }
+    const resultImage = graph.BinaryPreprocessor({
+      image,
+      threshold: form.threshold.threshold
+    }).outputs.IMAGE;
+    return resultImage;
+  }
+});
+var operation_baeNormalPreprocessor = createImageOperation({
+  ui: (form) => ({
+    baeNorma: form.groupOpt({
+      items: () => ({})
+    })
+  }),
+  run: ({ runtime, graph }, image, form) => {
+    if (form.baeNorma == null) {
+      return image;
+    }
+    const baeNormalImage = graph.BAE$7NormalMapPreprocessor({
+      image
+    }).outputs.IMAGE;
+    return baeNormalImage;
+  }
+});
+var operation_openPosePreprocessor = createImageOperation({
+  ui: (form) => ({
+    openPose: form.groupOpt({
+      items: () => ({
+        body: form.bool({}),
+        face: form.bool({}),
+        hand: form.bool({})
+      })
+    })
+  }),
+  run: ({ runtime, graph }, image, form) => {
+    if (form.openPose == null) {
+      return image;
+    }
+    const openPoseImage = graph.OpenposePreprocessor({
+      image,
+      detect_body: form.openPose.body ? "enable" : `disable`,
+      detect_face: form.openPose.face ? "enable" : `disable`,
+      detect_hand: form.openPose.hand ? "enable" : `disable`
+    }).outputs.IMAGE;
+    return openPoseImage;
+  }
+});
+var operation_enhanceLighting = createImageOperation({
+  ui: (form) => ({
+    enhanceLighting: form.groupOpt({
+      items: () => ({
+        // previewAll: form.inlineRun({}),
+        preview: form.groupOpt({
+          items: () => ({
+            img_all: form.inlineRun({}),
+            img_intensity: form.inlineRun({}),
+            img_gamma: form.inlineRun({}),
+            img_log: form.inlineRun({}),
+            img_rescale: form.inlineRun({}),
+            out_shadows: form.inlineRun({}),
+            out_highlights: form.inlineRun({}),
+            out_mid: form.inlineRun({}),
+            img_eq: form.inlineRun({}),
+            img_adaptive: form.inlineRun({}),
+            img_eq_local: form.inlineRun({})
+          })
+        }),
+        selected: form.selectOne({
+          choices: [
+            `img_intensity`,
+            `img_gamma`,
+            `img_log`,
+            `img_rescale`,
+            `out_shadows`,
+            `out_highlights`,
+            `out_mid`,
+            `img_eq`,
+            `img_adaptive`,
+            `img_eq_local`
+          ].map((x) => ({ id: x }))
+        }),
+        previewSelected: form.inlineRun({})
+      })
+    })
+  }),
+  run: ({ runtime, graph }, image, form) => {
+    if (form.enhanceLighting == null) {
+      return image;
+    }
+    const imageShadowNode = graph.RL$_Image$_Shadow({
+      image
+    });
+    const activiatePreviewKey = Object.entries(form.enhanceLighting.preview ?? {}).find(
+      ([k, v]) => v
+    )?.[0];
+    if (activiatePreviewKey) {
+      graph.PreviewImage({
+        images: imageShadowNode.outputs[activiatePreviewKey]
+      });
+      throw new StopError(() => {
+      });
+    }
+    const selectedImage = imageShadowNode.outputs[form.enhanceLighting.selected.id] ?? image;
+    if (form.enhanceLighting.previewSelected) {
+      graph.PreviewImage({
+        images: selectedImage
+      });
+      throw new StopError(() => {
+      });
+    }
+    return selectedImage;
+  }
+});
+var operation_blendImages = createImageOperation({
+  ui: (form) => ({
+    blendImages: form.groupOpt({
+      items: () => ({
+        // operation: form.selectOne({
+        //     choices: [{ id: `union` }, { id: `intersection` }],
+        // }),
+        a: form.group({
+          layout: `V`,
+          items: () => ({
+            name: form.string({ default: `a` })
+            // inverse: form.empt,
+            // inverse: form.bool({ default: false }),
+          })
+        }),
+        b: form.group({
+          layout: `V`,
+          items: () => ({
+            name: form.string({ default: `b` }),
+            inverse: form.bool({ default: false }),
+            blendRatio: form.float({ default: 0.5, min: 0, max: 1, step: 0.01 }),
+            blendMode: form.enum({ enumName: `Enum_ImageBlend_blend_mode`, default: `normal` })
+          })
+        })
+        // c: form.groupOpt({
+        //     layout: `V`,
+        //     items: () => ({
+        //         name: form.string({ default: `c` }),
+        //         inverse: form.bool({ default: false }),
+        //     }),
+        // }),
+        // d: form.groupOpt({
+        //     layout: `V`,
+        //     items: () => ({
+        //         name: form.string({ default: `d` }),
+        //         inverse: form.bool({ default: false }),
+        //     }),
+        // }),
+        // e: form.groupOpt({
+        //     layout: `V`,
+        //     items: () => ({
+        //         name: form.string({ default: `d` }),
+        //         inverse: form.bool({ default: false }),
+        //     }),
+        // }),
+      })
+    })
+  }),
+  run: (state, image, form) => {
+    if (form.blendImages == null) {
+      return image;
+    }
+    image = loadFromScope(state, form.blendImages.a.name) ?? image;
+    const otherImages = [
+      form.blendImages.b
+      // form.blendImages.c, form.blendImages.d, form.blendImages.e
+    ].filter((x) => x).map((x) => x);
+    const { graph } = state;
+    for (const item of otherImages) {
+      let itemImage = loadFromScope(state, item.name);
+      if (!itemImage) {
+        continue;
+      }
+      itemImage = !item.inverse ? itemImage : graph.ImageInvert({ image: itemImage });
+      if (!image) {
+        image = itemImage;
+        continue;
+      }
+      if (item === form.blendImages.a) {
+        continue;
+      }
+      image = graph.ImageBlend({
+        image1: image,
+        image2: itemImage,
+        blend_mode: item.blendMode,
+        blend_factor: item.blendRatio
+      });
+    }
+    return image;
+  }
+});
+var operation_storeImage = createImageOperation({
+  ui: (form) => ({
+    storeImage: form.groupOpt({
+      items: () => ({
+        name: form.string({ default: `a` })
+      })
+    })
+  }),
+  run: (state, image, form) => {
+    if (form.storeImage == null) {
+      return image;
+    }
+    storeInScope(state, form.storeImage.name, image);
+    return image;
+  }
+});
+var operation_loadImage = createImageOperation({
+  ui: (form) => ({
+    loadImage: form.groupOpt({
+      items: () => ({
+        name: form.string({ default: `a` })
+      })
+    })
+  }),
+  run: (state, image, form) => {
+    if (form.loadImage == null) {
+      return image;
+    }
+    return loadFromScope(state, form.loadImage.name) ?? image;
+  }
+});
+var operations_all2 = createImageOperation({
+  ui: (form) => ({
+    imageOperations: form.list({
+      element: () => form.group({
+        layout: "V",
+        items: () => ({
+          ...operation_loadImage.ui(form),
+          ...operation_enhanceLighting.ui(form),
+          ...operation_zoeDepthPreprocessor.ui(form),
+          ...operation_hedEdgePreprocessor.ui(form),
+          ...operation_pidiEdgePreprocessor.ui(form),
+          ...operation_scribbleEdgePreprocessor.ui(form),
+          ...operation_baeNormalPreprocessor.ui(form),
+          ...operation_openPosePreprocessor.ui(form),
+          ...operation_thresholdPreprocessor.ui(form),
+          ...operation_blendImages.ui(form),
+          ...operation_storeImage.ui(form),
+          preview: form.inlineRun({})
+        })
+      })
+    })
+  }),
+  run: (state, image, form) => {
+    const { runtime, graph } = state;
+    for (const op of form.imageOperations) {
+      image = operation_loadImage.run(state, image, op);
+      image = operation_enhanceLighting.run(state, image, op);
+      image = operation_zoeDepthPreprocessor.run(state, image, op);
+      image = operation_hedEdgePreprocessor.run(state, image, op);
+      image = operation_pidiEdgePreprocessor.run(state, image, op);
+      image = operation_scribbleEdgePreprocessor.run(state, image, op);
+      image = operation_baeNormalPreprocessor.run(state, image, op);
+      image = operation_openPosePreprocessor.run(state, image, op);
+      image = operation_thresholdPreprocessor.run(state, image, op);
+      image = operation_blendImages.run(state, image, op);
+      image = operation_storeImage.run(state, image, op);
+      if (op.preview) {
+        graph.PreviewImage({ images: image });
+        throw new StopError(void 0);
+      }
+    }
+    return image;
+  }
+});
+var operation_image = createImageOperationValue({
+  ui: (form) => operations_all2.ui(form).imageOperations,
+  run: (state, image, form) => operations_all2.run(state, image, { imageOperations: form })
+});
 
 // library/ricklove/my-cushy-deck/raw-power.ts
 appOptimized({
@@ -1181,6 +1495,8 @@ appOptimized({
       markdown: () => `# Crop Image`
     }),
     // crop1:
+    cropPreImageOperations: operation_image.ui(form),
+    previewCropPreImage: form.inlineRun({}),
     cropMaskOperations: operation_mask.ui(form),
     cropPadding: form.int({ default: 64 }),
     size: form.choice({
@@ -1200,6 +1516,8 @@ appOptimized({
       markdown: () => `# Mask Replacement`
     }),
     //operation_mask.ui(form).maskOperations,
+    replacePreImageOperations: operation_image.ui(form),
+    previewReplacePreImage: form.inlineRun({}),
     replaceMaskOperations: operation_mask.ui(form),
     previewReplaceMask: form.inlineRun({}),
     // ...operation_replaceMask.ui(form),
@@ -1286,555 +1604,267 @@ appOptimized({
     })
   }),
   run: async (runtime, form) => {
-    const _imageDirectory = form.imageSource.directory.replace(/\/$/g, ``);
-    const {
-      defineStep,
-      runSteps,
-      state: _state
-    } = createStepsSystem({
-      runtime,
-      imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
-      comfyUiInputRelativePath: `../comfyui/ComfyUI/input`,
-      graph: runtime.nodes,
-      scopeStack: [{}]
-    });
-    const startImageStep = defineStep({
-      name: `startImageStep`,
-      preview: form.imageSource.preview,
-      cacheParams: [],
-      inputSteps: {},
-      create: ({ graph, imageDirectory, workingDirectory }, {}) => {
-        const loadImageNode = graph.RL$_LoadImageSequence({
-          path: `${imageDirectory}/${form.imageSource.filePattern}`,
-          current_frame: 0
-        });
-        const startImage = loadImageNode.outputs.image;
-        const saveImageNode = graph.RL$_SaveImageSequence({
-          images: startImage,
-          current_frame: 0,
-          path: `../input/${workingDirectory}/_start-image/#####.png`
-        });
-        return {
-          nodes: { loadImageNode, saveImageNode },
-          outputs: { startImage }
-        };
-      },
-      modify: ({ nodes, frameIndex }) => {
-        nodes.loadImageNode.inputs.current_frame = frameIndex;
-        nodes.saveImageNode.inputs.current_frame = frameIndex;
-      }
-    });
-    const cropMaskStep = defineStep({
-      name: `cropMaskStep`,
-      preview: form.previewCropMask,
-      cacheParams: [form.cropMaskOperations],
-      inputSteps: { startImageStep },
-      create: (state, { inputs }) => {
-        const { startImage } = inputs;
-        const cropMask = operation_mask.run(state, startImage, void 0, form.cropMaskOperations);
-        return {
-          nodes: {},
-          outputs: { cropMask }
-        };
-      },
-      modify: ({ nodes, frameIndex }) => {
-      }
-    });
-    const cropStep = defineStep({
-      name: `cropStep`,
-      preview: form.previewCrop,
-      cacheParams: [form.size, form.cropPadding, form.sizeWidth, form.sizeHeight],
-      inputSteps: { startImageStep, cropMaskStep },
-      create: ({ graph, workingDirectory }, { inputs }) => {
-        const { startImage, cropMask } = inputs;
-        const { size: sizeInput, cropPadding, sizeWidth, sizeHeight } = form;
-        const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
-        const startImageSize = graph.Get_Image_Size({
-          image: startImage
-        });
-        const {
-          cropped_image: croppedImage,
-          left_source,
-          right_source,
-          top_source,
-          bottom_source
-        } = !cropMask ? {
-          cropped_image: startImage,
-          left_source: 0,
-          right_source: startImageSize.outputs.INT,
-          top_source: 0,
-          bottom_source: startImageSize.outputs.INT_1
-        } : graph.RL$_Crop$_Resize({
-          image: startImage,
-          mask: cropMask,
-          max_side_length: size,
-          width: sizeWidth ?? void 0,
-          height: sizeHeight ?? void 0,
-          padding: cropPadding
-        }).outputs;
-        const blackImage = graph.EmptyImage({
-          color: 0,
-          width: startImageSize.outputs.INT,
-          height: startImageSize.outputs.INT_1,
-          batch_size: 1
-        });
-        const whiteImage = graph.EmptyImage({
-          color: 16777215,
-          width: startImageSize.outputs.INT,
-          height: startImageSize.outputs.INT_1,
-          batch_size: 1
-        });
-        const cropAreaImage = graph.Image_Paste_Crop_by_Location({
-          image: blackImage,
-          crop_image: whiteImage,
-          crop_blending: 0,
-          left: left_source,
-          right: right_source,
-          top: top_source,
-          bottom: bottom_source
-        }).outputs.IMAGE;
-        const saveCropAreaImageNode = graph.RL$_SaveImageSequence({
-          images: cropAreaImage,
-          current_frame: 0,
-          path: `../input/${workingDirectory}/_crop-area/#####.png`
-        });
-        return {
-          nodes: { saveCropAreaImageNode },
-          outputs: { croppedImage }
-        };
-      },
-      modify: ({ nodes, frameIndex }) => {
-        nodes.saveCropAreaImageNode.inputs.current_frame = frameIndex;
-      }
-    });
-    const replaceMaskStep = defineStep({
-      name: `replaceMaskStep`,
-      preview: form.previewReplaceMask,
-      cacheParams: [form.replaceMaskOperations],
-      inputSteps: { cropStep },
-      create: (state, { inputs }) => {
-        const { croppedImage } = inputs;
-        const replaceMask = operation_mask.run(state, croppedImage, void 0, form.replaceMaskOperations);
-        const s = state.graph.Get_image_size({
-          image: croppedImage
-        });
-        const solidMask = state.graph.SolidMask({
-          value: 1,
-          width: s.outputs.INT,
-          height: s.outputs.INT_1
-        });
-        const replaceMaskImage = state.graph.MaskToImage({
-          mask: replaceMask ?? solidMask
-        });
-        const saveReplaceMaskImageNode = state.graph.RL$_SaveImageSequence({
-          images: replaceMaskImage,
-          current_frame: 0,
-          path: `../input/${state.workingDirectory}/_replace-mask/#####.png`
-        });
-        return {
-          nodes: {
-            saveReplaceMaskImageNode
-          },
-          outputs: { replaceMask }
-        };
-      },
-      modify: ({ nodes, frameIndex }) => {
-        nodes.saveReplaceMaskImageNode.inputs.current_frame = frameIndex;
-      }
-    });
-    const controlNetStackStep = (() => {
-      let controlNetStepPrev = void 0;
-      for (const c of form.controlNet) {
-        const preprocessorKind = c.controlNet.toLowerCase().includes(`depth`) ? `zoe-depth` : c.controlNet.toLowerCase().includes(`normal`) ? `bae-normal` : c.controlNet.toLowerCase().includes(`sketch`) || c.controlNet.toLowerCase().includes(`canny`) ? `hed` : void 0;
-        const preprocessorStep = defineStep({
-          name: `preprocessorStep`,
-          preview: c.preview,
-          cacheParams: [preprocessorKind],
-          inputSteps: { cropStep },
-          create: ({ graph }, { inputs }) => {
-            const { croppedImage } = inputs;
-            const imagePre = preprocessorKind === `zoe-depth` ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }).outputs.IMAGE : preprocessorKind === `bae-normal` ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }).outputs.IMAGE : preprocessorKind === `hed` ? graph.HEDPreprocessor({ image: croppedImage, safe: `enable`, version: `v1.1` }).outputs.IMAGE : croppedImage;
-            return {
-              nodes: {},
-              outputs: { imagePre }
-            };
-          },
-          modify: ({ nodes, frameIndex }) => {
-          }
-        });
-        const controlNetStep = defineStep({
-          name: `controlNetStep`,
-          preview: c.preview,
-          cacheParams: [],
-          inputSteps: { preprocessorStep, controlNetStepPrev },
-          create: ({ graph }, { inputs }) => {
-            const { imagePre, controlNetStack: controlNetStackPrev } = inputs;
-            console.log(`controlNetStep:`, { imagePre, controlNetStackPrev });
-            const controlNetStack = graph.Control_Net_Stacker({
-              cnet_stack: controlNetStackPrev,
-              control_net: graph.ControlNetLoader({ control_net_name: c.controlNet }),
-              image: imagePre,
-              strength: c.strength,
-              start_percent: c.start,
-              end_percent: c.end
-            }).outputs.CNET_STACK;
-            return {
-              nodes: {},
-              outputs: { controlNetStack }
-            };
-          },
-          modify: ({ nodes, frameIndex }) => {
-          }
-        });
-        controlNetStepPrev = controlNetStep;
-      }
-      return controlNetStepPrev;
-    })();
-    const samplerStep_create = (iRepeat) => defineStep({
-      name: `samplerStep`,
-      preview: form.sampler.preview,
-      cacheParams: [form.sampler, iRepeat],
-      inputSteps: { cropStep, replaceMaskStep, controlNetStackStep },
-      create: ({ graph }, { inputs }) => {
-        const { croppedImage, replaceMask, controlNetStack } = inputs;
-        if (form.sampler.previewInputs) {
-          graph.PreviewImage({ images: croppedImage });
-          if (replaceMask) {
-            const maskImage = graph.MaskToImage({ mask: replaceMask });
-            graph.PreviewImage({ images: maskImage });
-          }
-          throw new StopError(void 0);
-        }
-        const loraStack = !form.sampler.lcm ? void 0 : graph.LoRA_Stacker({
-          input_mode: `simple`,
-          lora_count: 1,
-          lora_name_1: !form.sampler.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`
-        });
-        const loader = graph.Efficient_Loader({
-          ckpt_name: form.sampler.checkpoint,
-          lora_stack: loraStack,
-          cnet_stack: controlNetStack,
-          // defaults
-          lora_name: `None`,
-          token_normalization: `none`,
-          vae_name: `Baked VAE`,
-          weight_interpretation: `comfy`,
-          positive: form.sampler.positive,
-          negative: form.sampler.negative
-        });
-        const startLatent = (() => {
-          if (replaceMask && form.sampler.useImpaintingEncode) {
-            const imageList = graph.ImpactImageBatchToImageList({
-              image: croppedImage
-            });
-            let maskList = graph.MasksToMaskList({
-              masks: replaceMask
-            }).outputs.MASK;
-            const latentList = graph.VAEEncodeForInpaint({ pixels: imageList, vae: loader, mask: maskList });
-            return graph.RebatchLatents({
-              latents: latentList
-            });
-          }
-          const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader });
-          if (!replaceMask) {
-            return startLatent0;
-          }
-          const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask });
-          return startLatent1;
-        })();
-        let latent = startLatent._LATENT;
-        if (form.sampler.previewLatent) {
-          if (replaceMask) {
-            const maskImage = graph.MaskToImage({ mask: replaceMask });
-            graph.PreviewImage({ images: maskImage });
-          }
-          const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE });
-          graph.PreviewImage({ images: latentImage });
-          throw new StopError(void 0);
-        }
-        const startStep = Math.max(
-          0,
-          Math.min(
-            form.sampler.steps - 1,
-            form.sampler.startStep ? form.sampler.startStep : form.sampler.startStepFromEnd ? form.sampler.steps - form.sampler.startStepFromEnd : 0
-          )
-        );
-        const endStep = Math.max(
-          1,
-          Math.min(
-            form.sampler.steps,
-            form.sampler.endStep ? form.sampler.endStep : form.sampler.endStepFromEnd ? form.sampler.steps - form.sampler.endStepFromEnd : form.sampler.stepsToIterate ? startStep + form.sampler.stepsToIterate : form.sampler.steps
-          )
-        );
-        const seed = form.sampler.seed;
-        const sampler = graph.KSampler_Adv$5_$1Efficient$2({
-          add_noise: form.sampler.add_noise ? `enable` : `disable`,
-          return_with_leftover_noise: `disable`,
-          vae_decode: `true`,
-          preview_method: `auto`,
-          noise_seed: seed + iRepeat,
-          steps: form.sampler.steps,
-          start_at_step: startStep,
-          end_at_step: endStep,
-          cfg: form.sampler.config,
-          sampler_name: "lcm",
-          scheduler: "normal",
-          model: loader,
-          positive: loader.outputs.CONDITIONING$6,
-          //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
-          negative: loader.outputs.CONDITIONING$7,
-          //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
-          // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
-          // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
-          latent_image: startLatent
-        });
-        const finalImage = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE;
-        graph.SaveImage({
-          images: finalImage,
-          filename_prefix: "cushy"
-        });
-        graph.PreviewImage({
-          images: finalImage
-        });
-        return {
-          nodes: {},
-          outputs: { finalImage }
-        };
-      },
-      modify: ({ nodes, frameIndex }) => {
-      }
-    });
-    const samplerSteps = [...new Array(form.film?.singleFramePyramidSize ?? 1)].map((_, i) => samplerStep_create(i));
-    let finalStep = samplerSteps[0];
-    if (form.film?.singleFramePyramidSize) {
-      const { singleFramePyramidSize } = form.film;
-      finalStep = defineStep({
-        name: `filmStep`,
-        preview: form.film.preview,
-        cacheParams: [singleFramePyramidSize],
-        inputSteps: { samplerSteps },
-        create: (state, { inputs }) => {
-          const finalImages = samplerSteps.map((x) => () => x._build?.outputs.finalImage).filter((x) => x).map((x) => x);
-          const { graph } = state;
-          let images = finalImages[0];
-          for (const f of finalImages.slice(1)) {
-            images = graph.ImageBatch({
-              image1: images,
-              image2: f
-            }).outputs.IMAGE;
-          }
-          const filmModel = graph.Load_Film_Model_$1mtb$2({
-            film_model: `Style`
-          });
-          let oddFrames = images;
-          for (let iLayer = 0; iLayer < singleFramePyramidSize - 1; iLayer++) {
-            const filmFrames = graph.Film_Interpolation_$1mtb$2({
-              film_model: filmModel,
-              images: oddFrames,
-              interpolate: 1
-            });
-            graph.SaveImage({
-              images: filmFrames,
-              filename_prefix: `film`
-            });
-            const filmframes_removedFirst = graph.ImageBatchRemove({
-              images: filmFrames,
-              index: 1
-            });
-            oddFrames = graph.VHS$_SelectEveryNthImage({
-              images: filmframes_removedFirst,
-              select_every_nth: 2
-            }).outputs.IMAGE;
-          }
-          const interpolatedFrame = oddFrames;
-          return {
-            nodes: {},
-            outputs: { finalImage: interpolatedFrame, interpolatedFrame }
-          };
-        },
-        modify: ({ nodes, frameIndex }) => {
-        }
-      });
-    }
-    defineStep({
-      name: `finalSave`,
-      // preview: form.film.preview,
-      cacheParams: [],
-      inputSteps: { finalStep },
-      create: (state, { inputs }) => {
-        const { finalImage } = inputs;
-        const { graph } = state;
-        const saveImageNode = graph.RL$_SaveImageSequence({
-          images: finalImage,
-          current_frame: 0,
-          path: `../input/${state.workingDirectory}/_final/#####.png`
-        });
-        return {
-          nodes: { saveImageNode },
-          outputs: { finalSavedImage: finalImage }
-        };
-      },
-      modify: ({ nodes, frameIndex }) => {
-        console.log(`finalSave: modify`, { frameIndex });
-        nodes.saveImageNode.inputs.current_frame = frameIndex;
-      }
-    });
-    const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
-      frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
-    }));
-    let dependecyKeyRef = await runSteps(frameIndexes.map((x) => x.frameIndex));
-    if (form.film?.sideFrameDoubleBackIterations) {
-      const { sideFrameDoubleBackIterations } = form.film;
-      console.log(`sideFrameDoubleBack START`);
-      disableNodesAfterInclusive(runtime, 0);
+    try {
+      const _imageDirectory = form.imageSource.directory.replace(/\/$/g, ``);
       const {
-        defineStep: defineStep2,
-        runSteps: runSteps2,
-        state: _state2
+        defineStep,
+        runSteps,
+        state: _state
       } = createStepsSystem({
         runtime,
         imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+        comfyUiInputRelativePath: `../comfyui/ComfyUI/input`,
         graph: runtime.nodes,
         scopeStack: [{}]
       });
-      const minCurrentFrame = Math.min(...frameIndexes.map((x) => x.frameIndex));
-      const maxCurrentFrame = Math.max(...frameIndexes.map((x) => x.frameIndex));
-      const size = 5;
-      const sizeHalf = size / 2 | 0;
-      defineStep2({
-        name: `sideFrameDoubleBack`,
-        // preview: form.film.preview,
-        cacheParams: [sideFrameDoubleBackIterations, size, dependecyKeyRef.dependencyKey],
+      const startImageStep = defineStep({
+        name: `startImageStep`,
+        preview: form.imageSource.preview,
+        cacheParams: [],
         inputSteps: {},
-        create: (state, { inputs }) => {
-          const { graph } = state;
-          const loadImageBatchNode = graph.RL$_LoadImageSequence({
-            path: `${state.workingDirectory}/_final/#####.png`,
-            current_frame: 0,
-            count: size
+        create: ({ graph, imageDirectory, workingDirectory }, {}) => {
+          const loadImageNode = graph.RL$_LoadImageSequence({
+            path: `${imageDirectory}/${form.imageSource.filePattern}`,
+            current_frame: 0
           });
-          const filmModel = graph.Load_Film_Model_$1mtb$2({
-            film_model: `Style`
-          });
-          let currentImages = loadImageBatchNode.outputs.image;
-          for (let i = 0; i < sideFrameDoubleBackIterations; i++) {
-            const filmFrames = graph.Film_Interpolation_$1mtb$2({
-              film_model: filmModel,
-              images: currentImages,
-              interpolate: 1
-            });
-            const filmframes_removedFirst = graph.ImageBatchRemove({
-              images: filmFrames,
-              index: 1
-            });
-            const middleFrames = graph.VHS$_SelectEveryNthImage({
-              images: filmframes_removedFirst,
-              select_every_nth: 2
-            });
-            const middleFrames_withFirst = graph.ImageBatchJoin({
-              images_a: graph.ImageBatchGet({
-                images: filmFrames,
-                index: 1
-              }),
-              images_b: middleFrames
-            });
-            const middleFrames_withFirstAndLast = graph.ImageBatchJoin({
-              images_a: middleFrames_withFirst,
-              images_b: graph.ImageBatchGet({
-                images: filmFrames,
-                index: graph.ImpactImageInfo({
-                  value: filmFrames
-                }).outputs.batch
-              })
-            });
-            const filmFrames2 = graph.Film_Interpolation_$1mtb$2({
-              film_model: filmModel,
-              images: middleFrames_withFirstAndLast,
-              interpolate: 1
-            });
-            const filmframes2_removedFirst = graph.ImageBatchRemove({
-              images: filmFrames2,
-              index: 1
-            });
-            const middleFrames2 = graph.VHS$_SelectEveryNthImage({
-              images: filmframes2_removedFirst,
-              select_every_nth: 2
-            });
-            currentImages = middleFrames2.outputs.IMAGE;
-          }
-          graph.SaveImage({
-            images: currentImages,
-            filename_prefix: `film`
-          });
-          const mainImageNode = graph.ImageBatchGet({
-            images: currentImages,
-            index: sizeHalf + 1
-          });
-          const mainImage = mainImageNode.outputs.IMAGE;
+          const startImage = loadImageNode.outputs.image;
           const saveImageNode = graph.RL$_SaveImageSequence({
-            images: mainImage,
+            images: startImage,
             current_frame: 0,
-            path: `../input/${state.workingDirectory}/_final-film/#####.png`
+            path: `../input/${workingDirectory}/_start-image/#####.png`
           });
           return {
-            nodes: { loadImageBatchNode, mainImageNode, saveImageNode },
-            outputs: { mainImage }
+            nodes: { loadImageNode, saveImageNode },
+            outputs: { startImage }
           };
         },
         modify: ({ nodes, frameIndex }) => {
-          const cStart = Math.max(minCurrentFrame, frameIndex - sizeHalf);
-          const cEnd = Math.min(maxCurrentFrame, frameIndex + sizeHalf);
-          const cCount = cEnd - cStart + 1;
-          nodes.loadImageBatchNode.inputs.current_frame = cStart;
-          nodes.loadImageBatchNode.inputs.count = cCount;
-          nodes.mainImageNode.inputs.index = frameIndex - cStart + 1;
+          nodes.loadImageNode.inputs.current_frame = frameIndex;
           nodes.saveImageNode.inputs.current_frame = frameIndex;
         }
       });
-      dependecyKeyRef = await runSteps2(frameIndexes.map((x) => x.frameIndex));
-    }
-    if (form.upscale) {
-      const formUpscale = form.upscale;
-      console.log(`upscale START`);
-      disableNodesAfterInclusive(runtime, 0);
-      const finalDir = form.film?.sideFrameDoubleBackIterations ? `_final-film` : `_final`;
-      const {
-        defineStep: defineStep2,
-        runSteps: runSteps2,
-        state: _state2
-      } = createStepsSystem({
-        runtime,
-        imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
-        graph: runtime.nodes,
-        scopeStack: [{}]
-      });
-      defineStep2({
-        name: `upscale`,
-        preview: formUpscale.preview,
-        cacheParams: [formUpscale, dependecyKeyRef.dependencyKey],
-        inputSteps: {},
+      const cropPreImageStep = defineStep({
+        name: `cropPreImageStep`,
+        preview: form.previewCropPreImage,
+        cacheParams: [form.cropPreImageOperations],
+        inputSteps: { startImageStep },
         create: (state, { inputs }) => {
-          const { graph } = state;
-          const loadImageNode = graph.RL$_LoadImageSequence({
-            path: `${state.workingDirectory}/${finalDir}/#####.png`,
-            current_frame: 0
+          const { startImage } = inputs;
+          const cropPreImage = operation_image.run(state, startImage, form.cropPreImageOperations);
+          return {
+            nodes: {},
+            outputs: { cropPreImage }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+        }
+      });
+      const cropMaskStep = defineStep({
+        name: `cropMaskStep`,
+        preview: form.previewCropMask,
+        cacheParams: [form.cropMaskOperations],
+        inputSteps: { cropPreImageStep },
+        create: (state, { inputs }) => {
+          const { cropPreImage } = inputs;
+          const cropMask = operation_mask.run(state, cropPreImage, void 0, form.cropMaskOperations);
+          return {
+            nodes: {},
+            outputs: { cropMask }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+        }
+      });
+      const cropStep = defineStep({
+        name: `cropStep`,
+        preview: form.previewCrop,
+        cacheParams: [form.size, form.cropPadding, form.sizeWidth, form.sizeHeight],
+        inputSteps: { startImageStep, cropMaskStep },
+        create: ({ graph, workingDirectory }, { inputs }) => {
+          const { startImage, cropMask } = inputs;
+          const { size: sizeInput, cropPadding, sizeWidth, sizeHeight } = form;
+          const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
+          const startImageSize = graph.Get_Image_Size({
+            image: startImage
           });
-          const controlNetStack = formUpscale.sdxl ? void 0 : graph.Control_Net_Stacker({
-            control_net: graph.ControlNetLoader({
-              control_net_name: `control_v11f1e_sd15_tile.pth`
-            }),
-            image: loadImageNode,
-            strength: formUpscale.tileStrength
+          const {
+            cropped_image: croppedImage,
+            left_source,
+            right_source,
+            top_source,
+            bottom_source
+          } = !cropMask ? {
+            cropped_image: startImage,
+            left_source: 0,
+            right_source: startImageSize.outputs.INT,
+            top_source: 0,
+            bottom_source: startImageSize.outputs.INT_1
+          } : graph.RL$_Crop$_Resize({
+            image: startImage,
+            mask: cropMask,
+            max_side_length: size,
+            width: sizeWidth ?? void 0,
+            height: sizeHeight ?? void 0,
+            padding: cropPadding
+          }).outputs;
+          const blackImage = graph.EmptyImage({
+            color: 0,
+            width: startImageSize.outputs.INT,
+            height: startImageSize.outputs.INT_1,
+            batch_size: 1
           });
-          const loraStack = !formUpscale.lcm ? void 0 : graph.LoRA_Stacker({
+          const whiteImage = graph.EmptyImage({
+            color: 16777215,
+            width: startImageSize.outputs.INT,
+            height: startImageSize.outputs.INT_1,
+            batch_size: 1
+          });
+          const cropAreaImage = graph.Image_Paste_Crop_by_Location({
+            image: blackImage,
+            crop_image: whiteImage,
+            crop_blending: 0,
+            left: left_source,
+            right: right_source,
+            top: top_source,
+            bottom: bottom_source
+          }).outputs.IMAGE;
+          const saveCropAreaImageNode = graph.RL$_SaveImageSequence({
+            images: cropAreaImage,
+            current_frame: 0,
+            path: `../input/${workingDirectory}/_crop-area/#####.png`
+          });
+          return {
+            nodes: { saveCropAreaImageNode },
+            outputs: { croppedImage }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+          nodes.saveCropAreaImageNode.inputs.current_frame = frameIndex;
+        }
+      });
+      const replacePreImageStep = defineStep({
+        name: `replacePreImageStep`,
+        preview: form.previewReplacePreImage,
+        cacheParams: [form.replacePreImageOperations],
+        inputSteps: { cropStep },
+        create: (state, { inputs }) => {
+          const { croppedImage } = inputs;
+          const replacePreImage = operation_image.run(state, croppedImage, form.replacePreImageOperations);
+          return {
+            nodes: {},
+            outputs: { replacePreImage }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+        }
+      });
+      const replaceMaskStep = defineStep({
+        name: `replaceMaskStep`,
+        preview: form.previewReplaceMask,
+        cacheParams: [form.replaceMaskOperations],
+        inputSteps: { replacePreImageStep },
+        create: (state, { inputs }) => {
+          const { replacePreImage } = inputs;
+          const replaceMask = operation_mask.run(state, replacePreImage, void 0, form.replaceMaskOperations);
+          const s = state.graph.Get_image_size({
+            image: replacePreImage
+          });
+          const solidMask = state.graph.SolidMask({
+            value: 1,
+            width: s.outputs.INT,
+            height: s.outputs.INT_1
+          });
+          const replaceMaskImage = state.graph.MaskToImage({
+            mask: replaceMask ?? solidMask
+          });
+          const saveReplaceMaskImageNode = state.graph.RL$_SaveImageSequence({
+            images: replaceMaskImage,
+            current_frame: 0,
+            path: `../input/${state.workingDirectory}/_replace-mask/#####.png`
+          });
+          return {
+            nodes: {
+              saveReplaceMaskImageNode
+            },
+            outputs: { replaceMask }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+          nodes.saveReplaceMaskImageNode.inputs.current_frame = frameIndex;
+        }
+      });
+      const controlNetStackStep = (() => {
+        let controlNetStepPrev = void 0;
+        for (const c of form.controlNet) {
+          const preprocessorKind = c.controlNet.toLowerCase().includes(`depth`) ? `zoe-depth` : c.controlNet.toLowerCase().includes(`normal`) ? `bae-normal` : c.controlNet.toLowerCase().includes(`sketch`) || c.controlNet.toLowerCase().includes(`canny`) ? `hed` : void 0;
+          const preprocessorStep = defineStep({
+            name: `preprocessorStep`,
+            preview: c.preview,
+            cacheParams: [preprocessorKind],
+            inputSteps: { cropStep },
+            create: ({ graph }, { inputs }) => {
+              const { croppedImage } = inputs;
+              const imagePre = preprocessorKind === `zoe-depth` ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }).outputs.IMAGE : preprocessorKind === `bae-normal` ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }).outputs.IMAGE : preprocessorKind === `hed` ? graph.HEDPreprocessor({ image: croppedImage, safe: `enable`, version: `v1.1` }).outputs.IMAGE : croppedImage;
+              return {
+                nodes: {},
+                outputs: { imagePre }
+              };
+            },
+            modify: ({ nodes, frameIndex }) => {
+            }
+          });
+          const controlNetStep = defineStep({
+            name: `controlNetStep`,
+            preview: c.preview,
+            cacheParams: [],
+            inputSteps: { preprocessorStep, controlNetStepPrev },
+            create: ({ graph }, { inputs }) => {
+              const { imagePre, controlNetStack: controlNetStackPrev } = inputs;
+              console.log(`controlNetStep:`, { imagePre, controlNetStackPrev });
+              const controlNetStack = graph.Control_Net_Stacker({
+                cnet_stack: controlNetStackPrev,
+                control_net: graph.ControlNetLoader({ control_net_name: c.controlNet }),
+                image: imagePre,
+                strength: c.strength,
+                start_percent: c.start,
+                end_percent: c.end
+              }).outputs.CNET_STACK;
+              return {
+                nodes: {},
+                outputs: { controlNetStack }
+              };
+            },
+            modify: ({ nodes, frameIndex }) => {
+            }
+          });
+          controlNetStepPrev = controlNetStep;
+        }
+        return controlNetStepPrev;
+      })();
+      const samplerStep_create = (iRepeat) => defineStep({
+        name: `samplerStep`,
+        preview: form.sampler.preview,
+        cacheParams: [form.sampler, iRepeat],
+        inputSteps: { cropStep, replaceMaskStep, controlNetStackStep },
+        create: ({ graph }, { inputs }) => {
+          const { croppedImage, replaceMask, controlNetStack } = inputs;
+          if (form.sampler.previewInputs) {
+            graph.PreviewImage({ images: croppedImage });
+            if (replaceMask) {
+              const maskImage = graph.MaskToImage({ mask: replaceMask });
+              graph.PreviewImage({ images: maskImage });
+            }
+            throw new StopError(void 0);
+          }
+          const loraStack = !form.sampler.lcm ? void 0 : graph.LoRA_Stacker({
             input_mode: `simple`,
             lora_count: 1,
-            lora_name_1: !formUpscale.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`
+            lora_name_1: !form.sampler.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`
           });
           const loader = graph.Efficient_Loader({
-            ckpt_name: formUpscale.checkpoint,
-            cnet_stack: controlNetStack,
+            ckpt_name: form.sampler.checkpoint,
             lora_stack: loraStack,
+            cnet_stack: controlNetStack,
             // defaults
             lora_name: `None`,
             token_normalization: `none`,
@@ -1843,320 +1873,458 @@ appOptimized({
             positive: form.sampler.positive,
             negative: form.sampler.negative
           });
-          const upscaleNode = graph.UltimateSDUpscale({
-            image: loadImageNode,
-            force_uniform_tiles: `enable`,
-            mode_type: `Linear`,
-            seam_fix_mode: `None`,
+          const startLatent = (() => {
+            if (replaceMask && form.sampler.useImpaintingEncode) {
+              const imageList = graph.ImpactImageBatchToImageList({
+                image: croppedImage
+              });
+              let maskList = graph.MasksToMaskList({
+                masks: replaceMask
+              }).outputs.MASK;
+              const latentList = graph.VAEEncodeForInpaint({ pixels: imageList, vae: loader, mask: maskList });
+              return graph.RebatchLatents({
+                latents: latentList
+              });
+            }
+            const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader });
+            if (!replaceMask) {
+              return startLatent0;
+            }
+            const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask });
+            return startLatent1;
+          })();
+          let latent = startLatent._LATENT;
+          if (form.sampler.previewLatent) {
+            if (replaceMask) {
+              const maskImage = graph.MaskToImage({ mask: replaceMask });
+              graph.PreviewImage({ images: maskImage });
+            }
+            const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE });
+            graph.PreviewImage({ images: latentImage });
+            throw new StopError(void 0);
+          }
+          const startStep = Math.max(
+            0,
+            Math.min(
+              form.sampler.steps - 1,
+              form.sampler.startStep ? form.sampler.startStep : form.sampler.startStepFromEnd ? form.sampler.steps - form.sampler.startStepFromEnd : 0
+            )
+          );
+          const endStep = Math.max(
+            1,
+            Math.min(
+              form.sampler.steps,
+              form.sampler.endStep ? form.sampler.endStep : form.sampler.endStepFromEnd ? form.sampler.steps - form.sampler.endStepFromEnd : form.sampler.stepsToIterate ? startStep + form.sampler.stepsToIterate : form.sampler.steps
+            )
+          );
+          const seed = form.sampler.seed;
+          const sampler = graph.KSampler_Adv$5_$1Efficient$2({
+            add_noise: form.sampler.add_noise ? `enable` : `disable`,
+            return_with_leftover_noise: `disable`,
+            vae_decode: `true`,
+            preview_method: `auto`,
+            noise_seed: seed + iRepeat,
+            steps: form.sampler.steps,
+            start_at_step: startStep,
+            end_at_step: endStep,
+            cfg: form.sampler.config,
+            sampler_name: "lcm",
+            scheduler: "normal",
             model: loader,
-            vae: loader,
             positive: loader.outputs.CONDITIONING$6,
+            //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
             negative: loader.outputs.CONDITIONING$7,
-            upscale_model: graph.UpscaleModelLoader({
-              model_name: `8x_NMKD-Superscale_150000_G.pth`
-            }),
-            sampler_name: formUpscale.lcm ? `lcm` : `dpmpp_2m_sde_gpu`,
-            scheduler: formUpscale.lcm ? `normal` : `karras`,
-            denoise: formUpscale.denoise,
-            cfg: formUpscale.config,
-            seed: form.sampler.seed,
-            tile_width: formUpscale.sdxl ? (form.sizeWidth ?? 1024) * formUpscale.upscaleBy : 576,
-            tile_height: formUpscale.sdxl ? (form.sizeHeight ?? 1024) * formUpscale.upscaleBy : 768,
-            steps: formUpscale.steps,
-            // tile_width: 1536,
-            // tile_height: 2048,
-            upscale_by: formUpscale.upscaleBy
+            //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
+            // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
+            // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
+            latent_image: startLatent
           });
-          const upscaledImage = upscaleNode.outputs.IMAGE;
+          const finalImage = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE;
           graph.SaveImage({
-            images: upscaledImage,
-            filename_prefix: `upscale`
+            images: finalImage,
+            filename_prefix: "cushy"
           });
-          const saveImageNode = graph.RL$_SaveImageSequence({
-            images: upscaledImage,
-            current_frame: 0,
-            path: `../input/${state.workingDirectory}/_final-upscale/#####.png`
+          graph.PreviewImage({
+            images: finalImage
           });
           return {
-            nodes: { loadImageNode, saveImageNode },
-            outputs: { upscaledImage }
+            nodes: {},
+            outputs: { finalImage }
           };
         },
         modify: ({ nodes, frameIndex }) => {
-          nodes.loadImageNode.inputs.current_frame = frameIndex;
+        }
+      });
+      const samplerSteps = [...new Array(form.film?.singleFramePyramidSize ?? 1)].map((_, i) => samplerStep_create(i));
+      let finalStep = samplerSteps[0];
+      if (form.film?.singleFramePyramidSize) {
+        const { singleFramePyramidSize } = form.film;
+        finalStep = defineStep({
+          name: `filmStep`,
+          preview: form.film.preview,
+          cacheParams: [singleFramePyramidSize],
+          inputSteps: { samplerSteps },
+          create: (state, { inputs }) => {
+            const finalImages = samplerSteps.map((x) => () => x._build?.outputs.finalImage).filter((x) => x).map((x) => x);
+            const { graph } = state;
+            let images = finalImages[0];
+            for (const f of finalImages.slice(1)) {
+              images = graph.ImageBatch({
+                image1: images,
+                image2: f
+              }).outputs.IMAGE;
+            }
+            const filmModel = graph.Load_Film_Model_$1mtb$2({
+              film_model: `Style`
+            });
+            let oddFrames = images;
+            for (let iLayer = 0; iLayer < singleFramePyramidSize - 1; iLayer++) {
+              const filmFrames = graph.Film_Interpolation_$1mtb$2({
+                film_model: filmModel,
+                images: oddFrames,
+                interpolate: 1
+              });
+              graph.SaveImage({
+                images: filmFrames,
+                filename_prefix: `film`
+              });
+              const filmframes_removedFirst = graph.ImageBatchRemove({
+                images: filmFrames,
+                index: 1
+              });
+              oddFrames = graph.VHS$_SelectEveryNthImage({
+                images: filmframes_removedFirst,
+                select_every_nth: 2
+              }).outputs.IMAGE;
+            }
+            const interpolatedFrame = oddFrames;
+            return {
+              nodes: {},
+              outputs: { finalImage: interpolatedFrame, interpolatedFrame }
+            };
+          },
+          modify: ({ nodes, frameIndex }) => {
+          }
+        });
+      }
+      defineStep({
+        name: `finalSave`,
+        // preview: form.film.preview,
+        cacheParams: [],
+        inputSteps: { finalStep },
+        create: (state, { inputs }) => {
+          const { finalImage } = inputs;
+          const { graph } = state;
+          const saveImageNode = graph.RL$_SaveImageSequence({
+            images: finalImage,
+            current_frame: 0,
+            path: `../input/${state.workingDirectory}/_final/#####.png`
+          });
+          return {
+            nodes: { saveImageNode },
+            outputs: { finalSavedImage: finalImage }
+          };
+        },
+        modify: ({ nodes, frameIndex }) => {
+          console.log(`finalSave: modify`, { frameIndex });
           nodes.saveImageNode.inputs.current_frame = frameIndex;
         }
       });
-      dependecyKeyRef = await runSteps2(frameIndexes.map((x) => x.frameIndex));
-    }
-    if (form.uncrop) {
-      const formUncrop = form.uncrop;
-      console.log(`uncrop START`);
-      disableNodesAfterInclusive(runtime, 0);
-      const startDir = `_start-image`;
-      const finalDir = form.upscale ? `_final-upscale` : form.film?.sideFrameDoubleBackIterations ? `_final-film` : `_final`;
-      const cropAreaDir = `_crop-area`;
-      const replaceMaskDir = `_replace-mask`;
-      const {
-        defineStep: defineStep2,
-        runSteps: runSteps2,
-        state: _state2
-      } = createStepsSystem({
-        runtime,
-        imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
-        graph: runtime.nodes,
-        scopeStack: [{}]
-      });
-      defineStep2({
-        name: `upscale`,
-        preview: formUncrop.preview,
-        cacheParams: [formUncrop, dependecyKeyRef.dependencyKey],
-        inputSteps: {},
-        create: (state, { inputs }) => {
-          const { graph } = state;
-          const loadStartImageNode = graph.RL$_LoadImageSequence({
-            path: `${state.workingDirectory}/${startDir}/#####.png`,
-            current_frame: 0
-          });
-          const loadFinalImageNode = graph.RL$_LoadImageSequence({
-            path: `${state.workingDirectory}/${finalDir}/#####.png`,
-            current_frame: 0
-          });
-          const loadCropAreaImageNode = graph.RL$_LoadImageSequence({
-            path: `${state.workingDirectory}/${cropAreaDir}/#####.png`,
-            current_frame: 0
-          });
-          const loadReplaceMaskImageNode = graph.RL$_LoadImageSequence({
-            path: `${state.workingDirectory}/${replaceMaskDir}/#####.png`,
-            current_frame: 0
-          });
-          const uncroppedReplaceMaskImage = graph.Paste_By_Mask({
-            image_base: loadCropAreaImageNode,
-            image_to_paste: loadReplaceMaskImageNode,
-            mask: loadCropAreaImageNode,
-            resize_behavior: `resize`
-          }).outputs.IMAGE;
-          const uncroppedFinalImage = graph.Paste_By_Mask({
-            image_base: loadStartImageNode,
-            image_to_paste: loadFinalImageNode,
-            mask: loadCropAreaImageNode,
-            resize_behavior: `resize`
-          }).outputs.IMAGE;
-          const restoredImage = graph.Image_Blend_by_Mask({
-            image_a: loadStartImageNode,
-            image_b: uncroppedFinalImage,
-            mask: uncroppedReplaceMaskImage,
-            blend_percentage: 1
-          }).outputs.IMAGE;
-          const uncroppedImage = restoredImage;
-          graph.SaveImage({
-            images: uncroppedImage,
-            filename_prefix: `uncropped`
-          });
-          return {
-            nodes: { loadStartImageNode, loadFinalImageNode, loadCropAreaImageNode, loadReplaceMaskImageNode },
-            outputs: { uncroppedImage, uncroppedReplaceMaskImage, uncroppedFinalImage }
-          };
-        },
-        modify: ({ nodes, frameIndex }) => {
-          nodes.loadStartImageNode.inputs.current_frame = frameIndex;
-          nodes.loadFinalImageNode.inputs.current_frame = frameIndex;
-          nodes.loadCropAreaImageNode.inputs.current_frame = frameIndex;
-          nodes.loadReplaceMaskImageNode.inputs.current_frame = frameIndex;
-        }
-      });
-      dependecyKeyRef = await runSteps2(frameIndexes.map((x) => x.frameIndex));
-    }
-    return;
-    const iterate = async (iterationIndex) => {
-      runtime.print(`${JSON.stringify(form)}`);
-      const dependencyKeyRef = { dependencyKey: `` };
-      const state = _state;
-      const { imageDirectory, graph } = state;
-      state.scopeStack = [{}];
-      const frameIndex = form.imageSource.startIndex + iterationIndex * (form.imageSource.selectEveryNth ?? 1);
-      const startImage = graph.RL$_LoadImageSequence({
-        path: `${imageDirectory}/${form.imageSource.filePattern}`,
-        current_frame: frameIndex
-      }).outputs.image;
-      if (form.imageSource.preview) {
-        graph.PreviewImage({ images: startImage });
-        throw new StopError(void 0);
-      }
-      const { mask: cropMask } = await cacheMask(
-        state,
-        `cropMask`,
-        frameIndex,
-        form.cropMaskOperations,
-        dependencyKeyRef,
-        async () => operation_mask.run(state, startImage, void 0, form.cropMaskOperations)
-      );
-      if (form.previewCropMask) {
-        graph.PreviewImage({ images: startImage });
-        if (cropMask) {
-          const maskImage = graph.MaskToImage({ mask: cropMask });
-          graph.PreviewImage({ images: maskImage });
-        }
-        throw new StopError(void 0);
-      }
-      const { size: sizeInput, cropPadding } = form;
-      const size = typeof sizeInput === `number` ? sizeInput : Number(sizeInput.id);
-      const { image: croppedImage } = !cropMask ? { image: startImage } : await cacheImage(
-        state,
-        `croppedImage`,
-        frameIndex,
-        { size, cropPadding },
-        dependencyKeyRef,
-        async () => graph.RL$_Crop$_Resize({
-          image: startImage,
-          mask: cropMask,
-          max_side_length: size,
-          padding: cropPadding
-        }).outputs.cropped_image
-      );
-      if (form.previewCrop) {
-        graph.PreviewImage({ images: startImage });
-        if (cropMask) {
-          const maskImage = graph.MaskToImage({ mask: cropMask });
-          graph.PreviewImage({ images: maskImage });
-        }
-        graph.PreviewImage({ images: croppedImage });
-        throw new StopError(void 0);
-      }
-      const { mask: replaceMask } = await cacheMask(
-        state,
-        `replaceMask`,
-        frameIndex,
-        form.replaceMaskOperations,
-        dependencyKeyRef,
-        async () => await operation_mask.run(state, croppedImage, void 0, form.replaceMaskOperations)
-      );
-      let controlNetStack = void 0;
-      for (const c of form.controlNet) {
-        const preprocessorKind = c.controlNet.toLowerCase().includes(`depth`) ? `zoe-depth` : c.controlNet.toLowerCase().includes(`normal`) ? `bae-normal` : void 0;
-        const { image: imagePre } = !preprocessorKind ? { image: croppedImage } : await cacheImage(
-          state,
-          `preprocessor`,
-          frameIndex,
-          { preprocessorKind },
-          dependencyKeyRef,
-          async () => preprocessorKind === `zoe-depth` ? graph.Zoe$7DepthMapPreprocessor({ image: croppedImage }) : preprocessorKind === `bae-normal` ? graph.BAE$7NormalMapPreprocessor({ image: croppedImage }) : croppedImage
-        );
-        if (c.preview) {
-          graph.PreviewImage({ images: imagePre });
-          throw new StopError(void 0);
-        }
-        controlNetStack = graph.Control_Net_Stacker({
-          cnet_stack: controlNetStack,
-          control_net: graph.ControlNetLoader({ control_net_name: c.controlNet }),
-          image: imagePre,
-          strength: c.strength,
-          start_percent: c.start,
-          end_percent: c.end
-        });
-      }
-      const loraStack = !form.sampler.lcm ? void 0 : graph.LoRA_Stacker({
-        input_mode: `simple`,
-        lora_count: 1,
-        lora_name_1: !form.sampler.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`
-      });
-      const loader = graph.Efficient_Loader({
-        ckpt_name: form.sampler.checkpoint,
-        lora_stack: loraStack,
-        cnet_stack: controlNetStack,
-        // defaults
-        lora_name: `None`,
-        token_normalization: `none`,
-        vae_name: `Baked VAE`,
-        weight_interpretation: `comfy`,
-        positive: form.sampler.positive,
-        negative: form.sampler.negative
-      });
-      const startLatent = (() => {
-        if (replaceMask && form.sampler.useImpaintingEncode) {
-          const imageList = graph.ImpactImageBatchToImageList({
-            image: croppedImage
-          });
-          let maskList = graph.MasksToMaskList({
-            masks: replaceMask
-          }).outputs.MASK;
-          const latentList = graph.VAEEncodeForInpaint({ pixels: imageList, vae: loader, mask: maskList });
-          return graph.RebatchLatents({
-            latents: latentList
-          });
-        }
-        const startLatent0 = graph.VAEEncode({ pixels: croppedImage, vae: loader });
-        if (!replaceMask) {
-          return startLatent0;
-        }
-        const startLatent1 = graph.SetLatentNoiseMask({ samples: startLatent0, mask: replaceMask });
-        return startLatent1;
-      })();
-      let latent = startLatent._LATENT;
-      if (form.sampler.previewLatent) {
-        if (replaceMask) {
-          const maskImage = graph.MaskToImage({ mask: replaceMask });
-          graph.PreviewImage({ images: maskImage });
-        }
-        const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE });
-        graph.PreviewImage({ images: latentImage });
-        throw new StopError(void 0);
-      }
-      const seed = form.sampler.seed;
-      const startStep = Math.max(
-        0,
-        Math.min(
-          form.sampler.steps - 1,
-          form.sampler.startStep ? form.sampler.startStep : form.sampler.startStepFromEnd ? form.sampler.steps - form.sampler.startStepFromEnd : 0
-        )
-      );
-      const endStep = Math.max(
-        1,
-        Math.min(
-          form.sampler.steps,
-          form.sampler.endStep ? form.sampler.endStep : form.sampler.endStepFromEnd ? form.sampler.steps - form.sampler.endStepFromEnd : form.sampler.stepsToIterate ? startStep + form.sampler.stepsToIterate : form.sampler.steps
-        )
-      );
-      const sampler = graph.KSampler_Adv$5_$1Efficient$2({
-        add_noise: form.sampler.add_noise ? `enable` : `disable`,
-        return_with_leftover_noise: `disable`,
-        vae_decode: `true`,
-        preview_method: `auto`,
-        noise_seed: seed,
-        steps: form.sampler.steps,
-        start_at_step: startStep,
-        end_at_step: endStep,
-        cfg: form.sampler.config,
-        sampler_name: "lcm",
-        scheduler: "normal",
-        model: loader,
-        positive: loader.outputs.CONDITIONING$6,
-        //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
-        negative: loader.outputs.CONDITIONING$7,
-        //graph.CLIPTextEncode({ text: form.sampler.positive, clip: loader }),
-        // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
-        // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
-        latent_image: startLatent
-      });
-      graph.SaveImage({
-        images: graph.VAEDecode({ samples: sampler, vae: loader }),
-        filename_prefix: "ComfyUI"
-      });
-      const result = await runtime.PROMPT();
-    };
-    for (let i = 0; i < form.imageSource.iterationCount; i++) {
-      const loadingMain = showLoadingMessage(runtime, `iteration: ${i}`);
-      try {
-        await iterate(i);
-        loadingMain.delete();
+      const frameIndexes = [...new Array(form.imageSource.iterationCount)].map((_, i) => ({
+        frameIndex: form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
+      }));
+      let dependecyKeyRef = await runSteps(frameIndexes.map((x) => x.frameIndex));
+      if (form.film?.sideFrameDoubleBackIterations) {
+        const { sideFrameDoubleBackIterations } = form.film;
+        console.log(`sideFrameDoubleBack START`);
         disableNodesAfterInclusive(runtime, 0);
-      } catch (err) {
-        if (!(err instanceof StopError)) {
-          throw err;
-        }
-        await runtime.PROMPT();
-        loadingMain.delete();
+        const {
+          defineStep: defineStep2,
+          runSteps: runSteps2,
+          state: _state2
+        } = createStepsSystem({
+          runtime,
+          imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+          graph: runtime.nodes,
+          scopeStack: [{}]
+        });
+        const minCurrentFrame = Math.min(...frameIndexes.map((x) => x.frameIndex));
+        const maxCurrentFrame = Math.max(...frameIndexes.map((x) => x.frameIndex));
+        const size = 5;
+        const sizeHalf = size / 2 | 0;
+        defineStep2({
+          name: `sideFrameDoubleBack`,
+          // preview: form.film.preview,
+          cacheParams: [sideFrameDoubleBackIterations, size, dependecyKeyRef.dependencyKey],
+          inputSteps: {},
+          create: (state, { inputs }) => {
+            const { graph } = state;
+            const loadImageBatchNode = graph.RL$_LoadImageSequence({
+              path: `${state.workingDirectory}/_final/#####.png`,
+              current_frame: 0,
+              count: size
+            });
+            const filmModel = graph.Load_Film_Model_$1mtb$2({
+              film_model: `Style`
+            });
+            let currentImages = loadImageBatchNode.outputs.image;
+            for (let i = 0; i < sideFrameDoubleBackIterations; i++) {
+              const filmFrames = graph.Film_Interpolation_$1mtb$2({
+                film_model: filmModel,
+                images: currentImages,
+                interpolate: 1
+              });
+              const filmframes_removedFirst = graph.ImageBatchRemove({
+                images: filmFrames,
+                index: 1
+              });
+              const middleFrames = graph.VHS$_SelectEveryNthImage({
+                images: filmframes_removedFirst,
+                select_every_nth: 2
+              });
+              const middleFrames_withFirst = graph.ImageBatchJoin({
+                images_a: graph.ImageBatchGet({
+                  images: filmFrames,
+                  index: 1
+                }),
+                images_b: middleFrames
+              });
+              const middleFrames_withFirstAndLast = graph.ImageBatchJoin({
+                images_a: middleFrames_withFirst,
+                images_b: graph.ImageBatchGet({
+                  images: filmFrames,
+                  index: graph.ImpactImageInfo({
+                    value: filmFrames
+                  }).outputs.batch
+                })
+              });
+              const filmFrames2 = graph.Film_Interpolation_$1mtb$2({
+                film_model: filmModel,
+                images: middleFrames_withFirstAndLast,
+                interpolate: 1
+              });
+              const filmframes2_removedFirst = graph.ImageBatchRemove({
+                images: filmFrames2,
+                index: 1
+              });
+              const middleFrames2 = graph.VHS$_SelectEveryNthImage({
+                images: filmframes2_removedFirst,
+                select_every_nth: 2
+              });
+              currentImages = middleFrames2.outputs.IMAGE;
+            }
+            graph.SaveImage({
+              images: currentImages,
+              filename_prefix: `film`
+            });
+            const mainImageNode = graph.ImageBatchGet({
+              images: currentImages,
+              index: sizeHalf + 1
+            });
+            const mainImage = mainImageNode.outputs.IMAGE;
+            const saveImageNode = graph.RL$_SaveImageSequence({
+              images: mainImage,
+              current_frame: 0,
+              path: `../input/${state.workingDirectory}/_final-film/#####.png`
+            });
+            return {
+              nodes: { loadImageBatchNode, mainImageNode, saveImageNode },
+              outputs: { mainImage }
+            };
+          },
+          modify: ({ nodes, frameIndex }) => {
+            const cStart = Math.max(minCurrentFrame, frameIndex - sizeHalf);
+            const cEnd = Math.min(maxCurrentFrame, frameIndex + sizeHalf);
+            const cCount = cEnd - cStart + 1;
+            nodes.loadImageBatchNode.inputs.current_frame = cStart;
+            nodes.loadImageBatchNode.inputs.count = cCount;
+            nodes.mainImageNode.inputs.index = frameIndex - cStart + 1;
+            nodes.saveImageNode.inputs.current_frame = frameIndex;
+          }
+        });
+        dependecyKeyRef = await runSteps2(frameIndexes.map((x) => x.frameIndex));
       }
+      if (form.upscale) {
+        const formUpscale = form.upscale;
+        console.log(`upscale START`);
+        disableNodesAfterInclusive(runtime, 0);
+        const finalDir = form.film?.sideFrameDoubleBackIterations ? `_final-film` : `_final`;
+        const {
+          defineStep: defineStep2,
+          runSteps: runSteps2,
+          state: _state2
+        } = createStepsSystem({
+          runtime,
+          imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+          graph: runtime.nodes,
+          scopeStack: [{}]
+        });
+        defineStep2({
+          name: `upscale`,
+          preview: formUpscale.preview,
+          cacheParams: [formUpscale, dependecyKeyRef.dependencyKey],
+          inputSteps: {},
+          create: (state, { inputs }) => {
+            const { graph } = state;
+            const loadImageNode = graph.RL$_LoadImageSequence({
+              path: `${state.workingDirectory}/${finalDir}/#####.png`,
+              current_frame: 0
+            });
+            const controlNetStack = formUpscale.sdxl ? void 0 : graph.Control_Net_Stacker({
+              control_net: graph.ControlNetLoader({
+                control_net_name: `control_v11f1e_sd15_tile.pth`
+              }),
+              image: loadImageNode,
+              strength: formUpscale.tileStrength
+            });
+            const loraStack = !formUpscale.lcm ? void 0 : graph.LoRA_Stacker({
+              input_mode: `simple`,
+              lora_count: 1,
+              lora_name_1: !formUpscale.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`
+            });
+            const loader = graph.Efficient_Loader({
+              ckpt_name: formUpscale.checkpoint,
+              cnet_stack: controlNetStack,
+              lora_stack: loraStack,
+              // defaults
+              lora_name: `None`,
+              token_normalization: `none`,
+              vae_name: `Baked VAE`,
+              weight_interpretation: `comfy`,
+              positive: form.sampler.positive,
+              negative: form.sampler.negative
+            });
+            const upscaleNode = graph.UltimateSDUpscale({
+              image: loadImageNode,
+              force_uniform_tiles: `enable`,
+              mode_type: `Linear`,
+              seam_fix_mode: `None`,
+              model: loader,
+              vae: loader,
+              positive: loader.outputs.CONDITIONING$6,
+              negative: loader.outputs.CONDITIONING$7,
+              upscale_model: graph.UpscaleModelLoader({
+                model_name: `8x_NMKD-Superscale_150000_G.pth`
+              }),
+              sampler_name: formUpscale.lcm ? `lcm` : `dpmpp_2m_sde_gpu`,
+              scheduler: formUpscale.lcm ? `normal` : `karras`,
+              denoise: formUpscale.denoise,
+              cfg: formUpscale.config,
+              seed: form.sampler.seed,
+              tile_width: formUpscale.sdxl ? (form.sizeWidth ?? 1024) * formUpscale.upscaleBy : 576,
+              tile_height: formUpscale.sdxl ? (form.sizeHeight ?? 1024) * formUpscale.upscaleBy : 768,
+              steps: formUpscale.steps,
+              // tile_width: 1536,
+              // tile_height: 2048,
+              upscale_by: formUpscale.upscaleBy
+            });
+            const upscaledImage = upscaleNode.outputs.IMAGE;
+            graph.SaveImage({
+              images: upscaledImage,
+              filename_prefix: `upscale`
+            });
+            const saveImageNode = graph.RL$_SaveImageSequence({
+              images: upscaledImage,
+              current_frame: 0,
+              path: `../input/${state.workingDirectory}/_final-upscale/#####.png`
+            });
+            return {
+              nodes: { loadImageNode, saveImageNode },
+              outputs: { upscaledImage }
+            };
+          },
+          modify: ({ nodes, frameIndex }) => {
+            nodes.loadImageNode.inputs.current_frame = frameIndex;
+            nodes.saveImageNode.inputs.current_frame = frameIndex;
+          }
+        });
+        dependecyKeyRef = await runSteps2(frameIndexes.map((x) => x.frameIndex));
+      }
+      if (form.uncrop) {
+        const formUncrop = form.uncrop;
+        console.log(`uncrop START`);
+        disableNodesAfterInclusive(runtime, 0);
+        const startDir = `_start-image`;
+        const finalDir = form.upscale ? `_final-upscale` : form.film?.sideFrameDoubleBackIterations ? `_final-film` : `_final`;
+        const cropAreaDir = `_crop-area`;
+        const replaceMaskDir = `_replace-mask`;
+        const {
+          defineStep: defineStep2,
+          runSteps: runSteps2,
+          state: _state2
+        } = createStepsSystem({
+          runtime,
+          imageDirectory: form.imageSource.directory.replace(/\/$/g, ``),
+          graph: runtime.nodes,
+          scopeStack: [{}]
+        });
+        defineStep2({
+          name: `upscale`,
+          preview: formUncrop.preview,
+          cacheParams: [formUncrop, dependecyKeyRef.dependencyKey],
+          inputSteps: {},
+          create: (state, { inputs }) => {
+            const { graph } = state;
+            const loadStartImageNode = graph.RL$_LoadImageSequence({
+              path: `${state.workingDirectory}/${startDir}/#####.png`,
+              current_frame: 0
+            });
+            const loadFinalImageNode = graph.RL$_LoadImageSequence({
+              path: `${state.workingDirectory}/${finalDir}/#####.png`,
+              current_frame: 0
+            });
+            const loadCropAreaImageNode = graph.RL$_LoadImageSequence({
+              path: `${state.workingDirectory}/${cropAreaDir}/#####.png`,
+              current_frame: 0
+            });
+            const loadReplaceMaskImageNode = graph.RL$_LoadImageSequence({
+              path: `${state.workingDirectory}/${replaceMaskDir}/#####.png`,
+              current_frame: 0
+            });
+            const uncroppedReplaceMaskImage = graph.Paste_By_Mask({
+              image_base: loadCropAreaImageNode,
+              image_to_paste: loadReplaceMaskImageNode,
+              mask: loadCropAreaImageNode,
+              resize_behavior: `resize`
+            }).outputs.IMAGE;
+            const uncroppedFinalImage = graph.Paste_By_Mask({
+              image_base: loadStartImageNode,
+              image_to_paste: loadFinalImageNode,
+              mask: loadCropAreaImageNode,
+              resize_behavior: `resize`
+            }).outputs.IMAGE;
+            const restoredImage = graph.Image_Blend_by_Mask({
+              image_a: loadStartImageNode,
+              image_b: uncroppedFinalImage,
+              mask: uncroppedReplaceMaskImage,
+              blend_percentage: 1
+            }).outputs.IMAGE;
+            const uncroppedImage = restoredImage;
+            graph.SaveImage({
+              images: uncroppedImage,
+              filename_prefix: `uncropped`
+            });
+            return {
+              nodes: { loadStartImageNode, loadFinalImageNode, loadCropAreaImageNode, loadReplaceMaskImageNode },
+              outputs: { uncroppedImage, uncroppedReplaceMaskImage, uncroppedFinalImage }
+            };
+          },
+          modify: ({ nodes, frameIndex }) => {
+            nodes.loadStartImageNode.inputs.current_frame = frameIndex;
+            nodes.loadFinalImageNode.inputs.current_frame = frameIndex;
+            nodes.loadCropAreaImageNode.inputs.current_frame = frameIndex;
+            nodes.loadReplaceMaskImageNode.inputs.current_frame = frameIndex;
+          }
+        });
+        dependecyKeyRef = await runSteps2(frameIndexes.map((x) => x.frameIndex));
+      }
+      return;
+    } catch (err) {
+      if (err instanceof StopError) {
+        await runtime.PROMPT();
+        return;
+      }
+      throw err;
     }
   }
 });

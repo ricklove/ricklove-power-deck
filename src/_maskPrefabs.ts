@@ -1,26 +1,7 @@
 import { FormBuilder, Runtime, Widget } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { WidgetDict } from 'src/cards/Card'
-import { AppState, StopError } from './_appState'
-
-const storeInScope = <T extends null | Object>(state: AppState, name: string, value: T) => {
-    const { scopeStack } = state
-    scopeStack[scopeStack.length - 1][name] = value
-}
-
-const loadFromScope = <T extends null | Object>(state: AppState, name: string): undefined | T => {
-    const { scopeStack } = state
-
-    let i = scopeStack.length
-    while (i >= 0) {
-        const v = scopeStack[scopeStack.length - 1][name]
-        if (v !== undefined) {
-            return v as T
-        }
-    }
-
-    return undefined
-}
+import { AppState, StopError, storeInScope, loadFromScope } from './_appState'
 
 type MaskOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields
@@ -147,6 +128,14 @@ const operation_sam = createMaskOperation({
             items: () => ({
                 // prompt: form.str({ default: `ball` }),
                 threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
+                detection_hint: form.enum({
+                    enumName: `Enum_SAMDetectorCombined_detection_hint`,
+                    default: `center-1`,
+                }),
+                mask_hint_use_negative: form.enum({
+                    enumName: `Enum_SAMDetectorCombined_mask_hint_use_negative`,
+                    default: `False`,
+                }),
                 // dilation: form.int({ default: 4, min: 0 }),
                 // blur: form.float({ default: 1, min: 0 }),
             }),
@@ -173,8 +162,8 @@ const operation_sam = createMaskOperation({
             segs,
             sam_model: samModel,
             image,
-            detection_hint: `center-1`,
-            mask_hint_use_negative: `False`,
+            detection_hint: form.sam.detection_hint,
+            mask_hint_use_negative: form.sam.mask_hint_use_negative,
             threshold: form.sam.threshold,
         }).outputs.combined_mask
 

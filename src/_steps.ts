@@ -426,8 +426,11 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
                     err.setFrameIndex(frameIndex)
                 }
 
+                // throw new StopError(() => {})
                 await _state.runtime.PROMPT()
             }
+
+            throw new StopError(() => {})
         }
 
         return dependencyKeyRef
