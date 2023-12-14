@@ -1564,7 +1564,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
       const dependencyKey = formItemCacheState.dependencyKey = `${createRandomGenerator(
         `${formItemCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`
       ).randomInt()}`;
-      const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache);
+      const shouldCache = true;
       const cacheNumber = !shouldCache ? formItemCacheState.cacheNumber : formItemCacheState.cacheNumber = formItemCacheState.cacheNumber + 1;
       const isStopped = cacheNumber > frame.cacheCount_stop;
       const isCached = state.cacheState.exists(dependencyKey, frame.cacheFrameId);
@@ -1594,6 +1594,9 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
         }
         frame = { ...frame, ...cacheResult.frame };
         state.scopeStack = cacheResult.scopeStack;
+        if (isStopped) {
+          throw new CacheStopError();
+        }
         continue;
       }
       const listItemGroupOptFields = listItem;
@@ -1629,7 +1632,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
           ...frame,
           cacheCount_current: cacheNumber
         };
-        if (frame.cacheCount_current >= frame.cacheCount_stop) {
+        if (isStopped) {
           throw new CacheStopError();
         }
       }

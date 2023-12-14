@@ -393,7 +393,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
       const dependencyKey = formItemCacheState.dependencyKey = `${createRandomGenerator(
         `${formItemCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`
       ).randomInt()}`;
-      const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache);
+      const shouldCache = true;
       const cacheNumber = !shouldCache ? formItemCacheState.cacheNumber : formItemCacheState.cacheNumber = formItemCacheState.cacheNumber + 1;
       const isStopped = cacheNumber > frame.cacheCount_stop;
       const isCached = state.cacheState.exists(dependencyKey, frame.cacheFrameId);
@@ -423,6 +423,9 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
         }
         frame = { ...frame, ...cacheResult.frame };
         state.scopeStack = cacheResult.scopeStack;
+        if (isStopped) {
+          throw new CacheStopError();
+        }
         continue;
       }
       const listItemGroupOptFields = listItem;
@@ -458,7 +461,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
           ...frame,
           cacheCount_current: cacheNumber
         };
-        if (frame.cacheCount_current >= frame.cacheCount_stop) {
+        if (isStopped) {
           throw new CacheStopError();
         }
       }
@@ -1370,22 +1373,19 @@ var cacheMaskBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
 // library/ricklove/my-cushy-deck/raw-power-02.ts
 appOptimized({
   ui: (form) => ({
+    cancel: form.inlineRun({
+      kind: `warning`,
+      text: `Cancel!`
+    }),
     size: form.size({}),
     operations: allOperationsList.ui(form)
   }),
   run: async (runtime, form) => {
-    const formHash = `${createRandomGenerator(JSON.stringify(form)).randomInt()}`;
-    const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState:${formHash}`, () => ({
-      formHash,
-      isFirstRun: true,
-      isDone: false,
-      nextJobIndex: 0,
-      jobs: []
-    }));
     const cacheStatusStore = runtime.getStore_orCreateIfMissing(`cacheStatus`, () => ({
       cache: []
     }));
     const cacheStatus = cacheStatusStore.get();
+    console.log(`cacheStatus`, { cacheStatus: JSON.stringify(cacheStatus) });
     const graph = runtime.nodes;
     const state = {
       runtime,
@@ -1393,15 +1393,16 @@ appOptimized({
       scopeStack: [{}],
       workingDirectory: `../input/working`,
       comfyUiInputRelativePath: `../comfyui/ComfyUI/input`,
-      jobState: jobStateStore.get(),
       cacheState: {
         exists: (dependencyKey, cacheFrameId) => {
+          console.log(`cacheState: exists`, { dependencyKey, cacheFrameId, cacheStatus: JSON.stringify(cacheStatus) });
           const cacheResult = cacheStatus.cache.find(
             (x) => x.dependencyKey === dependencyKey && x.cacheFrameId === cacheFrameId
           );
           return cacheResult?.status === `cached`;
         },
         get: (dependencyKey, cacheFrameId) => {
+          console.log(`cacheState: get`, { dependencyKey, cacheFrameId, cacheStatus: JSON.stringify(cacheStatus) });
           const cacheResult = cacheStatus.cache.find(
             (x) => x.dependencyKey === dependencyKey && x.cacheFrameId === cacheFrameId
           );
@@ -1433,6 +1434,12 @@ appOptimized({
           return { frame, scopeStack };
         },
         set: (dependencyKey, cacheFrameId, data) => {
+          console.log(`cacheState: set`, {
+            dependencyKey,
+            cacheFrameId,
+            data,
+            cacheStatus: JSON.stringify(cacheStatus)
+          });
           const setCachedObject = (sourceName, data2) => {
             return Object.fromEntries(
               Object.entries(data2).map(([k, v]) => {
@@ -1464,15 +1471,30 @@ appOptimized({
         }
       }
     };
-    const jobState = state.jobState;
+    const formHash = `${createRandomGenerator(JSON.stringify({ ...form, cancel: void 0 })).randomInt()}`;
+    const defaultJobState = () => ({
+      formHash,
+      isFirstRun: true,
+      isDone: false,
+      isCancelled: false,
+      shouldReset: true,
+      jobs: []
+    });
+    const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState:${formHash}`, defaultJobState);
+    const jobState = jobStateStore.get();
+    if (form.cancel) {
+      jobState.isCancelled = true;
+      return;
+    }
+    if (jobState.isCancelled) {
+      return;
+    }
     if (jobState.isFirstRun) {
       jobState.isFirstRun = false;
       try {
-        const queueSize = 2;
-        for (let i = 0; !jobState.isDone; i++) {
-          const iJob2 = i;
+        const queueSize = 1;
+        for (let iJob2 = 0; !jobState.isDone && !jobState.isCancelled; iJob2++) {
           runtime.output_text({ title: `#${iJob2} created`, message: `#${iJob2} created` });
-          jobState.nextJobIndex = i;
           jobState.jobs[iJob2] = {
             status: `created`
           };
@@ -1491,55 +1513,73 @@ appOptimized({
             }, 100);
           });
         }
+        if (jobState.isCancelled) {
+          jobState.shouldReset = true;
+        }
       } catch (err) {
         console.error(`jobState.isFirstRun`, err);
       }
       return;
     }
-    const iJob = state.jobState.nextJobIndex;
-    jobState.jobs[iJob].status = `started`;
+    const iJob = jobState.jobs.length - 1;
+    const job = jobState.jobs[iJob];
+    job.status = `started`;
     try {
       runtime.output_text({
-        title: `# ${iJob}`,
-        message: `# ${iJob}`
+        title: `# ${iJob} START`,
+        message: `# ${iJob} START
+
+${JSON.stringify(
+          {
+            jobState,
+            cacheStatus
+          },
+          null,
+          2
+        )}`
       });
-      const frameId = 0;
-      const size = form.size;
-      const initialImage = graph.EmptyImage({
-        width: size.width,
-        height: size.height,
-        color: iJob
-      });
-      const initialMask = graph.SolidMask({
-        width: size.width,
-        height: size.height,
-        value: 1
-      });
-      for (let iCacheStop = 1; iCacheStop < 1e6; iCacheStop++) {
+      const cacheCount_stop = job.cacheCount_stop = jobState.jobs[iJob - 1]?.nextCacheCount_stop ?? jobState.jobs[iJob - 1]?.cacheCount_stop ?? 1;
+      const frameIds = [0];
+      let wasCacheStopped = false;
+      for (const frameId of frameIds) {
+        const size = form.size;
+        const initialImage = graph.EmptyImage({
+          width: size.width,
+          height: size.height,
+          color: iJob
+        });
+        const initialMask = graph.SolidMask({
+          width: size.width,
+          height: size.height,
+          value: 1
+        });
         try {
           allOperationsList.run(state, form.operations, {
             image: initialImage,
             mask: initialMask,
             cacheCount_current: 0,
-            cacheCount_stop: iCacheStop,
+            cacheCount_stop,
             cacheFrameId: frameId
           });
-          graph.PreviewImage({
-            images: runtime.AUTO
-          });
-          await runtime.PROMPT();
-          break;
         } catch (err) {
           if (!(err instanceof CacheStopError)) {
             throw err;
           }
-          continue;
+          wasCacheStopped = true;
         }
+        graph.PreviewImage({
+          images: runtime.AUTO
+        });
+        await runtime.PROMPT();
       }
-      jobState.isDone = true;
+      if (!wasCacheStopped) {
+        jobState.isDone = true;
+      } else {
+        job.nextCacheCount_stop = cacheCount_stop + 1;
+      }
     } catch (err) {
       if (!(err instanceof PreviewStopError)) {
-        return;
+        throw err;
       }
       const graph2 = state.graph;
       graph2.PreviewImage({
@@ -1548,6 +1588,19 @@ appOptimized({
       await runtime.PROMPT();
     } finally {
       jobState.jobs[iJob].status = `finished`;
+      runtime.output_text({
+        title: `# ${iJob} DONE`,
+        message: `# ${iJob} DONE
+
+${JSON.stringify(
+          {
+            jobState,
+            cacheStatus
+          },
+          null,
+          2
+        )}`
+      });
     }
   }
 });

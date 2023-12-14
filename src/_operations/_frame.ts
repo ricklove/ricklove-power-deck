@@ -151,7 +151,8 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                 const dependencyKey = (formItemCacheState.dependencyKey = `${createRandomGenerator(
                     `${formItemCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`,
                 ).randomInt()}`)
-                const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache)
+                // const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache)
+                const shouldCache = true
                 const cacheNumber = !shouldCache
                     ? formItemCacheState.cacheNumber
                     : (formItemCacheState.cacheNumber = formItemCacheState.cacheNumber + 1)
@@ -186,6 +187,11 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                     }
                     frame = { ...frame, ...cacheResult.frame }
                     state.scopeStack = cacheResult.scopeStack
+
+                    if (isStopped) {
+                        throw new CacheStopError()
+                    }
+
                     continue
                 }
 
@@ -236,7 +242,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         ...frame,
                         cacheCount_current: cacheNumber,
                     }
-                    if (frame.cacheCount_current >= frame.cacheCount_stop) {
+                    if (isStopped) {
                         throw new CacheStopError()
                     }
                 }
