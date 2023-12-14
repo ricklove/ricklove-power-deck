@@ -151,28 +151,30 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                 const dependencyKey = (opCacheState.dependencyKey = `${createRandomGenerator(
                     `${opCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`,
                 ).randomInt()}`)
-                const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache)
-                // const shouldCache = true
+                // const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache)
+                const shouldCache = true
                 const cacheStepIndex = !shouldCache
                     ? opCacheState.cacheStepIndex
                     : (opCacheState.cacheStepIndex = opCacheState.cacheStepIndex + 1)
-                const isStopped = cacheStepIndex >= frame.cacheStepIndex_stop
                 const isCached = state.cacheState.exists(cacheStepIndex, dependencyKey, frame.cacheFrameId)
 
                 return {
                     item: x,
                     dependencyKey,
                     cacheStepIndex,
-                    isStopped,
                     shouldCache,
                     isCached,
                 }
             })
+            const opStatesWithRequired = opStates.map((x, i) => ({
+                ...x,
+                isRequired: !opStates[i + 1]?.isCached,
+                isLast: i === opStates.length - 1,
+            }))
 
-            console.log(`createFrameOperationsChoiceList:opStates`, { opStates })
-
-            const iLastCacheToUse = opStates.findLastIndex((x) => !x.isStopped && x.isCached)
-            const opStatesStartingWithCached = iLastCacheToUse >= 0 ? opStates.slice(iLastCacheToUse) : opStates
+            // console.log(`createFrameOperationsChoiceList:opStates ${frame.cacheStepIndex_stop}@${frame.cacheFrameId}`, {
+            //     opStatesWithRequired,
+            // })
 
             for (const {
                 item: listItem,
@@ -180,24 +182,31 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                 isCached,
                 cacheStepIndex,
                 shouldCache,
-                isStopped,
-            } of opStatesStartingWithCached) {
+                isLast,
+                isRequired,
+            } of opStatesWithRequired) {
                 if (isCached) {
-                    const cacheResult = state.cacheState.get(cacheStepIndex, dependencyKey, frame.cacheFrameId)
-                    if (!cacheResult) {
-                        throw new Error(
-                            `Cache is missing, but reported as existing ${JSON.stringify({ cacheStepIndex, listItem })}`,
-                        )
+                    if (isRequired) {
+                        const cacheResult = state.cacheState.get(cacheStepIndex, dependencyKey, frame.cacheFrameId)
+                        if (!cacheResult) {
+                            throw new Error(
+                                `Cache is missing, but reported as existing ${JSON.stringify({ cacheStepIndex, listItem })}`,
+                            )
+                        }
+                        frame = { ...frame, ...cacheResult.frame }
+                        state.scopeStack = cacheResult.scopeStack
                     }
-                    frame = { ...frame, ...cacheResult.frame }
-                    state.scopeStack = cacheResult.scopeStack
 
-                    if (isStopped) {
+                    if (cacheStepIndex >= frame.cacheStepIndex_stop) {
                         throw new CacheStopError(() => {}, true)
                     }
 
                     continue
                 }
+
+                console.log(`createFrameOperationsChoiceList: NOT CACHED ${frame.cacheStepIndex_stop}@${frame.cacheFrameId}`, {
+                    opStatesWithRequired,
+                })
 
                 const listItemGroupOptFields = listItem as unknown as Widget_group_output<
                     Record<string, Widget_groupOpt<Record<string, Widget>>>
@@ -235,7 +244,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                     }
                 }
 
-                if (shouldCache && !isCached) {
+                if (shouldCache) {
                     // save the cache
                     const { onCacheCreated } = state.cacheState.set(cacheStepIndex, dependencyKey, frame.cacheFrameId, {
                         frame,
@@ -246,7 +255,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         ...frame,
                         cacheStepIndex_current: cacheStepIndex,
                     }
-                    if (isStopped) {
+                    if (cacheStepIndex >= frame.cacheStepIndex_stop) {
                         throw new CacheStopError(onCacheCreated, false)
                     }
                 }

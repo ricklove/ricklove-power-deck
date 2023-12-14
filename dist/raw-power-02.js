@@ -395,45 +395,51 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
       const dependencyKey = opCacheState.dependencyKey = `${createRandomGenerator(
         `${opCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`
       ).randomInt()}`;
-      const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache);
+      const shouldCache = true;
       const cacheStepIndex = !shouldCache ? opCacheState.cacheStepIndex : opCacheState.cacheStepIndex = opCacheState.cacheStepIndex + 1;
-      const isStopped = cacheStepIndex >= frame.cacheStepIndex_stop;
       const isCached = state.cacheState.exists(cacheStepIndex, dependencyKey, frame.cacheFrameId);
       return {
         item: x,
         dependencyKey,
         cacheStepIndex,
-        isStopped,
         shouldCache,
         isCached
       };
     });
-    console.log(`createFrameOperationsChoiceList:opStates`, { opStates });
-    const iLastCacheToUse = opStates.findLastIndex((x) => !x.isStopped && x.isCached);
-    const opStatesStartingWithCached = iLastCacheToUse >= 0 ? opStates.slice(iLastCacheToUse) : opStates;
+    const opStatesWithRequired = opStates.map((x, i) => ({
+      ...x,
+      isRequired: !opStates[i + 1]?.isCached,
+      isLast: i === opStates.length - 1
+    }));
     for (const {
       item: listItem,
       dependencyKey,
       isCached,
       cacheStepIndex,
       shouldCache,
-      isStopped
-    } of opStatesStartingWithCached) {
+      isLast,
+      isRequired
+    } of opStatesWithRequired) {
       if (isCached) {
-        const cacheResult = state.cacheState.get(cacheStepIndex, dependencyKey, frame.cacheFrameId);
-        if (!cacheResult) {
-          throw new Error(
-            `Cache is missing, but reported as existing ${JSON.stringify({ cacheStepIndex, listItem })}`
-          );
+        if (isRequired) {
+          const cacheResult = state.cacheState.get(cacheStepIndex, dependencyKey, frame.cacheFrameId);
+          if (!cacheResult) {
+            throw new Error(
+              `Cache is missing, but reported as existing ${JSON.stringify({ cacheStepIndex, listItem })}`
+            );
+          }
+          frame = { ...frame, ...cacheResult.frame };
+          state.scopeStack = cacheResult.scopeStack;
         }
-        frame = { ...frame, ...cacheResult.frame };
-        state.scopeStack = cacheResult.scopeStack;
-        if (isStopped) {
+        if (cacheStepIndex >= frame.cacheStepIndex_stop) {
           throw new CacheStopError(() => {
           }, true);
         }
         continue;
       }
+      console.log(`createFrameOperationsChoiceList: NOT CACHED ${frame.cacheStepIndex_stop}@${frame.cacheFrameId}`, {
+        opStatesWithRequired
+      });
       const listItemGroupOptFields = listItem;
       for (const [opName, op] of Object.entries(operations)) {
         const opGroupOptValue = listItemGroupOptFields[opName];
@@ -458,7 +464,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
           throw new PreviewStopError(void 0);
         }
       }
-      if (shouldCache && !isCached) {
+      if (shouldCache) {
         const { onCacheCreated } = state.cacheState.set(cacheStepIndex, dependencyKey, frame.cacheFrameId, {
           frame,
           scopeStack: state.scopeStack
@@ -467,7 +473,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
           ...frame,
           cacheStepIndex_current: cacheStepIndex
         };
-        if (isStopped) {
+        if (cacheStepIndex >= frame.cacheStepIndex_stop) {
           throw new CacheStopError(onCacheCreated, false);
         }
       }
@@ -1405,6 +1411,14 @@ appOptimized({
     operations: allOperationsList.ui(form)
   }),
   run: async (runtime, form) => {
+    const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState`, () => ({
+      isCancelled: false
+    }));
+    const jobState = jobStateStore.get();
+    if (form.cancel) {
+      jobState.isCancelled = true;
+      return;
+    }
     const cacheStatusStore = runtime.getStore_orCreateIfMissing(`cacheStatus`, () => ({
       cache: []
     }));
@@ -1563,121 +1577,85 @@ appOptimized({
         }
       }
     };
-    const formHash = `${createRandomGenerator(JSON.stringify({ ...form, cancel: void 0 })).randomInt()}`;
-    const defaultJobState = () => ({
-      formHash,
-      isFirstRun: true,
-      isDone: false,
-      isCancelled: false,
-      shouldReset: true,
-      jobs: []
-    });
-    const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState:${formHash}`, defaultJobState);
-    const jobState = jobStateStore.get();
-    if (form.cancel) {
-      jobState.isCancelled = true;
-      return;
-    }
-    if (jobState.isCancelled) {
-      return;
-    }
-    if (jobState.isFirstRun) {
-      jobState.isFirstRun = false;
-      try {
-        for (let iJob2 = 0; !jobState.isDone && !jobState.isCancelled; iJob2++) {
-          runtime.output_text({ title: `#${iJob2} created`, message: `#${iJob2} created` });
-          jobState.jobs[iJob2] = {
-            status: `created`
-          };
-          runtime.st.currentDraft?.start();
-          await new Promise((resolve, reject) => {
-            const intervalId = setInterval(() => {
-              if (jobState.jobs[jobState.jobs.length - 1].status === `finished`) {
-                clearInterval(intervalId);
-                resolve();
-              }
-            }, 100);
-          });
-        }
+    const runNext = () => {
+      setTimeout(() => {
         if (jobState.isCancelled) {
-          jobState.shouldReset = true;
+          jobState.isCancelled = false;
+          return;
         }
-      } catch (err) {
-        console.error(`jobState.isFirstRun`, err);
-      }
-      return;
-    }
-    const iJob = jobState.jobs.length - 1;
-    const job = jobState.jobs[iJob];
-    job.status = `started`;
+        runtime.st.currentDraft?.start();
+      }, 10);
+    };
     try {
       runtime.output_text({
-        title: `# ${iJob} START`,
-        message: `# ${iJob} START
+        title: `START`,
+        message: `START
 
 ${JSON.stringify(
           {
-            jobState,
             cacheStatus
           },
           null,
           2
         )}`
       });
-      const cacheCount_stop = job.cacheCount_stop = jobState.jobs[iJob - 1]?.nextCacheCount_stop ?? jobState.jobs[iJob - 1]?.cacheCount_stop ?? 1;
       const frameIds = [...new Array(form.imageSource.iterationCount)].map(
         (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
       );
-      let wasCacheStopped = false;
-      for (const frameId of frameIds) {
-        const imageDir = form.imageSource.directory.replace(/\/$/g, ``);
-        const loadImageNode = graph.RL$_LoadImageSequence({
-          path: `${imageDir}/${form.imageSource.filePattern}`,
-          current_frame: frameId
-        });
-        const initialImage = loadImageNode.outputs.image;
-        if (form.imageSource.preview) {
-          throw new PreviewStopError(() => {
-          });
-        }
-        const { INT: width, INT_1: height } = graph.Get_Image_Size({
-          image: initialImage
-        }).outputs;
-        const initialMask = graph.SolidMask({
-          width,
-          height,
-          value: 1
-        });
-        try {
-          allOperationsList.run(state, form.operations, {
-            image: initialImage,
-            mask: initialMask,
-            cacheStepIndex_current: 0,
-            cacheStepIndex_stop: cacheCount_stop,
-            cacheFrameId: frameId
-          });
-          graph.PreviewImage({
-            images: runtime.AUTO
-          });
-          await runtime.PROMPT();
-        } catch (err) {
-          if (!(err instanceof CacheStopError)) {
-            throw err;
+      const imageDir = form.imageSource.directory.replace(/\/$/g, ``);
+      const loadImageNode = graph.RL$_LoadImageSequence({
+        path: `${imageDir}/${form.imageSource.filePattern}`,
+        current_frame: frameIds[0]
+      });
+      const initialImage = loadImageNode.outputs.image;
+      const { INT: width, INT_1: height } = graph.Get_Image_Size({
+        image: initialImage
+      }).outputs;
+      const initialMask = graph.SolidMask({
+        width,
+        height,
+        value: 1
+      });
+      let cacheCount_stop = 0;
+      while (true) {
+        cacheCount_stop++;
+        let wasCacheStopped = false;
+        for (const frameId of frameIds) {
+          loadImageNode.inputs.current_frame = frameId;
+          if (form.imageSource.preview) {
+            throw new PreviewStopError(() => {
+            });
           }
-          wasCacheStopped = true;
-          if (!err.wasAlreadyCached) {
+          try {
+            allOperationsList.run(state, form.operations, {
+              image: initialImage,
+              mask: initialMask,
+              cacheStepIndex_current: 0,
+              cacheStepIndex_stop: cacheCount_stop,
+              cacheFrameId: frameId
+            });
+            continue;
+          } catch (err) {
+            if (!(err instanceof CacheStopError)) {
+              throw err;
+            }
+            wasCacheStopped = true;
+            if (err.wasAlreadyCached) {
+              console.log(`CACHE wasAlreadyCached`, { frameId, cacheCount_stop });
+              continue;
+            }
             graph.PreviewImage({
               images: runtime.AUTO
             });
             await runtime.PROMPT();
             err.onCacheCreated();
+            console.log(`CACHE created`, { frameId, cacheCount_stop });
+            return runNext();
           }
         }
-      }
-      if (!wasCacheStopped) {
-        jobState.isDone = true;
-      } else {
-        job.nextCacheCount_stop = cacheCount_stop + 1;
+        if (!wasCacheStopped) {
+          return;
+        }
       }
     } catch (err) {
       if (!(err instanceof PreviewStopError)) {
@@ -1689,14 +1667,12 @@ ${JSON.stringify(
       });
       await runtime.PROMPT();
     } finally {
-      jobState.jobs[iJob].status = `finished`;
       runtime.output_text({
-        title: `# ${iJob} DONE`,
-        message: `# ${iJob} DONE
+        title: `DONE`,
+        message: `DONE
 
 ${JSON.stringify(
           {
-            jobState,
             cacheStatus
           },
           null,

@@ -57,6 +57,15 @@ appOptimized({
         operations: allOperationsList.ui(form),
     }),
     run: async (runtime, form) => {
+        const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState`, () => ({
+            isCancelled: false,
+        }))
+        const jobState = jobStateStore.get()
+        if (form.cancel) {
+            jobState.isCancelled = true
+            return
+        }
+
         const cacheStatusStore = runtime.getStore_orCreateIfMissing<CacheStatus>(`cacheStatus`, () => ({
             cache: [],
         }))
@@ -242,77 +251,23 @@ appOptimized({
             },
         }
 
-        const formHash = `${createRandomGenerator(JSON.stringify({ ...form, cancel: undefined })).randomInt()}`
-        const defaultJobState = () => ({
-            formHash,
-            isFirstRun: true,
-            isDone: false,
-            isCancelled: false,
-            shouldReset: true,
-            jobs: [] as { status: 'created' | 'started' | 'finished'; cacheCount_stop?: number; nextCacheCount_stop?: number }[],
-        })
-        const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState:${formHash}`, defaultJobState)
-        const jobState = jobStateStore.get()
-        if (form.cancel) {
-            jobState.isCancelled = true
-            return
-        }
-
-        // if (jobState.shouldReset) {
-        //     // reset jobState
-        //     const d = defaultJobState()
-        //     for (const k in jobState) {
-        //         const jobStateUntyped = jobState as Record<string, unknown>
-        //         jobStateUntyped[k] = d[k as keyof typeof d]
-        //     }
-        // }
-
-        if (jobState.isCancelled) {
-            return
-        }
-
-        if (jobState.isFirstRun) {
-            jobState.isFirstRun = false
-
-            try {
-                for (let iJob = 0; !jobState.isDone && !jobState.isCancelled; iJob++) {
-                    runtime.output_text({ title: `#${iJob} created`, message: `#${iJob} created` })
-                    jobState.jobs[iJob] = {
-                        status: `created`,
-                    }
-                    runtime.st.currentDraft?.start()
-
-                    await new Promise<void>((resolve, reject) => {
-                        const intervalId = setInterval(() => {
-                            if (jobState.jobs[jobState.jobs.length - 1].status === `finished`) {
-                                clearInterval(intervalId)
-                                resolve()
-                            }
-                        }, 100)
-                    })
-                }
-
+        const runNext = () => {
+            setTimeout(() => {
                 if (jobState.isCancelled) {
-                    jobState.shouldReset = true
+                    jobState.isCancelled = false
+                    return
                 }
-            } catch (err) {
-                console.error(`jobState.isFirstRun`, err)
-            }
-
-            return
+                runtime.st.currentDraft?.start()
+            }, 10)
         }
 
-        const iJob = jobState.jobs.length - 1
-        const job = jobState.jobs[iJob]
-        job.status = `started`
         try {
             runtime.output_text({
-                title: `# ${iJob} START`,
-                message: `# ${iJob} START
+                title: `START`,
+                message: `START
 
 ${JSON.stringify(
     {
-        jobState,
         cacheStatus,
     },
     null,
@@ -320,61 +275,76 @@ ${JSON.stringify(
 )}`,
             })
 
-            const cacheCount_stop = (job.cacheCount_stop =
-                jobState.jobs[iJob - 1]?.nextCacheCount_stop ?? jobState.jobs[iJob - 1]?.cacheCount_stop ?? 1)
-
             const frameIds = [...new Array(form.imageSource.iterationCount)].map(
                 (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1),
             )
-            let wasCacheStopped = false
+            const imageDir = form.imageSource.directory.replace(/\/$/g, ``)
+            const loadImageNode = graph.RL$_LoadImageSequence({
+                path: `${imageDir}/${form.imageSource.filePattern}`,
+                current_frame: frameIds[0],
+            })
+            const initialImage = loadImageNode.outputs.image
 
-            // Loop through all frames in a single job
-            for (const frameId of frameIds) {
-                const imageDir = form.imageSource.directory.replace(/\/$/g, ``)
-                const loadImageNode = graph.RL$_LoadImageSequence({
-                    path: `${imageDir}/${form.imageSource.filePattern}`,
-                    current_frame: frameId,
-                })
-                const initialImage = loadImageNode.outputs.image
+            const { INT: width, INT_1: height } = graph.Get_Image_Size({
+                image: initialImage,
+            }).outputs
+            // const initialImage = graph.EmptyImage({
+            //     width: size.width,
+            //     height: size.height,
+            //     color: iJob,
+            // })
+            const initialMask = graph.SolidMask({
+                width: width,
+                height: height,
+                value: 1,
+            })
 
-                if (form.imageSource.preview) {
-                    throw new PreviewStopError(() => {})
-                }
+            let cacheCount_stop = 0
+            while (true) {
+                cacheCount_stop++
 
-                const { INT: width, INT_1: height } = graph.Get_Image_Size({
-                    image: initialImage,
-                }).outputs
-                // const initialImage = graph.EmptyImage({
-                //     width: size.width,
-                //     height: size.height,
-                //     color: iJob,
-                // })
-                const initialMask = graph.SolidMask({
-                    width: width,
-                    height: height,
-                    value: 1,
-                })
+                let wasCacheStopped = false
 
-                try {
-                    allOperationsList.run(state, form.operations, {
-                        image: initialImage,
-                        mask: initialMask,
-                        cacheStepIndex_current: 0,
-                        cacheStepIndex_stop: cacheCount_stop,
-                        cacheFrameId: frameId,
-                    })
-
-                    graph.PreviewImage({
-                        images: runtime.AUTO,
-                    })
-                    await runtime.PROMPT()
-                } catch (err) {
-                    if (!(err instanceof CacheStopError)) {
-                        throw err
+                // Loop through all frames in a single job
+                for (const frameId of frameIds) {
+                    loadImageNode.inputs.current_frame = frameId
+                    if (form.imageSource.preview) {
+                        throw new PreviewStopError(() => {})
                     }
-                    wasCacheStopped = true
 
-                    if (!err.wasAlreadyCached) {
+                    try {
+                        allOperationsList.run(state, form.operations, {
+                            image: initialImage,
+                            mask: initialMask,
+                            cacheStepIndex_current: 0,
+                            cacheStepIndex_stop: cacheCount_stop,
+                            cacheFrameId: frameId,
+                        })
+
+                        // It finished without any caching, so just keep going
+                        continue
+
+                        // // only if no cache was created - actually done with all steps for this frame
+                        // graph.PreviewImage({
+                        //     images: runtime.AUTO,
+                        // })
+                        // await runtime.PROMPT()
+
+                        // if (frameIds[frameIds.length - 1] !== frameId) {
+                        //     return runNext()
+                        // }
+                    } catch (err) {
+                        if (!(err instanceof CacheStopError)) {
+                            throw err
+                        }
+
+                        wasCacheStopped = true
+
+                        if (err.wasAlreadyCached) {
+                            console.log(`CACHE wasAlreadyCached`, { frameId, cacheCount_stop })
+                            continue
+                        }
+
                         graph.PreviewImage({
                             images: runtime.AUTO,
                         })
@@ -382,14 +352,16 @@ ${JSON.stringify(
 
                         // callback to save cache status
                         err.onCacheCreated()
+
+                        console.log(`CACHE created`, { frameId, cacheCount_stop })
+                        return runNext()
                     }
                 }
-            }
 
-            if (!wasCacheStopped) {
-                jobState.isDone = true
-            } else {
-                job.nextCacheCount_stop = cacheCount_stop + 1
+                if (!wasCacheStopped) {
+                    // done
+                    return
+                }
             }
         } catch (err) {
             if (!(err instanceof PreviewStopError)) {
@@ -402,15 +374,12 @@ ${JSON.stringify(
             })
             await runtime.PROMPT()
         } finally {
-            jobState.jobs[iJob].status = `finished`
-
             runtime.output_text({
-                title: `# ${iJob} DONE`,
-                message: `# ${iJob} DONE
+                title: `DONE`,
+                message: `DONE
 
 ${JSON.stringify(
     {
-        jobState,
         cacheStatus,
     },
     null,
