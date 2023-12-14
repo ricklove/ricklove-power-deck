@@ -1474,8 +1474,10 @@ var operation_image = createImageOperationValue({
 
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
 var CacheStopError = class extends Error {
-  constructor() {
+  constructor(onCacheCreated, wasAlreadyCached) {
     super();
+    this.onCacheCreated = onCacheCreated;
+    this.wasAlreadyCached = wasAlreadyCached;
   }
 };
 var createFrameOperation = (op) => op;
@@ -1544,9 +1546,9 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
   }),
   run: (state, form, frame) => {
     const { runtime, graph } = state;
-    const formItemCacheState = {
+    const opCacheState = {
       dependencyKey: `42`,
-      cacheNumber: frame.cacheCount_current
+      cacheStepIndex: frame.cacheStepIndex_current
     };
     const opStates = form.map((x) => {
       const cleanedFormItem = {
@@ -1561,41 +1563,45 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
           ])
         )
       };
-      const dependencyKey = formItemCacheState.dependencyKey = `${createRandomGenerator(
-        `${formItemCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`
+      const dependencyKey = opCacheState.dependencyKey = `${createRandomGenerator(
+        `${opCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`
       ).randomInt()}`;
-      const shouldCache = true;
-      const cacheNumber = !shouldCache ? formItemCacheState.cacheNumber : formItemCacheState.cacheNumber = formItemCacheState.cacheNumber + 1;
-      const isStopped = cacheNumber > frame.cacheCount_stop;
-      const isCached = state.cacheState.exists(dependencyKey, frame.cacheFrameId);
+      const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache);
+      const cacheStepIndex = !shouldCache ? opCacheState.cacheStepIndex : opCacheState.cacheStepIndex = opCacheState.cacheStepIndex + 1;
+      const isStopped = cacheStepIndex >= frame.cacheStepIndex_stop;
+      const isCached = state.cacheState.exists(cacheStepIndex, dependencyKey, frame.cacheFrameId);
       return {
         item: x,
         dependencyKey,
-        cacheNumber,
+        cacheStepIndex,
         isStopped,
         shouldCache,
         isCached
       };
     });
+    console.log(`createFrameOperationsChoiceList:opStates`, { opStates });
     const iLastCacheToUse = opStates.findLastIndex((x) => !x.isStopped && x.isCached);
-    const opStatesStartingWithCached = opStates.slice(iLastCacheToUse);
+    const opStatesStartingWithCached = iLastCacheToUse >= 0 ? opStates.slice(iLastCacheToUse) : opStates;
     for (const {
       item: listItem,
       dependencyKey,
       isCached,
-      cacheNumber,
+      cacheStepIndex,
       shouldCache,
       isStopped
     } of opStatesStartingWithCached) {
       if (isCached) {
-        const cacheResult = state.cacheState.get(dependencyKey, frame.cacheFrameId);
+        const cacheResult = state.cacheState.get(cacheStepIndex, dependencyKey, frame.cacheFrameId);
         if (!cacheResult) {
-          throw new Error(`Cache is missing, but reported as existing ${JSON.stringify({ cacheNumber, listItem })}`);
+          throw new Error(
+            `Cache is missing, but reported as existing ${JSON.stringify({ cacheStepIndex, listItem })}`
+          );
         }
         frame = { ...frame, ...cacheResult.frame };
         state.scopeStack = cacheResult.scopeStack;
         if (isStopped) {
-          throw new CacheStopError();
+          throw new CacheStopError(() => {
+          }, true);
         }
         continue;
       }
@@ -1624,16 +1630,16 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
         }
       }
       if (shouldCache && !isCached) {
-        state.cacheState.set(dependencyKey, frame.cacheFrameId, {
+        const { onCacheCreated } = state.cacheState.set(cacheStepIndex, dependencyKey, frame.cacheFrameId, {
           frame,
           scopeStack: state.scopeStack
         });
         frame = {
           ...frame,
-          cacheCount_current: cacheNumber
+          cacheStepIndex_current: cacheStepIndex
         };
         if (isStopped) {
-          throw new CacheStopError();
+          throw new CacheStopError(onCacheCreated, false);
         }
       }
     }
@@ -2509,6 +2515,10 @@ appOptimized({
                 exists: () => false,
                 get: () => void 0,
                 set: () => {
+                  return {
+                    onCacheCreated: () => {
+                    }
+                  };
                 }
               }
             },
@@ -2517,8 +2527,8 @@ appOptimized({
               image: startImage,
               mask: fullMask,
               // ignored
-              cacheCount_current: 0,
-              cacheCount_stop: 1e4,
+              cacheStepIndex_current: 0,
+              cacheStepIndex_stop: 1e4,
               cacheFrameId: 0
             }
           );

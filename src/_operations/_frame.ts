@@ -6,14 +6,14 @@ import { createRandomGenerator } from '../_random'
 type CacheData = { frame: Pick<Frame, `image` | `mask`>; scopeStack: AppState[`scopeStack`] }
 export type AppStateWithCache = AppState & {
     cacheState: {
-        exists: (dependencyKey: string, cacheFrameId: number) => boolean
-        get: (dependencyKey: string, cacheFrameId: number) => undefined | CacheData
-        set: (dependencyKey: string, cacheFrameId: number, data: CacheData) => void
+        exists: (cacheIndex: number, dependencyKey: string, cacheFrameId: number) => boolean
+        get: (cacheIndex: number, dependencyKey: string, cacheFrameId: number) => undefined | CacheData
+        set: (cacheIndex: number, dependencyKey: string, cacheFrameId: number, data: CacheData) => { onCacheCreated: () => void }
     }
 }
 
 export class CacheStopError extends Error {
-    constructor() {
+    constructor(public onCacheCreated: () => void, public wasAlreadyCached: boolean) {
         super()
     }
 }
@@ -21,8 +21,8 @@ export class CacheStopError extends Error {
 export type Frame = {
     image: _IMAGE
     mask: _MASK
-    cacheCount_current: number
-    cacheCount_stop: number
+    cacheStepIndex_current: number
+    cacheStepIndex_stop: number
     cacheFrameId: number
 }
 export type FrameOperation<TFields extends WidgetDict> = {
@@ -128,9 +128,9 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
 
             // console.log(`createFrameOperationsChoiceList: run`, { operations, form })
 
-            const formItemCacheState = {
+            const opCacheState = {
                 dependencyKey: `42`,
-                cacheNumber: frame.cacheCount_current,
+                cacheStepIndex: frame.cacheStepIndex_current,
             }
 
             const opStates = form.map((x) => {
@@ -148,48 +148,52 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         ]),
                     ),
                 }
-                const dependencyKey = (formItemCacheState.dependencyKey = `${createRandomGenerator(
-                    `${formItemCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`,
+                const dependencyKey = (opCacheState.dependencyKey = `${createRandomGenerator(
+                    `${opCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`,
                 ).randomInt()}`)
-                // const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache)
-                const shouldCache = true
-                const cacheNumber = !shouldCache
-                    ? formItemCacheState.cacheNumber
-                    : (formItemCacheState.cacheNumber = formItemCacheState.cacheNumber + 1)
-                const isStopped = cacheNumber > frame.cacheCount_stop
-                const isCached = state.cacheState.exists(dependencyKey, frame.cacheFrameId)
+                const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache)
+                // const shouldCache = true
+                const cacheStepIndex = !shouldCache
+                    ? opCacheState.cacheStepIndex
+                    : (opCacheState.cacheStepIndex = opCacheState.cacheStepIndex + 1)
+                const isStopped = cacheStepIndex >= frame.cacheStepIndex_stop
+                const isCached = state.cacheState.exists(cacheStepIndex, dependencyKey, frame.cacheFrameId)
 
                 return {
                     item: x,
                     dependencyKey,
-                    cacheNumber,
+                    cacheStepIndex,
                     isStopped,
                     shouldCache,
                     isCached,
                 }
             })
 
+            console.log(`createFrameOperationsChoiceList:opStates`, { opStates })
+
             const iLastCacheToUse = opStates.findLastIndex((x) => !x.isStopped && x.isCached)
-            const opStatesStartingWithCached = opStates.slice(iLastCacheToUse)
+            const opStatesStartingWithCached = iLastCacheToUse >= 0 ? opStates.slice(iLastCacheToUse) : opStates
 
             for (const {
                 item: listItem,
                 dependencyKey,
                 isCached,
-                cacheNumber,
+                cacheStepIndex,
                 shouldCache,
                 isStopped,
             } of opStatesStartingWithCached) {
                 if (isCached) {
-                    const cacheResult = state.cacheState.get(dependencyKey, frame.cacheFrameId)
+                    const cacheResult = state.cacheState.get(cacheStepIndex, dependencyKey, frame.cacheFrameId)
                     if (!cacheResult) {
-                        throw new Error(`Cache is missing, but reported as existing ${JSON.stringify({ cacheNumber, listItem })}`)
+                        throw new Error(
+                            `Cache is missing, but reported as existing ${JSON.stringify({ cacheStepIndex, listItem })}`,
+                        )
                     }
                     frame = { ...frame, ...cacheResult.frame }
                     state.scopeStack = cacheResult.scopeStack
 
                     if (isStopped) {
-                        throw new CacheStopError()
+                        throw new CacheStopError(() => {}, true)
                     }
 
                     continue
@@ -233,17 +237,17 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
 
                 if (shouldCache && !isCached) {
                     // save the cache
-                    state.cacheState.set(dependencyKey, frame.cacheFrameId, {
+                    const { onCacheCreated } = state.cacheState.set(cacheStepIndex, dependencyKey, frame.cacheFrameId, {
                         frame,
                         scopeStack: state.scopeStack,
                     })
 
                     frame = {
                         ...frame,
-                        cacheCount_current: cacheNumber,
+                        cacheStepIndex_current: cacheStepIndex,
                     }
                     if (isStopped) {
-                        throw new CacheStopError()
+                        throw new CacheStopError(onCacheCreated, false)
                     }
                 }
             }

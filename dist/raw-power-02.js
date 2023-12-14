@@ -303,8 +303,10 @@ var createRandomGenerator = (hash) => {
 
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
 var CacheStopError = class extends Error {
-  constructor() {
+  constructor(onCacheCreated, wasAlreadyCached) {
     super();
+    this.onCacheCreated = onCacheCreated;
+    this.wasAlreadyCached = wasAlreadyCached;
   }
 };
 var createFrameOperation = (op) => op;
@@ -373,9 +375,9 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
   }),
   run: (state, form, frame) => {
     const { runtime, graph } = state;
-    const formItemCacheState = {
+    const opCacheState = {
       dependencyKey: `42`,
-      cacheNumber: frame.cacheCount_current
+      cacheStepIndex: frame.cacheStepIndex_current
     };
     const opStates = form.map((x) => {
       const cleanedFormItem = {
@@ -390,41 +392,45 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
           ])
         )
       };
-      const dependencyKey = formItemCacheState.dependencyKey = `${createRandomGenerator(
-        `${formItemCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`
+      const dependencyKey = opCacheState.dependencyKey = `${createRandomGenerator(
+        `${opCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`
       ).randomInt()}`;
-      const shouldCache = true;
-      const cacheNumber = !shouldCache ? formItemCacheState.cacheNumber : formItemCacheState.cacheNumber = formItemCacheState.cacheNumber + 1;
-      const isStopped = cacheNumber > frame.cacheCount_stop;
-      const isCached = state.cacheState.exists(dependencyKey, frame.cacheFrameId);
+      const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache);
+      const cacheStepIndex = !shouldCache ? opCacheState.cacheStepIndex : opCacheState.cacheStepIndex = opCacheState.cacheStepIndex + 1;
+      const isStopped = cacheStepIndex >= frame.cacheStepIndex_stop;
+      const isCached = state.cacheState.exists(cacheStepIndex, dependencyKey, frame.cacheFrameId);
       return {
         item: x,
         dependencyKey,
-        cacheNumber,
+        cacheStepIndex,
         isStopped,
         shouldCache,
         isCached
       };
     });
+    console.log(`createFrameOperationsChoiceList:opStates`, { opStates });
     const iLastCacheToUse = opStates.findLastIndex((x) => !x.isStopped && x.isCached);
-    const opStatesStartingWithCached = opStates.slice(iLastCacheToUse);
+    const opStatesStartingWithCached = iLastCacheToUse >= 0 ? opStates.slice(iLastCacheToUse) : opStates;
     for (const {
       item: listItem,
       dependencyKey,
       isCached,
-      cacheNumber,
+      cacheStepIndex,
       shouldCache,
       isStopped
     } of opStatesStartingWithCached) {
       if (isCached) {
-        const cacheResult = state.cacheState.get(dependencyKey, frame.cacheFrameId);
+        const cacheResult = state.cacheState.get(cacheStepIndex, dependencyKey, frame.cacheFrameId);
         if (!cacheResult) {
-          throw new Error(`Cache is missing, but reported as existing ${JSON.stringify({ cacheNumber, listItem })}`);
+          throw new Error(
+            `Cache is missing, but reported as existing ${JSON.stringify({ cacheStepIndex, listItem })}`
+          );
         }
         frame = { ...frame, ...cacheResult.frame };
         state.scopeStack = cacheResult.scopeStack;
         if (isStopped) {
-          throw new CacheStopError();
+          throw new CacheStopError(() => {
+          }, true);
         }
         continue;
       }
@@ -453,16 +459,16 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
         }
       }
       if (shouldCache && !isCached) {
-        state.cacheState.set(dependencyKey, frame.cacheFrameId, {
+        const { onCacheCreated } = state.cacheState.set(cacheStepIndex, dependencyKey, frame.cacheFrameId, {
           frame,
           scopeStack: state.scopeStack
         });
         frame = {
           ...frame,
-          cacheCount_current: cacheNumber
+          cacheStepIndex_current: cacheStepIndex
         };
         if (isStopped) {
-          throw new CacheStopError();
+          throw new CacheStopError(onCacheCreated, false);
         }
       }
     }
@@ -1377,7 +1383,25 @@ appOptimized({
       kind: `warning`,
       text: `Cancel!`
     }),
-    size: form.size({}),
+    clearCache: form.inlineRun({
+      kind: `warning`,
+      text: `Clear Cache!!!`
+    }),
+    imageSource: form.group({
+      items: () => ({
+        directory: form.string({ default: `video` }),
+        filePattern: form.string({ default: `#####.png` }),
+        // pattern: form.string({ default: `*.png` }),
+        startIndex: form.int({ default: 1, min: 0 }),
+        endIndex: form.intOpt({ default: 1e4, min: 0, max: 1e4 }),
+        selectEveryNth: form.intOpt({ default: 1, min: 1 }),
+        // batchSize: form.int({ default: 1, min: 1 }),
+        iterationCount: form.int({ default: 1, min: 1 }),
+        // iterationSize: form.intOpt({ default: 1, min: 1 }),
+        preview: form.inlineRun({})
+      })
+    }),
+    // size: form.size({}),
     operations: allOperationsList.ui(form)
   }),
   run: async (runtime, form) => {
@@ -1386,6 +1410,10 @@ appOptimized({
     }));
     const cacheStatus = cacheStatusStore.get();
     console.log(`cacheStatus`, { cacheStatus: JSON.stringify(cacheStatus) });
+    if (form.clearCache) {
+      cacheStatus.cache = [];
+      return;
+    }
     const graph = runtime.nodes;
     const state = {
       runtime,
@@ -1394,15 +1422,25 @@ appOptimized({
       workingDirectory: `../input/working`,
       comfyUiInputRelativePath: `../comfyui/ComfyUI/input`,
       cacheState: {
-        exists: (dependencyKey, cacheFrameId) => {
-          console.log(`cacheState: exists`, { dependencyKey, cacheFrameId, cacheStatus: JSON.stringify(cacheStatus) });
+        exists: (cacheStepIndex, dependencyKey, cacheFrameId) => {
+          console.log(`cacheState: exists`, {
+            cacheStepIndex,
+            dependencyKey,
+            cacheFrameId,
+            cacheStatus: JSON.parse(JSON.stringify(cacheStatus))
+          });
           const cacheResult = cacheStatus.cache.find(
             (x) => x.dependencyKey === dependencyKey && x.cacheFrameId === cacheFrameId
           );
           return cacheResult?.status === `cached`;
         },
-        get: (dependencyKey, cacheFrameId) => {
-          console.log(`cacheState: get`, { dependencyKey, cacheFrameId, cacheStatus: JSON.stringify(cacheStatus) });
+        get: (cacheStepIndex, dependencyKey, cacheFrameId) => {
+          console.log(`cacheState: get`, {
+            cacheStepIndex,
+            dependencyKey,
+            cacheFrameId,
+            cacheStatus: JSON.parse(JSON.stringify(cacheStatus))
+          });
           const cacheResult = cacheStatus.cache.find(
             (x) => x.dependencyKey === dependencyKey && x.cacheFrameId === cacheFrameId
           );
@@ -1412,11 +1450,21 @@ appOptimized({
           const getCachedObject = (sourceName, entries) => {
             return Object.fromEntries(
               entries.map((x) => {
-                const cacheBuilerResult = x.kind === `mask` ? cacheMaskBuilder(state, `${sourceName}_${x.key}`, [], {
-                  dependencyKey
-                }).loadCached() : cacheImageBuilder(state, `${sourceName}_${x.key}`, [], {
-                  dependencyKey
-                }).loadCached();
+                const cacheBuilerResult = x.kind === `mask` ? cacheMaskBuilder(
+                  state,
+                  `${cacheStepIndex.toString().padStart(4, `0`)}_${sourceName}_${x.key}`,
+                  [],
+                  {
+                    dependencyKey
+                  }
+                ).loadCached() : cacheImageBuilder(
+                  state,
+                  `${cacheStepIndex.toString().padStart(4, `0`)}_${sourceName}_${x.key}`,
+                  [],
+                  {
+                    dependencyKey
+                  }
+                ).loadCached();
                 const nodeOutput = cacheBuilerResult.getOutput();
                 cacheBuilerResult.modify(cacheFrameId);
                 return [x.key, { value: nodeOutput, kind: x.kind }];
@@ -1433,24 +1481,35 @@ appOptimized({
           );
           return { frame, scopeStack };
         },
-        set: (dependencyKey, cacheFrameId, data) => {
+        set: (cacheStepIndex, dependencyKey, cacheFrameId, data) => {
           console.log(`cacheState: set`, {
+            cacheStepIndex,
             dependencyKey,
             cacheFrameId,
             data,
-            cacheStatus: JSON.stringify(cacheStatus)
+            cacheStatus: JSON.parse(JSON.stringify(cacheStatus))
           });
           const setCachedObject = (sourceName, data2) => {
-            return Object.fromEntries(
+            const result = Object.fromEntries(
               Object.entries(data2).map(([k, v]) => {
                 if (!v) {
                   return [k, void 0];
                 }
-                const cacheBuilerResult = v.kind === `mask` ? cacheMaskBuilder(state, `${sourceName}_${k}`, [], {
-                  dependencyKey
-                }).createCache(() => v.value) : cacheImageBuilder(state, `${sourceName}_${k}`, [], {
-                  dependencyKey
-                }).createCache(() => v.value);
+                const cacheBuilerResult = v.kind === `mask` ? cacheMaskBuilder(
+                  state,
+                  `${cacheStepIndex.toString().padStart(4, `0`)}_${sourceName}_${k}`,
+                  [],
+                  {
+                    dependencyKey
+                  }
+                ).createCache(() => v.value) : cacheImageBuilder(
+                  state,
+                  `${cacheStepIndex.toString().padStart(4, `0`)}_${sourceName}_${k}`,
+                  [],
+                  {
+                    dependencyKey
+                  }
+                ).createCache(() => v.value);
                 if (!cacheBuilerResult) {
                   throw new Error(`cache failed to be created`);
                 }
@@ -1459,6 +1518,7 @@ appOptimized({
                 return [k, nodeOutput];
               }).filter((k, v) => !!v)
             );
+            return result;
           };
           const frame = setCachedObject(`frame`, {
             image: { value: data.frame.image, kind: `image` },
@@ -1467,7 +1527,39 @@ appOptimized({
           const scopeStack = data.scopeStack.map(
             (s, i) => setCachedObject(`scopeStack${i.toString().padStart(2, `0`)}`, s)
           );
-          return { frame, scopeStack };
+          const valueKeys = {
+            frame: {
+              entries: [
+                {
+                  key: `image`,
+                  kind: `image`
+                },
+                {
+                  key: `mask`,
+                  kind: `mask`
+                }
+              ]
+            },
+            scopeStack: data.scopeStack.map((s, i) => ({
+              entries: Object.entries(s).filter(([k, v]) => !!v).map(([k, v]) => {
+                return {
+                  key: k,
+                  kind: v.kind
+                };
+              })
+            }))
+          };
+          const cacheValue = JSON.parse(
+            JSON.stringify({
+              cacheStepIndex,
+              dependencyKey,
+              cacheFrameId,
+              status: `cached`,
+              valueKeys
+            })
+          );
+          const onCacheCreated = () => cacheStatus.cache.push(cacheValue);
+          return { frame, scopeStack, onCacheCreated };
         }
       }
     };
@@ -1492,7 +1584,6 @@ appOptimized({
     if (jobState.isFirstRun) {
       jobState.isFirstRun = false;
       try {
-        const queueSize = 1;
         for (let iJob2 = 0; !jobState.isDone && !jobState.isCancelled; iJob2++) {
           runtime.output_text({ title: `#${iJob2} created`, message: `#${iJob2} created` });
           jobState.jobs[iJob2] = {
@@ -1501,12 +1592,7 @@ appOptimized({
           runtime.st.currentDraft?.start();
           await new Promise((resolve, reject) => {
             const intervalId = setInterval(() => {
-              if (jobState.jobs[iJob2].status === `created`) {
-                return;
-              }
-              const jobsDoneCount = jobState.jobs.filter((x) => x.status === `finished`).length;
-              const jobsPendingCount = iJob2 - jobsDoneCount;
-              if (jobsPendingCount < queueSize) {
+              if (jobState.jobs[jobState.jobs.length - 1].status === `finished`) {
                 clearInterval(intervalId);
                 resolve();
               }
@@ -1539,38 +1625,54 @@ ${JSON.stringify(
         )}`
       });
       const cacheCount_stop = job.cacheCount_stop = jobState.jobs[iJob - 1]?.nextCacheCount_stop ?? jobState.jobs[iJob - 1]?.cacheCount_stop ?? 1;
-      const frameIds = [0];
+      const frameIds = [...new Array(form.imageSource.iterationCount)].map(
+        (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
+      );
       let wasCacheStopped = false;
       for (const frameId of frameIds) {
-        const size = form.size;
-        const initialImage = graph.EmptyImage({
-          width: size.width,
-          height: size.height,
-          color: iJob
+        const imageDir = form.imageSource.directory.replace(/\/$/g, ``);
+        const loadImageNode = graph.RL$_LoadImageSequence({
+          path: `${imageDir}/${form.imageSource.filePattern}`,
+          current_frame: frameId
         });
+        const initialImage = loadImageNode.outputs.image;
+        if (form.imageSource.preview) {
+          throw new PreviewStopError(() => {
+          });
+        }
+        const { INT: width, INT_1: height } = graph.Get_Image_Size({
+          image: initialImage
+        }).outputs;
         const initialMask = graph.SolidMask({
-          width: size.width,
-          height: size.height,
+          width,
+          height,
           value: 1
         });
         try {
           allOperationsList.run(state, form.operations, {
             image: initialImage,
             mask: initialMask,
-            cacheCount_current: 0,
-            cacheCount_stop,
+            cacheStepIndex_current: 0,
+            cacheStepIndex_stop: cacheCount_stop,
             cacheFrameId: frameId
           });
+          graph.PreviewImage({
+            images: runtime.AUTO
+          });
+          await runtime.PROMPT();
         } catch (err) {
           if (!(err instanceof CacheStopError)) {
             throw err;
           }
           wasCacheStopped = true;
+          if (!err.wasAlreadyCached) {
+            graph.PreviewImage({
+              images: runtime.AUTO
+            });
+            await runtime.PROMPT();
+            err.onCacheCreated();
+          }
         }
-        graph.PreviewImage({
-          images: runtime.AUTO
-        });
-        await runtime.PROMPT();
       }
       if (!wasCacheStopped) {
         jobState.isDone = true;

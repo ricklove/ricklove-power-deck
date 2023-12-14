@@ -236,6 +236,9 @@ appOptimized({
                                 get: () => undefined,
                                 set: () => {
                                     //ignore
+                                    return {
+                                        onCacheCreated: () => {},
+                                    }
                                 },
                             },
                         },
@@ -244,8 +247,8 @@ appOptimized({
                             image: startImage,
                             mask: fullMask,
                             // ignored
-                            cacheCount_current: 0,
-                            cacheCount_stop: 10000,
+                            cacheStepIndex_current: 0,
+                            cacheStepIndex_stop: 10000,
                             cacheFrameId: 0,
                         },
                     )
