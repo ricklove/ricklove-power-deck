@@ -228,10 +228,27 @@ appOptimized({
                         height: imageSize.outputs.INT_1,
                         value: 0xffffff,
                     })
-                    const result = allOperationsList.run(state, form.testAllOperationsList, {
-                        image: startImage,
-                        mask: fullMask,
-                    })
+                    const result = allOperationsList.run(
+                        {
+                            ...state,
+                            cacheState: {
+                                exists: () => false,
+                                get: () => undefined,
+                                set: () => {
+                                    //ignore
+                                },
+                            },
+                        },
+                        form.testAllOperationsList,
+                        {
+                            image: startImage,
+                            mask: fullMask,
+                            // ignored
+                            cacheCount_current: 0,
+                            cacheCount_stop: 10000,
+                            cacheFrameId: 0,
+                        },
+                    )
                     return {
                         nodes: {},
                         outputs: { image_testAllOperationsList: result.image, mask_testAllOperationsList: result.mask },

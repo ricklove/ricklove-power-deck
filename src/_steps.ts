@@ -1,11 +1,13 @@
 import { ComfyNodeOutput } from 'src/core/Slot'
 import { AppState, StopError, disableNodesAfterInclusive, getNextActiveNodeIndex, getEnabledNodeNames } from './_appState'
-import { cacheImage, cacheImageBuilder, cacheMaskBuilder } from './_cache'
+import { AppStateWithCacheDirectories, cacheImage, cacheImageBuilder, cacheMaskBuilder } from './_cache'
 import { Widget } from 'src'
 import { ComfyNode } from 'src/core/ComfyNode'
 import { showLoadingMessage } from './_loadingMessage'
 
-type StepState = AppState
+export type AppStateWithStepDirectories = AppStateWithCacheDirectories & {
+    imageDirectory: string
+}
 
 type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never
 // type MergeNestedFields<T extends Record<string, unknown>> = UnionToIntersection<T[keyof T]>
@@ -48,7 +50,7 @@ export type StepDefinition<
     inputSteps: TInputStepDefinitions
     cacheParams: Widget[`$Output`] | Record<string, unknown>
     create: (
-        state: StepState,
+        state: AppStateWithStepDirectories,
         args: { inputs: OutputsOfInputSteps<TInputStepDefinitions> },
     ) => {
         nodes: TNodes
@@ -68,8 +70,8 @@ type StepBuild<
     _nodes: TNodes
 }
 
-export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) => {
-    const _state = appState as AppState
+export const createStepsSystem = (appState: Omit<AppStateWithStepDirectories, `workingDirectory`>) => {
+    const _state = appState as AppStateWithStepDirectories
     _state.workingDirectory = `${_state.imageDirectory}/working`
     const stepsRegistry = [] as StepDefinition[]
 
@@ -88,7 +90,7 @@ export const createStepsSystem = (appState: Omit<AppState, `workingDirectory`>) 
         name: string
         inputSteps: TInputStepDefinitions
         create: (
-            state: StepState,
+            state: AppStateWithStepDirectories,
             args: { inputs: OutputsOfInputSteps<TInputStepDefinitions> },
         ) => {
             nodes: TNodes

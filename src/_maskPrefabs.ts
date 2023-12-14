@@ -184,7 +184,7 @@ const operation_storeMask = createMaskOperation({
             return mask
         }
 
-        storeInScope(state, form.storeMask.name, mask ?? null)
+        storeInScope(state, form.storeMask.name, `mask`, mask ?? null)
         return mask
     },
 })

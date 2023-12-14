@@ -26,15 +26,15 @@ var getEnabledNodeNames = (runtime) => {
     disabledNodes: runtime.workflow.nodes.filter((x) => x.disabled).map((x) => x.$schema.nameInCushy)
   };
 };
-var storeInScope = (state, name, value) => {
+var storeInScope = (state, name, kind, value) => {
   const { scopeStack } = state;
-  scopeStack[scopeStack.length - 1][name] = value;
+  scopeStack[scopeStack.length - 1][name] = value == void 0 ? void 0 : { value, kind };
 };
 var loadFromScope = (state, name) => {
   const { scopeStack } = state;
   let i = scopeStack.length;
   while (i >= 0) {
-    const v = scopeStack[scopeStack.length - 1][name];
+    const { value: v } = scopeStack[scopeStack.length - 1][name] ?? {};
     if (v !== void 0) {
       return v;
     }
@@ -188,7 +188,7 @@ var operation_storeMask = createMaskOperation({
     if (form.storeMask == null) {
       return mask;
     }
-    storeInScope(state, form.storeMask.name, mask ?? null);
+    storeInScope(state, form.storeMask.name, `mask`, mask ?? null);
     return mask;
   }
 });
@@ -1404,7 +1404,7 @@ var operation_storeImage = createImageOperation({
     if (form.storeImage == null) {
       return image;
     }
-    storeInScope(state, form.storeImage.name, image);
+    storeInScope(state, form.storeImage.name, `image`, image);
     return image;
   }
 });
@@ -1525,7 +1525,11 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
             return [
               k,
               form.group({
-                items: () => ({ ...v.ui(form), __preview: form.inlineRun({}) })
+                items: () => ({
+                  ...v.ui(form),
+                  __cache: form.bool({}),
+                  __preview: form.inlineRun({})
+                })
               })
             ];
           })
@@ -1535,17 +1539,61 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
   }),
   run: (state, form, frame) => {
     const { runtime, graph } = state;
-    console.log(`createFrameOperationsChoiceList: run`, { operations, form });
-    for (const listItem of form) {
+    const formItemCacheState = {
+      dependencyKey: `42`,
+      cacheNumber: frame.cacheCount_current
+    };
+    const opStates = form.map((x) => {
+      const cleanedFormItem = {
+        ...Object.fromEntries(
+          Object.entries(x).map(([k, v]) => [
+            k,
+            !v ? void 0 : {
+              ...v,
+              __cache: void 0,
+              __preview: void 0
+            }
+          ])
+        )
+      };
+      const dependencyKey = formItemCacheState.dependencyKey = `${createRandomGenerator(
+        `${formItemCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`
+      ).randomInt()}`;
+      const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache);
+      const cacheNumber = !shouldCache ? formItemCacheState.cacheNumber : formItemCacheState.cacheNumber = formItemCacheState.cacheNumber + 1;
+      const isStopped = cacheNumber > frame.cacheCount_stop;
+      const isCached = state.cacheState.exists(dependencyKey, frame.cacheFrameId);
+      return {
+        item: x,
+        dependencyKey,
+        cacheNumber,
+        isStopped,
+        shouldCache,
+        isCached
+      };
+    });
+    const iLastCacheToUse = opStates.findLastIndex((x) => !x.isStopped && x.isCached);
+    const opStatesStartingWithCached = opStates.slice(iLastCacheToUse);
+    for (const {
+      item: listItem,
+      dependencyKey,
+      isCached,
+      cacheNumber,
+      shouldCache,
+      isStopped
+    } of opStatesStartingWithCached) {
+      if (isCached) {
+        const cacheResult = state.cacheState.get(dependencyKey, frame.cacheFrameId);
+        if (!cacheResult) {
+          throw new Error(`Cache is missing, but reported as existing ${JSON.stringify({ cacheNumber, listItem })}`);
+        }
+        frame = { ...frame, ...cacheResult.frame };
+        state.scopeStack = cacheResult.scopeStack;
+        continue;
+      }
       const listItemGroupOptFields = listItem;
       for (const [opName, op] of Object.entries(operations)) {
         const opGroupOptValue = listItemGroupOptFields[opName];
-        console.log(`createFrameOperationsChoiceList: loop operations`, {
-          opGroupOptValue,
-          operations,
-          listItemGroupOptFields,
-          form
-        });
         if (opGroupOptValue == null) {
           continue;
         }
@@ -1564,6 +1612,19 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
               blend_factor: 0.5
             })
           });
+          throw new StopError(void 0);
+        }
+      }
+      if (shouldCache && !isCached) {
+        state.cacheState.set(dependencyKey, frame.cacheFrameId, {
+          frame,
+          scopeStack: state.scopeStack
+        });
+        frame = {
+          ...frame,
+          cacheCount_current: cacheNumber
+        };
+        if (frame.cacheCount_current >= frame.cacheCount_stop) {
           throw new StopError(void 0);
         }
       }
@@ -2069,7 +2130,7 @@ var storeImageVarible = createFrameOperation({
     name: form.string({ default: `a` })
   }),
   run: (state, form, { image }) => {
-    storeInScope(state, form.name, image);
+    storeInScope(state, form.name, `image`, image);
     return { image };
   }
 });
@@ -2086,7 +2147,7 @@ var storeMaskVariable = createFrameOperation({
     name: form.string({ default: `a` })
   }),
   run: (state, form, { image, mask }) => {
-    storeInScope(state, form.name, mask);
+    storeInScope(state, form.name, `mask`, mask);
     return { mask };
   }
 });
@@ -2105,10 +2166,10 @@ var storeVariables = createFrameOperation({
   }),
   run: (state, form, { image, mask }) => {
     if (form.image) {
-      storeInScope(state, form.image, mask);
+      storeInScope(state, form.image, `image`, image);
     }
     if (form.mask) {
-      storeInScope(state, form.mask, mask);
+      storeInScope(state, form.mask, `mask`, mask);
     }
     return {};
   }
@@ -2433,10 +2494,26 @@ appOptimized({
             height: imageSize.outputs.INT_1,
             value: 16777215
           });
-          const result = allOperationsList.run(state, form.testAllOperationsList, {
-            image: startImage,
-            mask: fullMask
-          });
+          const result = allOperationsList.run(
+            {
+              ...state,
+              cacheState: {
+                exists: () => false,
+                get: () => void 0,
+                set: () => {
+                }
+              }
+            },
+            form.testAllOperationsList,
+            {
+              image: startImage,
+              mask: fullMask,
+              // ignored
+              cacheCount_current: 0,
+              cacheCount_stop: 1e4,
+              cacheFrameId: 0
+            }
+          );
           return {
             nodes: {},
             outputs: { image_testAllOperationsList: result.image, mask_testAllOperationsList: result.mask }

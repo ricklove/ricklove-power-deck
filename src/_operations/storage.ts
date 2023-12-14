@@ -6,7 +6,7 @@ const storeImageVarible = createFrameOperation({
         name: form.string({ default: `a` }),
     }),
     run: (state, form, { image }) => {
-        storeInScope(state, form.name, image)
+        storeInScope(state, form.name, `image`, image)
         return { image }
     },
 })
@@ -25,7 +25,7 @@ const storeMaskVariable = createFrameOperation({
         name: form.string({ default: `a` }),
     }),
     run: (state, form, { image, mask }) => {
-        storeInScope(state, form.name, mask)
+        storeInScope(state, form.name, `mask`, mask)
         return { mask }
     },
 })
@@ -46,10 +46,10 @@ const storeVariables = createFrameOperation({
     }),
     run: (state, form, { image, mask }) => {
         if (form.image) {
-            storeInScope(state, form.image, mask)
+            storeInScope(state, form.image, `image`, image)
         }
         if (form.mask) {
-            storeInScope(state, form.mask, mask)
+            storeInScope(state, form.mask, `mask`, mask)
         }
         return {}
     },

@@ -368,7 +368,7 @@ const operation_storeImage = createImageOperation({
             return image
         }
 
-        storeInScope(state, form.storeImage.name, image)
+        storeInScope(state, form.storeImage.name, `image`, image)
         return image
     },
 })

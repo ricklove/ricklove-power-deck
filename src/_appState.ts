@@ -7,13 +7,12 @@ export class StopError extends Error {
     }
 }
 
+export type ScopeStackValueType = _IMAGE | _MASK
+export type ScopeStackValueKind = `image` | `mask`
 export type AppState = {
     runtime: Runtime
     graph: ComfyWorkflowBuilder
-    imageDirectory: string
-    workingDirectory: string
-    comfyUiInputRelativePath?: string
-    scopeStack: Record<string, unknown>[]
+    scopeStack: Record<string, undefined | { value: ScopeStackValueType; kind: ScopeStackValueKind }>[]
 }
 
 export const getNextActiveNodeIndex = (runtime: Runtime) => {
@@ -31,17 +30,22 @@ export const getEnabledNodeNames = (runtime: Runtime) => {
     }
 }
 
-export const storeInScope = <T extends null | Object>(state: AppState, name: string, value: T) => {
+export const storeInScope = <T extends null | ScopeStackValueType>(
+    state: AppState,
+    name: string,
+    kind: ScopeStackValueKind,
+    value: T,
+) => {
     const { scopeStack } = state
-    scopeStack[scopeStack.length - 1][name] = value
+    scopeStack[scopeStack.length - 1][name] = value == undefined ? undefined : { value: value, kind }
 }
 
-export const loadFromScope = <T extends null | Object>(state: AppState, name: string): undefined | T => {
+export const loadFromScope = <T extends null | ScopeStackValueType>(state: AppState, name: string): undefined | T => {
     const { scopeStack } = state
 
     let i = scopeStack.length
     while (i >= 0) {
-        const v = scopeStack[scopeStack.length - 1][name]
+        const { value: v } = scopeStack[scopeStack.length - 1][name] ?? {}
         if (v !== undefined) {
             return v as T
         }

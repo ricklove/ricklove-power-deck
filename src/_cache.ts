@@ -3,12 +3,17 @@ import { createRandomGenerator } from './_random'
 import { showLoadingMessage } from './_loadingMessage'
 import { Widget } from 'src'
 
+export type AppStateWithCacheDirectories = AppState & {
+    workingDirectory: string
+    comfyUiInputRelativePath?: string
+}
+
 let history = {
     writtenFormSerialWithPath: new Set<string>(),
 }
 type Params = Widget[`$Output`] | Record<string, unknown>
 export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
-    state: AppState,
+    state: AppStateWithCacheDirectories,
     folderPrefix: string,
     params: (Widget[`$Output`] | Record<string, unknown>)[],
     dependencyKeyRef: { dependencyKey: string },
@@ -104,7 +109,7 @@ export const cacheImageBuilder = <TIMAGE extends _IMAGE>(
 }
 
 export const cacheMaskBuilder = <TMASK extends undefined | _MASK>(
-    state: AppState,
+    state: AppStateWithCacheDirectories,
     folderPrefix: string,
     params: Params,
     dependencyKeyRef: { dependencyKey: string },
@@ -154,7 +159,7 @@ export const cacheMaskBuilder = <TMASK extends undefined | _MASK>(
 }
 
 export const cacheImage = async <TIMAGE extends undefined | _IMAGE | IMAGE>(
-    state: AppState,
+    state: AppStateWithCacheDirectories,
     folderPrefix: string,
     frameIndex: number,
     params: Widget[`$Output`] | Record<string, unknown>,
@@ -234,7 +239,7 @@ export const cacheImage = async <TIMAGE extends undefined | _IMAGE | IMAGE>(
 }
 
 export const cacheMask = async <TMASK extends undefined | _MASK | MASK>(
-    state: AppState,
+    state: AppStateWithCacheDirectories,
     folderPrefix: string,
     frameIndex: number,
     params: Params,
