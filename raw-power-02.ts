@@ -1,9 +1,9 @@
-import { AppState, ScopeStackValueKind, ScopeStackValueType, StopError } from './src/_appState'
+import { AppState, ScopeStackValueKind, ScopeStackValueType, PreviewStopError } from './src/_appState'
 import { appOptimized } from './src/optimizer'
 import { createRandomGenerator } from './src/_random'
 import { allOperationsList } from './src/_operations/allOperations'
 import { CustomDataL } from 'src/models/CustomData'
-import { AppStateWithCache } from './src/_operations/_frame'
+import { AppStateWithCache, CacheStopError } from './src/_operations/_frame'
 import { AppStateWithCacheDirectories, cacheImageBuilder, cacheMaskBuilder } from './src/_cache'
 
 export type AppJobState = AppStateWithCache &
@@ -184,11 +184,6 @@ appOptimized({
                             }
                         }, 100)
                     })
-
-                    // temp
-                    if (i > 10) {
-                        jobState.isDone = true
-                    }
                 }
             } catch (err) {
                 console.error(`jobState.isFirstRun`, err)
@@ -205,6 +200,7 @@ appOptimized({
                 message: `# ${iJob}`,
             })
 
+            const frameId = 0
             const size = form.size
             const initialImage = graph.EmptyImage({
                 width: size.width,
@@ -216,21 +212,34 @@ appOptimized({
                 height: size.height,
                 value: 1,
             })
-            allOperationsList.run(state, form.operations, {
-                image: initialImage,
-                mask: initialMask,
-                // TODO: enable cache
-                cacheCount_current: 0,
-                cacheCount_stop: 10000,
-                cacheFrameId: 0,
-            })
+            for (let iCacheStop = 1; iCacheStop < 1000000; iCacheStop++) {
+                try {
+                    allOperationsList.run(state, form.operations, {
+                        image: initialImage,
+                        mask: initialMask,
+                        cacheCount_current: 0,
+                        cacheCount_stop: iCacheStop,
+                        cacheFrameId: frameId,
+                    })
 
-            graph.PreviewImage({
-                images: runtime.AUTO,
-            })
-            await runtime.PROMPT()
+                    graph.PreviewImage({
+                        images: runtime.AUTO,
+                    })
+                    await runtime.PROMPT()
+
+                    // got here without a stop, so quit loop
+                    break
+                } catch (err) {
+                    if (!(err instanceof CacheStopError)) {
+                        throw err
+                    }
+                    continue
+                }
+            }
+
+            jobState.isDone = true
         } catch (err) {
-            if (!(err instanceof StopError)) {
+            if (!(err instanceof PreviewStopError)) {
                 return
             }
 

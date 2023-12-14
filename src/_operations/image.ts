@@ -1,4 +1,4 @@
-import { StopError, loadFromScope, storeInScope } from '../_appState'
+import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
 
 const zoeDepth = createFrameOperation({
@@ -197,7 +197,7 @@ const enhanceLighting = createFrameOperation({
             graph.PreviewImage({
                 images: imageShadowNode.outputs[activiatePreviewKey],
             })
-            throw new StopError(() => {})
+            throw new PreviewStopError(() => {})
         }
 
         const selectedImage = imageShadowNode.outputs[form.selected.id] ?? image
@@ -205,7 +205,7 @@ const enhanceLighting = createFrameOperation({
             graph.PreviewImage({
                 images: selectedImage,
             })
-            throw new StopError(() => {})
+            throw new PreviewStopError(() => {})
         }
         return { image: selectedImage }
     },

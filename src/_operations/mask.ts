@@ -1,5 +1,5 @@
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
-import { StopError, loadFromScope, storeInScope } from '../_appState'
+import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
 
 const hedEdge = createFrameOperation({

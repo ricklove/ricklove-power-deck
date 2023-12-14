@@ -1,5 +1,5 @@
 import { ComfyNode } from 'src/core/ComfyNode'
-import { AppState, StopError, disableNodesAfterInclusive } from './src/_appState'
+import { AppState, PreviewStopError, disableNodesAfterInclusive } from './src/_appState'
 import { cacheImage, cacheMask } from './src/_cache'
 import { showLoadingMessage } from './src/_loadingMessage'
 import { operation_mask } from './src/_maskPrefabs'
@@ -514,7 +514,7 @@ appOptimized({
                                 const maskImage = graph.MaskToImage({ mask: replaceMask })
                                 graph.PreviewImage({ images: maskImage })
                             }
-                            throw new StopError(undefined)
+                            throw new PreviewStopError(undefined)
                         }
 
                         const loraStack = !form.sampler.lcm
@@ -574,7 +574,7 @@ appOptimized({
 
                             const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE })
                             graph.PreviewImage({ images: latentImage })
-                            throw new StopError(undefined)
+                            throw new PreviewStopError(undefined)
                         }
 
                         // if (form.film?.singleFramePyramidSize) {
@@ -1110,7 +1110,7 @@ appOptimized({
 
             return
         } catch (err) {
-            if (err instanceof StopError) {
+            if (err instanceof PreviewStopError) {
                 await runtime.PROMPT()
                 return
             }

@@ -1,7 +1,6 @@
-import { FormBuilder, Runtime, Widget, Widget_groupOpt, Widget_group_output } from 'src'
-import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
+import { FormBuilder, Widget, Widget_groupOpt, Widget_group_output } from 'src'
 import { WidgetDict } from 'src/cards/Card'
-import { AppState, StopError, storeInScope, loadFromScope } from '../_appState'
+import { AppState, PreviewStopError } from '../_appState'
 import { createRandomGenerator } from '../_random'
 
 type CacheData = { frame: Pick<Frame, `image` | `mask`>; scopeStack: AppState[`scopeStack`] }
@@ -10,6 +9,12 @@ export type AppStateWithCache = AppState & {
         exists: (dependencyKey: string, cacheFrameId: number) => boolean
         get: (dependencyKey: string, cacheFrameId: number) => undefined | CacheData
         set: (dependencyKey: string, cacheFrameId: number, data: CacheData) => void
+    }
+}
+
+export class CacheStopError extends Error {
+    constructor() {
+        super()
     }
 }
 
@@ -84,7 +89,7 @@ export const createFrameOperationsGroupList = <TOperations extends Record<string
 
                 if (listItem.preview) {
                     graph.PreviewImage({ images: frame.image })
-                    throw new StopError(undefined)
+                    throw new PreviewStopError(undefined)
                 }
             }
 
@@ -216,7 +221,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                 blend_factor: 0.5,
                             }),
                         })
-                        throw new StopError(undefined)
+                        throw new PreviewStopError(undefined)
                     }
                 }
 
@@ -232,7 +237,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         cacheCount_current: cacheNumber,
                     }
                     if (frame.cacheCount_current >= frame.cacheCount_stop) {
-                        throw new StopError(undefined)
+                        throw new CacheStopError()
                     }
                 }
             }

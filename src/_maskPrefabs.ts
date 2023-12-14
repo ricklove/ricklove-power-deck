@@ -1,7 +1,7 @@
 import { FormBuilder, Runtime, Widget } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { WidgetDict } from 'src/cards/Card'
-import { AppState, StopError, storeInScope, loadFromScope } from './_appState'
+import { AppState, PreviewStopError, storeInScope, loadFromScope } from './_appState'
 
 type MaskOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields
@@ -409,7 +409,7 @@ const operations_all = createMaskOperation({
             if (op.preview) {
                 if (!mask) {
                     runtime.output_text(`No mask!`)
-                    throw new StopError(undefined)
+                    throw new PreviewStopError(undefined)
                 }
 
                 const maskAsImage = graph.MaskToImage({ mask })
@@ -422,7 +422,7 @@ const operations_all = createMaskOperation({
                 // graph.PreviewImage({ images: maskRaw.outputs.Heatmap$_Mask })
                 graph.PreviewImage({ images: maskPreview })
                 // don't wait for it?
-                throw new StopError(undefined)
+                throw new PreviewStopError(undefined)
             }
         }
 

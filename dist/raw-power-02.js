@@ -8,7 +8,7 @@
 // ████████▀  ████████▀   ▄████████▀    ███    █▀     ▀█████▀         ███    █▀   ▄████▀       ▄████▀
 
 // library/ricklove/my-cushy-deck/src/_appState.ts
-var StopError = class extends Error {
+var PreviewStopError = class extends Error {
   constructor(setFrameIndex) {
     super();
     this.setFrameIndex = setFrameIndex;
@@ -302,6 +302,11 @@ var createRandomGenerator = (hash) => {
 };
 
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
+var CacheStopError = class extends Error {
+  constructor() {
+    super();
+  }
+};
 var createFrameOperation = (op) => op;
 var createFrameOperationValue = (op) => op;
 var createFrameOperationsGroupList = (operations) => createFrameOperationValue({
@@ -339,7 +344,7 @@ var createFrameOperationsGroupList = (operations) => createFrameOperationValue({
       }
       if (listItem.preview) {
         graph.PreviewImage({ images: frame.image });
-        throw new StopError(void 0);
+        throw new PreviewStopError(void 0);
       }
     }
     return frame;
@@ -441,7 +446,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
               blend_factor: 0.5
             })
           });
-          throw new StopError(void 0);
+          throw new PreviewStopError(void 0);
         }
       }
       if (shouldCache && !isCached) {
@@ -454,7 +459,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
           cacheCount_current: cacheNumber
         };
         if (frame.cacheCount_current >= frame.cacheCount_stop) {
-          throw new StopError(void 0);
+          throw new CacheStopError();
         }
       }
     }
@@ -637,7 +642,7 @@ var enhanceLighting = createFrameOperation({
       graph.PreviewImage({
         images: imageShadowNode.outputs[activiatePreviewKey]
       });
-      throw new StopError(() => {
+      throw new PreviewStopError(() => {
       });
     }
     const selectedImage = imageShadowNode.outputs[form.selected.id] ?? image;
@@ -645,7 +650,7 @@ var enhanceLighting = createFrameOperation({
       graph.PreviewImage({
         images: selectedImage
       });
-      throw new StopError(() => {
+      throw new PreviewStopError(() => {
       });
     }
     return { image: selectedImage };
@@ -1485,9 +1490,6 @@ appOptimized({
               }
             }, 100);
           });
-          if (i > 10) {
-            jobState.isDone = true;
-          }
         }
       } catch (err) {
         console.error(`jobState.isFirstRun`, err);
@@ -1501,6 +1503,7 @@ appOptimized({
         title: `# ${iJob}`,
         message: `# ${iJob}`
       });
+      const frameId = 0;
       const size = form.size;
       const initialImage = graph.EmptyImage({
         width: size.width,
@@ -1512,20 +1515,30 @@ appOptimized({
         height: size.height,
         value: 1
       });
-      allOperationsList.run(state, form.operations, {
-        image: initialImage,
-        mask: initialMask,
-        // TODO: enable cache
-        cacheCount_current: 0,
-        cacheCount_stop: 1e4,
-        cacheFrameId: 0
-      });
-      graph.PreviewImage({
-        images: runtime.AUTO
-      });
-      await runtime.PROMPT();
+      for (let iCacheStop = 1; iCacheStop < 1e6; iCacheStop++) {
+        try {
+          allOperationsList.run(state, form.operations, {
+            image: initialImage,
+            mask: initialMask,
+            cacheCount_current: 0,
+            cacheCount_stop: iCacheStop,
+            cacheFrameId: frameId
+          });
+          graph.PreviewImage({
+            images: runtime.AUTO
+          });
+          await runtime.PROMPT();
+          break;
+        } catch (err) {
+          if (!(err instanceof CacheStopError)) {
+            throw err;
+          }
+          continue;
+        }
+      }
+      jobState.isDone = true;
     } catch (err) {
-      if (!(err instanceof StopError)) {
+      if (!(err instanceof PreviewStopError)) {
         return;
       }
       const graph2 = state.graph;

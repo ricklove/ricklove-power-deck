@@ -1,5 +1,5 @@
 import { ComfyNodeOutput } from 'src/core/Slot'
-import { AppState, StopError, disableNodesAfterInclusive, getNextActiveNodeIndex, getEnabledNodeNames } from './_appState'
+import { AppState, PreviewStopError, disableNodesAfterInclusive, getNextActiveNodeIndex, getEnabledNodeNames } from './_appState'
 import { AppStateWithCacheDirectories, cacheImage, cacheImageBuilder, cacheMaskBuilder } from './_cache'
 import { Widget } from 'src'
 import { ComfyNode } from 'src/core/ComfyNode'
@@ -384,7 +384,7 @@ export const createStepsSystem = (appState: Omit<AppStateWithStepDirectories, `w
                     // preview
                     if (stepDef.preview) {
                         _state.graph.PreviewImage({ images: _state.runtime.AUTO })
-                        throw new StopError(undefined)
+                        throw new PreviewStopError(undefined)
                     }
                     continue
                 }
@@ -410,11 +410,11 @@ export const createStepsSystem = (appState: Omit<AppStateWithStepDirectories, `w
                 // preview
                 if (stepDef.preview) {
                     _state.graph.PreviewImage({ images: _state.runtime.AUTO })
-                    throw new StopError(undefined)
+                    throw new PreviewStopError(undefined)
                 }
             }
         } catch (err) {
-            if (!(err instanceof StopError)) {
+            if (!(err instanceof PreviewStopError)) {
                 throw err
             }
 
@@ -432,7 +432,7 @@ export const createStepsSystem = (appState: Omit<AppStateWithStepDirectories, `w
                 await _state.runtime.PROMPT()
             }
 
-            throw new StopError(() => {})
+            throw new PreviewStopError(() => {})
         }
 
         return dependencyKeyRef

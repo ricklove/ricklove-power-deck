@@ -1,7 +1,7 @@
 import { Runtime } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 
-export class StopError extends Error {
+export class PreviewStopError extends Error {
     constructor(public setFrameIndex: undefined | ((frameIndex: number) => void)) {
         super()
     }

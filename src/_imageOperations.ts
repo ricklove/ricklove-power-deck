@@ -1,7 +1,7 @@
 import { FormBuilder, Runtime, Widget, Widget_groupOpt, Widget_group_output } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { WidgetDict } from 'src/cards/Card'
-import { AppState, StopError, storeInScope, loadFromScope } from './_appState'
+import { AppState, PreviewStopError, storeInScope, loadFromScope } from './_appState'
 
 type ImageOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields
@@ -250,7 +250,7 @@ const operation_enhanceLighting = createImageOperation({
             graph.PreviewImage({
                 images: imageShadowNode.outputs[activiatePreviewKey],
             })
-            throw new StopError(() => {})
+            throw new PreviewStopError(() => {})
         }
 
         const selectedImage = imageShadowNode.outputs[form.enhanceLighting.selected.id] ?? image
@@ -258,7 +258,7 @@ const operation_enhanceLighting = createImageOperation({
             graph.PreviewImage({
                 images: selectedImage,
             })
-            throw new StopError(() => {})
+            throw new PreviewStopError(() => {})
         }
         return selectedImage
     },
@@ -432,7 +432,7 @@ const operations_all = createImageOperation({
             if (op.preview) {
                 graph.PreviewImage({ images: image })
                 // don't wait for it?
-                throw new StopError(undefined)
+                throw new PreviewStopError(undefined)
             }
         }
 

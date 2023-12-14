@@ -8,7 +8,7 @@
 // ████████▀  ████████▀   ▄████████▀    ███    █▀     ▀█████▀         ███    █▀   ▄████▀       ▄████▀
 
 // library/ricklove/my-cushy-deck/src/_appState.ts
-var StopError = class extends Error {
+var PreviewStopError = class extends Error {
   constructor(setFrameIndex) {
     super();
     this.setFrameIndex = setFrameIndex;
@@ -311,7 +311,7 @@ var operations_all = createMaskOperation({
       if (op.preview) {
         if (!mask) {
           runtime.output_text(`No mask!`);
-          throw new StopError(void 0);
+          throw new PreviewStopError(void 0);
         }
         const maskAsImage = graph.MaskToImage({ mask });
         const maskPreview = graph.ImageBlend({
@@ -321,7 +321,7 @@ var operations_all = createMaskOperation({
           blend_factor: 0.5
         });
         graph.PreviewImage({ images: maskPreview });
-        throw new StopError(void 0);
+        throw new PreviewStopError(void 0);
       }
     }
     return mask;
@@ -1043,7 +1043,7 @@ var createStepsSystem = (appState) => {
           });
           if (stepDef.preview) {
             _state.graph.PreviewImage({ images: _state.runtime.AUTO });
-            throw new StopError(void 0);
+            throw new PreviewStopError(void 0);
           }
           continue;
         }
@@ -1061,11 +1061,11 @@ var createStepsSystem = (appState) => {
         });
         if (stepDef.preview) {
           _state.graph.PreviewImage({ images: _state.runtime.AUTO });
-          throw new StopError(void 0);
+          throw new PreviewStopError(void 0);
         }
       }
     } catch (err) {
-      if (!(err instanceof StopError)) {
+      if (!(err instanceof PreviewStopError)) {
         throw err;
       }
       console.log(`runSteps: Stop Preview - Running up to this point in the graph for all frames`, {
@@ -1078,7 +1078,7 @@ var createStepsSystem = (appState) => {
         }
         await _state.runtime.PROMPT();
       }
-      throw new StopError(() => {
+      throw new PreviewStopError(() => {
       });
     }
     return dependencyKeyRef;
@@ -1297,7 +1297,7 @@ var operation_enhanceLighting = createImageOperation({
       graph.PreviewImage({
         images: imageShadowNode.outputs[activiatePreviewKey]
       });
-      throw new StopError(() => {
+      throw new PreviewStopError(() => {
       });
     }
     const selectedImage = imageShadowNode.outputs[form.enhanceLighting.selected.id] ?? image;
@@ -1305,7 +1305,7 @@ var operation_enhanceLighting = createImageOperation({
       graph.PreviewImage({
         images: selectedImage
       });
-      throw new StopError(() => {
+      throw new PreviewStopError(() => {
       });
     }
     return selectedImage;
@@ -1461,7 +1461,7 @@ var operations_all2 = createImageOperation({
       image = operation_storeImage.run(state, image, op);
       if (op.preview) {
         graph.PreviewImage({ images: image });
-        throw new StopError(void 0);
+        throw new PreviewStopError(void 0);
       }
     }
     return image;
@@ -1473,6 +1473,11 @@ var operation_image = createImageOperationValue({
 });
 
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
+var CacheStopError = class extends Error {
+  constructor() {
+    super();
+  }
+};
 var createFrameOperation = (op) => op;
 var createFrameOperationValue = (op) => op;
 var createFrameOperationsGroupList = (operations) => createFrameOperationValue({
@@ -1510,7 +1515,7 @@ var createFrameOperationsGroupList = (operations) => createFrameOperationValue({
       }
       if (listItem.preview) {
         graph.PreviewImage({ images: frame.image });
-        throw new StopError(void 0);
+        throw new PreviewStopError(void 0);
       }
     }
     return frame;
@@ -1612,7 +1617,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
               blend_factor: 0.5
             })
           });
-          throw new StopError(void 0);
+          throw new PreviewStopError(void 0);
         }
       }
       if (shouldCache && !isCached) {
@@ -1625,7 +1630,7 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
           cacheCount_current: cacheNumber
         };
         if (frame.cacheCount_current >= frame.cacheCount_stop) {
-          throw new StopError(void 0);
+          throw new CacheStopError();
         }
       }
     }
@@ -1808,7 +1813,7 @@ var enhanceLighting = createFrameOperation({
       graph.PreviewImage({
         images: imageShadowNode.outputs[activiatePreviewKey]
       });
-      throw new StopError(() => {
+      throw new PreviewStopError(() => {
       });
     }
     const selectedImage = imageShadowNode.outputs[form.selected.id] ?? image;
@@ -1816,7 +1821,7 @@ var enhanceLighting = createFrameOperation({
       graph.PreviewImage({
         images: selectedImage
       });
-      throw new StopError(() => {
+      throw new PreviewStopError(() => {
       });
     }
     return { image: selectedImage };
@@ -2733,7 +2738,7 @@ appOptimized({
               const maskImage = graph.MaskToImage({ mask: replaceMask });
               graph.PreviewImage({ images: maskImage });
             }
-            throw new StopError(void 0);
+            throw new PreviewStopError(void 0);
           }
           const loraStack = !form.sampler.lcm ? void 0 : graph.LoRA_Stacker({
             input_mode: `simple`,
@@ -2780,7 +2785,7 @@ appOptimized({
             }
             const latentImage = graph.VAEDecode({ samples: latent, vae: loader.outputs.VAE });
             graph.PreviewImage({ images: latentImage });
-            throw new StopError(void 0);
+            throw new PreviewStopError(void 0);
           }
           const startStep = Math.max(
             0,
@@ -3199,7 +3204,7 @@ appOptimized({
       }
       return;
     } catch (err) {
-      if (err instanceof StopError) {
+      if (err instanceof PreviewStopError) {
         await runtime.PROMPT();
         return;
       }
