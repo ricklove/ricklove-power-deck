@@ -274,15 +274,22 @@ var appOptimized = ({ ui, run }) => {
 };
 
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
-var createFrameIdProvider = () => {
+var createFrameIdProvider = (frameIds) => {
+  const getBatch = (frameIds2, currentFrameId, leftCount, rightCount) => {
+    const iFrameId = frameIds2.indexOf(currentFrameId);
+    const iStart = Math.max(0, iFrameId - leftCount);
+    const iEndInclusive = Math.min(frameIds2.length - 1, iFrameId + (rightCount ?? leftCount));
+    return [...new Array(iEndInclusive - iStart + 1)].map((_, i) => frameIds2[iStart + i]);
+  };
   const frameIdProvider = {
-    _state: 0,
+    _frameIds: frameIds,
+    _currentFrameId: 0,
     _callbacks: [],
     subscribe: (callback) => {
       frameIdProvider._callbacks.push(callback);
     },
     set: (value) => {
-      frameIdProvider._state = value;
+      frameIdProvider._currentFrameId = value;
       for (const cb of frameIdProvider._callbacks) {
         try {
           cb(value);
@@ -293,8 +300,9 @@ var createFrameIdProvider = () => {
     },
     get: () => {
       console.log(`frameIdProvider.get`, { frameIdProvider });
-      return frameIdProvider._state;
-    }
+      return frameIdProvider._currentFrameId;
+    },
+    getBatch: (left, right) => getBatch(frameIdProvider._frameIds, frameIdProvider._currentFrameId, left, right)
   };
   return frameIdProvider;
 };

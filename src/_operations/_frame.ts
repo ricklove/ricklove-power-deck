@@ -4,15 +4,30 @@ import { AppState, PreviewStopError, loadFromScope, storeInScope } from '../_app
 import { createRandomGenerator } from '../_random'
 import { storageOperations } from './storage'
 
-export const createFrameIdProvider = () => {
+export type Frame = {
+    image: _IMAGE
+    mask: _MASK
+    frameIdProvider: { subscribe: (callback: (value: number) => void) => void }
+}
+
+export const createFrameIdProvider = (frameIds: number[]) => {
+    const getBatch = (frameIds: number[], currentFrameId: number, leftCount: number, rightCount?: number) => {
+        const iFrameId = frameIds.indexOf(currentFrameId)
+        const iStart = Math.max(0, iFrameId - leftCount)
+        const iEndInclusive = Math.min(frameIds.length - 1, iFrameId + (rightCount ?? leftCount))
+        return [...new Array(iEndInclusive - iStart + 1)].map((_, i) => frameIds[iStart + i])
+    }
+    type GetBatch = ReturnType<typeof getBatch>
+
     const frameIdProvider = {
-        _state: 0,
+        _frameIds: frameIds,
+        _currentFrameId: 0,
         _callbacks: [] as ((value: number) => void)[],
         subscribe: (callback: (value: number) => void) => {
             frameIdProvider._callbacks.push(callback)
         },
         set: (value: number) => {
-            frameIdProvider._state = value
+            frameIdProvider._currentFrameId = value
             for (const cb of frameIdProvider._callbacks) {
                 try {
                     cb(value)
@@ -24,17 +39,14 @@ export const createFrameIdProvider = () => {
         },
         get: () => {
             console.log(`frameIdProvider.get`, { frameIdProvider })
-            return frameIdProvider._state
+            return frameIdProvider._currentFrameId
         },
+        getBatch: (left: number, right?: number) =>
+            getBatch(frameIdProvider._frameIds, frameIdProvider._currentFrameId, left, right),
     }
     return frameIdProvider
 }
 
-export type Frame = {
-    image: _IMAGE
-    mask: _MASK
-    frameIdProvider: { subscribe: (callback: (value: number) => void) => void }
-}
 export type FrameOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields
     run: (state: AppState, form: { [k in keyof TFields]: TFields[k]['$Output'] }, frame: Frame) => Partial<Frame>
