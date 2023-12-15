@@ -116,8 +116,9 @@ const upscaleWithModel = createFrameOperation({
             items: () => ({
                 none: form.bool({ default: false }),
                 ratio: form.float({ default: 1 }),
-                targetWidth: form.int({ default: 1024 }),
-                targetHeight: form.int({ default: 1024 }),
+                maxSideLength: form.int({ default: 1024 }),
+                // targetWidth: form.int({ default: 1024 }),
+                // targetHeight: form.int({ default: 1024 }),
             }),
         }),
     }),
@@ -136,11 +137,10 @@ const upscaleWithModel = createFrameOperation({
                   scale_width: form.resize.ratio,
                   scale_height: form.resize.ratio,
               })
-            : form.resize.targetHeight || form.resize.targetWidth
+            : form.resize.maxSideLength
             ? graph.RL$_Crop$_Resize({
                   image: upscaledImage,
-                  width: form.resize.targetWidth,
-                  height: form.resize.targetHeight,
+                  max_side_length: form.resize.maxSideLength,
               })
             : upscaledImage
 

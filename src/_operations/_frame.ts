@@ -4,10 +4,36 @@ import { AppState, PreviewStopError, loadFromScope, storeInScope } from '../_app
 import { createRandomGenerator } from '../_random'
 import { storageOperations } from './storage'
 
+export const createFrameIdProvider = () => {
+    const frameIdProvider = {
+        _state: 0,
+        _callbacks: [] as ((value: number) => void)[],
+        subscribe: (callback: (value: number) => void) => {
+            frameIdProvider._callbacks.push(callback)
+        },
+        set: (value: number) => {
+            frameIdProvider._state = value
+            for (const cb of frameIdProvider._callbacks) {
+                try {
+                    cb(value)
+                } catch (err) {
+                    // ignore subscriber errors
+                    console.error(`frameIdProvider.callback error`, err)
+                }
+            }
+        },
+        get: () => {
+            console.log(`frameIdProvider.get`, { frameIdProvider })
+            return frameIdProvider._state
+        },
+    }
+    return frameIdProvider
+}
+
 export type Frame = {
     image: _IMAGE
     mask: _MASK
-    frameId: () => number
+    frameIdProvider: { subscribe: (callback: (value: number) => void) => void }
 }
 export type FrameOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields

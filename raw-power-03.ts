@@ -1,6 +1,7 @@
 import { PreviewStopError, AppState } from './src/_appState'
 import { appOptimized } from './src/optimizer'
 import { allOperationsList } from './src/_operations/allOperations'
+import { createFrameIdProvider } from './src/_operations/_frame'
 
 appOptimized({
     ui: (form) => ({
@@ -44,19 +45,14 @@ appOptimized({
         const frameIds = [...new Array(form.imageSource.iterationCount)].map(
             (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1),
         )
-        const frameIdProvider = {
-            state: 0,
-            get: () => {
-                console.log(`frameIdProvider.get`, { frameIdProvider, frameIds })
-                return frameIdProvider.state
-            },
-        }
+        const frameIdProvider = createFrameIdProvider()
 
         const imageDir = form.imageSource.directory.replace(/\/$/g, ``)
         const loadImageNode = graph.RL$_LoadImageSequence({
             path: `${imageDir}/${form.imageSource.filePattern}`,
-            current_frame: frameIds[0],
+            current_frame: frameIdProvider.get,
         })
+        frameIdProvider.subscribe((v) => (loadImageNode.inputs.current_frame = v))
         const initialImage = loadImageNode.outputs.image
 
         try {
@@ -79,8 +75,7 @@ appOptimized({
                     images: runtime.AUTO,
                 })
                 for (const frameId of frameIds) {
-                    frameIdProvider.state = frameId
-                    loadImageNode.inputs.current_frame = frameId
+                    frameIdProvider.set(frameId)
                     await runtime.PROMPT()
                 }
                 return
@@ -89,12 +84,11 @@ appOptimized({
             allOperationsList.run(state, form.operations, {
                 image: initialImage,
                 mask: initialMask,
-                frameId: frameIdProvider.get,
+                frameIdProvider,
             })
 
             for (const frameId of frameIds) {
-                frameIdProvider.state = frameId
-                loadImageNode.inputs.current_frame = frameId
+                frameIdProvider.set(frameId)
                 await runtime.PROMPT()
             }
         } catch (err) {
@@ -107,8 +101,7 @@ appOptimized({
             //     images: runtime.AUTO,
             // })
             for (const frameId of frameIds) {
-                frameIdProvider.state = frameId
-                loadImageNode.inputs.current_frame = frameId
+                frameIdProvider.set(frameId)
                 await runtime.PROMPT()
             }
             // await runtime.PROMPT()

@@ -12,6 +12,7 @@ import { createRandomGenerator } from './src/_random'
 import { operation_image } from './src/_imageOperations'
 import { imageOperationsList } from './src/_operations/image'
 import { allOperationsList } from './src/_operations/allOperations'
+import { createFrameIdProvider } from './src/_operations/_frame'
 
 appOptimized({
     ui: (form) => ({
@@ -228,10 +229,7 @@ appOptimized({
                         height: imageSize.outputs.INT_1,
                         value: 0xffffff,
                     })
-                    const frameIdProvider = {
-                        state: 0,
-                        get: () => frameIdProvider.state,
-                    }
+                    const frameIdProvider = createFrameIdProvider()
                     const result = allOperationsList.run(
                         {
                             ...state,
@@ -240,7 +238,7 @@ appOptimized({
                         {
                             image: startImage,
                             mask: fullMask,
-                            frameId: frameIdProvider.get,
+                            frameIdProvider: frameIdProvider,
                         },
                     )
                     return {
@@ -249,7 +247,7 @@ appOptimized({
                     }
                 },
                 modify: ({ nodes, frameIndex }) => {
-                    nodes.frameIdProvider.state = frameIndex
+                    nodes.frameIdProvider.set(frameIndex)
                 },
             })
 

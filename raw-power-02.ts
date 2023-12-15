@@ -5,6 +5,7 @@ import { allOperationsList_cached as allOperationsList } from './src/_operations
 import { CustomDataL } from 'src/models/CustomData'
 import { AppStateWithCache, CacheStopError } from './src/_operations/_frameCached'
 import { AppStateWithCacheDirectories, cacheImageBuilder, cacheMaskBuilder } from './src/_cache'
+import { createFrameIdProvider } from './src/_operations/_frame'
 
 export type AppState = AppStateWithCache & AppStateWithCacheDirectories
 
@@ -313,10 +314,12 @@ ${JSON.stringify(
                     }
 
                     try {
+                        const frameIdProvider = createFrameIdProvider()
+
                         allOperationsList.run(state, form.operations, {
                             image: initialImage,
                             mask: initialMask,
-                            frameId: () => frameId,
+                            frameIdProvider,
                             cacheStepIndex_current: 0,
                             cacheStepIndex_stop: cacheCount_stop,
                             cacheFrameId: frameId,

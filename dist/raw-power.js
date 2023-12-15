@@ -1474,6 +1474,30 @@ var operation_image = createImageOperationValue({
 });
 
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
+var createFrameIdProvider = () => {
+  const frameIdProvider = {
+    _state: 0,
+    _callbacks: [],
+    subscribe: (callback) => {
+      frameIdProvider._callbacks.push(callback);
+    },
+    set: (value) => {
+      frameIdProvider._state = value;
+      for (const cb of frameIdProvider._callbacks) {
+        try {
+          cb(value);
+        } catch (err) {
+          console.error(`frameIdProvider.callback error`, err);
+        }
+      }
+    },
+    get: () => {
+      console.log(`frameIdProvider.get`, { frameIdProvider });
+      return frameIdProvider._state;
+    }
+  };
+  return frameIdProvider;
+};
 var createFrameOperation = (op) => op;
 var createFrameOperationValue = (op) => op;
 var createFrameOperationsGroupList = (operations) => createFrameOperationValue({
@@ -2409,8 +2433,9 @@ var upscaleWithModel = createFrameOperation({
       items: () => ({
         none: form.bool({ default: false }),
         ratio: form.float({ default: 1 }),
-        targetWidth: form.int({ default: 1024 }),
-        targetHeight: form.int({ default: 1024 })
+        maxSideLength: form.int({ default: 1024 })
+        // targetWidth: form.int({ default: 1024 }),
+        // targetHeight: form.int({ default: 1024 }),
       })
     })
   }),
@@ -2426,10 +2451,9 @@ var upscaleWithModel = createFrameOperation({
       method: `lanczos`,
       scale_width: form.resize.ratio,
       scale_height: form.resize.ratio
-    }) : form.resize.targetHeight || form.resize.targetWidth ? graph.RL$_Crop$_Resize({
+    }) : form.resize.maxSideLength ? graph.RL$_Crop$_Resize({
       image: upscaledImage,
-      width: form.resize.targetWidth,
-      height: form.resize.targetHeight
+      max_side_length: form.resize.maxSideLength
     }) : upscaledImage;
     const size = graph.Get_image_size({ image: resizedImage });
     const resizedMask = graph.Image_To_Mask({
@@ -2610,12 +2634,13 @@ var saveImageFrame = createFrameOperation({
   ui: (form) => ({
     path: form.string({ default: `../input/working/#####.png` })
   }),
-  run: ({ graph }, form, { image, frameId }) => {
-    graph.RL$_SaveImageSequence({
+  run: ({ graph }, form, { image, frameIdProvider }) => {
+    const saveNode = graph.RL$_SaveImageSequence({
       images: image,
-      current_frame: frameId,
+      current_frame: 0,
       path: form.path
     });
+    frameIdProvider.subscribe((v) => saveNode.inputs.current_frame = v);
     return {};
   }
 });
@@ -2623,16 +2648,18 @@ var loadImageFrame = createFrameOperation({
   ui: (form) => ({
     path: form.string({ default: `../input/working/#####.png` })
   }),
-  run: ({ graph }, form, { image, frameId }) => {
-    const resultImage = graph.RL$_LoadImageSequence({
-      current_frame: frameId,
+  run: ({ graph }, form, { image, frameIdProvider }) => {
+    const resultImageNode = graph.RL$_LoadImageSequence({
+      current_frame: 0,
       path: form.path
     });
-    return { image: resultImage };
+    frameIdProvider.subscribe((v) => resultImageNode.inputs.current_frame = v);
+    return { image: resultImageNode.outputs.image };
   }
 });
 var cacheImageFrame = createFrameOperation({
   ui: (form) => ({
+    buildCache: form.inlineRun({ text: `Cache It!!!`, kind: `warning` }),
     path: form.string({ default: `../input/working/NAME/#####.png` }),
     image: form.strOpt({ default: `imageFinal` }),
     imageVariables: form.list({
@@ -2643,34 +2670,44 @@ var cacheImageFrame = createFrameOperation({
       element: () => form.string({ default: `maskVariable` })
     })
   }),
-  run: (state, form, { image, mask, frameId }) => {
+  run: (state, form, { image, mask, frameIdProvider }) => {
     const { graph } = state;
     const createCachedImage = (name, image2) => {
-      graph.RL$_SaveImageSequence({
-        images: image2,
-        current_frame: frameId,
+      if (form.buildCache) {
+        const saveNode = graph.RL$_SaveImageSequence({
+          images: image2,
+          current_frame: 0,
+          path: form.path.replace(`NAME`, name)
+        });
+        frameIdProvider.subscribe((v) => saveNode.inputs.current_frame = v);
+        return void 0;
+      }
+      const cachedImageNode = graph.RL$_LoadImageSequence({
+        current_frame: 0,
         path: form.path.replace(`NAME`, name)
       });
-      const cachedImage = graph.RL$_LoadImageSequence({
-        current_frame: frameId,
-        path: form.path.replace(`NAME`, name)
-      });
-      return cachedImage;
+      frameIdProvider.subscribe((v) => cachedImageNode.inputs.current_frame = v);
+      return cachedImageNode.outputs.image;
     };
     const createCachedMask = (name, mask2) => {
-      graph.RL$_SaveImageSequence({
-        images: graph.MaskToImage({ mask: mask2 }),
-        current_frame: frameId,
+      if (form.buildCache) {
+        const saveNode = graph.RL$_SaveImageSequence({
+          images: graph.MaskToImage({ mask: mask2 }),
+          current_frame: 0,
+          path: form.path.replace(`NAME`, name)
+        });
+        frameIdProvider.subscribe((v) => saveNode.inputs.current_frame = v);
+        return void 0;
+      }
+      const cachedImageNode = graph.RL$_LoadImageSequence({
+        current_frame: 0,
         path: form.path.replace(`NAME`, name)
       });
-      const cachedImage = graph.RL$_LoadImageSequence({
-        current_frame: frameId,
-        path: form.path.replace(`NAME`, name)
-      });
+      frameIdProvider.subscribe((v) => cachedImageNode.inputs.current_frame = v);
       const cachedMask = graph.Image_To_Mask({
-        image: cachedImage,
+        image: cachedImageNode,
         method: `intensity`
-      });
+      }).outputs.MASK;
       return cachedMask;
     };
     const resultImage = !form.image ? void 0 : createCachedImage(form.image, image);
@@ -2679,7 +2716,7 @@ var cacheImageFrame = createFrameOperation({
       if (!variableImage) {
         continue;
       }
-      storeInScope(state, k, `image`, createCachedImage(k, variableImage));
+      storeInScope(state, k, `image`, createCachedImage(k, variableImage) ?? variableImage);
     }
     const resultMask = !form.mask ? void 0 : createCachedMask(form.mask, mask);
     for (const k of form.maskVariables) {
@@ -2687,7 +2724,11 @@ var cacheImageFrame = createFrameOperation({
       if (!variableMask) {
         continue;
       }
-      storeInScope(state, k, `mask`, createCachedMask(k, variableMask));
+      storeInScope(state, k, `mask`, createCachedMask(k, variableMask) ?? variableMask);
+    }
+    if (form.buildCache) {
+      throw new PreviewStopError(() => {
+      });
     }
     return { image: resultImage, mask: resultMask };
   }
@@ -2917,10 +2958,7 @@ appOptimized({
             height: imageSize.outputs.INT_1,
             value: 16777215
           });
-          const frameIdProvider = {
-            state: 0,
-            get: () => frameIdProvider.state
-          };
+          const frameIdProvider = createFrameIdProvider();
           const result = allOperationsList.run(
             {
               ...state
@@ -2929,7 +2967,7 @@ appOptimized({
             {
               image: startImage,
               mask: fullMask,
-              frameId: frameIdProvider.get
+              frameIdProvider
             }
           );
           return {
@@ -2938,7 +2976,7 @@ appOptimized({
           };
         },
         modify: ({ nodes, frameIndex }) => {
-          nodes.frameIdProvider.state = frameIndex;
+          nodes.frameIdProvider.set(frameIndex);
         }
       });
       const cropPreImageStep = defineStep({
