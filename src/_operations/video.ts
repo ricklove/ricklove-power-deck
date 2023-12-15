@@ -33,10 +33,14 @@ const filmInterpolation = createFrameOperation({
                 path: form.inputPath,
             })
 
+            const backupOutputNode = graph.PreviewImage({
+                images: image,
+            })
+
             frameIdProvider.subscribe((v) => {
                 // reconnect frames as needed
-                const isBatchStart = v % form.batchSize === 0
                 const batch = frameIdProvider.getBatch(form.batchSize, form.batchOverlap)
+                console.log(`filmInterpolation: batch`, { batch })
 
                 loadImageBatchNode.inputs.current_frame = batch.startFrameId
                 loadImageBatchNode.inputs.count = batch.count
@@ -48,6 +52,9 @@ const filmInterpolation = createFrameOperation({
                 loadImageBatchNode.disabled = !batch.isActive
                 filmNode.disabled = !batch.isActive
                 saveImageBatchNode.disabled = !batch.isActive
+
+                // ensure there is output on disabled frames
+                backupOutputNode.disabled = batch.isActive
             })
 
             throw new PreviewStopError(undefined)
@@ -66,7 +73,7 @@ const filmInterpolation = createFrameOperation({
     },
 })
 
-export const fileOperations = {
+export const videoOperations = {
     filmInterpolation,
 }
-export const fileOperationsList = createFrameOperationsGroupList(fileOperations)
+export const videoOperationsList = createFrameOperationsGroupList(videoOperations)

@@ -27,14 +27,15 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
         batchSize: number,
         overlap = 0,
     ) => {
-        // (batchSize:5 - len:20 - overlap:0) % 5 = 0
-        // (batchSize:5 - len:21 - overlap:0) % 5 = 4
-        // (batchSize:5 - len:20 - overlap:1) % 5 = 4
-        const lastActiveStartOffset = (batchSize - frameIds.length - overlap) % batchSize
-        const iLastActiveStart = frameIds.length - 1 - lastActiveStartOffset
-        const isActive = iFrameId < iLastActiveStart ? iFrameId % batchSize === 0 : iFrameId === iLastActiveStart
+        // batchSize:5, len:20 => 0-4,5-9,10-14,15-19 (iLastActive = 15)
+        // batchSize:5, len:19 => 0-4,5-9,10-14,14-18 (iLastActive = 14)
+        // batchSize:6, overlap:1, len:20 => 0-5,5-10,10-15,14-19 (iLastActive = 14)
+        const iLastActive = frameIds.length - batchSize
+        const b = Math.max(1, batchSize - overlap)
+        const isActive = iFrameId < iLastActive ? iFrameId % b === 0 : iFrameId === iLastActive
 
         return {
+            _iFrameId: iFrameId,
             isActive,
             startFrameId: frameIds[iFrameId],
             count: Math.min(batchSize, frameIds.length - iFrameId),
@@ -53,22 +54,25 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
         callbacks: [] as ((value: number) => void)[],
     }
 
+    const setCurrentFrameIdIndex = (iFramdId: number) => {
+        state.currentFrameIdIndex = iFramdId
+        const value = state.frameIds[state.currentFrameIdIndex]
+        for (const cb of state.callbacks) {
+            try {
+                cb(value)
+            } catch (err) {
+                // ignore subscriber errors
+                console.error(`frameIdProvider.callback error`, err)
+            }
+        }
+    }
+
     const frameIdProvider = {
         _state: state,
         subscribe: (callback: (currentFrameId: number) => void) => {
             state.callbacks.push(callback)
         },
-        // setCurrentFrameId: (value: number) => {
-        //     state._currentFrameId = value
-        //     for (const cb of state.callbacks) {
-        //         try {
-        //             cb(value)
-        //         } catch (err) {
-        //             // ignore subscriber errors
-        //             console.error(`frameIdProvider.callback error`, err)
-        //         }
-        //     }
-        // },
+
         get: () => {
             return {
                 frameId: state.frameIds[state.currentFrameIdIndex],
@@ -77,13 +81,13 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
         iterator: {
             next: () => {
                 if (state.currentFrameIdIndex < state.frameIds.length - 1) {
-                    state.currentFrameIdIndex++
+                    setCurrentFrameIdIndex(state.currentFrameIdIndex + 1)
                     return { value: state.frameIds[state.currentFrameIdIndex]!, done: false }
                 }
                 return { value: undefined as unknown as number, done: true }
             },
             reset: () => {
-                state.currentFrameIdIndex = 0
+                setCurrentFrameIdIndex(0)
             },
         },
         [Symbol.iterator]() {
@@ -183,6 +187,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                     return [
                                         k,
                                         form.group({
+                                            // label: `test`,
                                             items: () => ({
                                                 __loadVariables: form.groupOpt({
                                                     items: () => ({

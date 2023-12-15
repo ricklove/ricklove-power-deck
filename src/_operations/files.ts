@@ -33,7 +33,7 @@ const loadImageFrame = createFrameOperation({
 
 const cacheImageFrame = createFrameOperation({
     ui: (form) => ({
-        buildCache: form.inlineRun({ text: `Cache It!!!`, kind: `warning` }),
+        buildCache: form.inlineRun({ text: `Cache It!!!`, kind: `special` }),
         path: form.string({ default: `../input/working/NAME/#####.png` }),
         image: form.strOpt({ default: `imageFinal` }),
         imageVariables: form.list({
