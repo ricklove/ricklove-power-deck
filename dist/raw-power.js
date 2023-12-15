@@ -1473,13 +1473,6 @@ var operation_image = createImageOperationValue({
 });
 
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
-var CacheStopError = class extends Error {
-  constructor(onCacheCreated, wasAlreadyCached) {
-    super();
-    this.onCacheCreated = onCacheCreated;
-    this.wasAlreadyCached = wasAlreadyCached;
-  }
-};
 var createFrameOperation = (op) => op;
 var createFrameOperationValue = (op) => op;
 var createFrameOperationsGroupList = (operations) => createFrameOperationValue({
@@ -1524,6 +1517,67 @@ var createFrameOperationsGroupList = (operations) => createFrameOperationValue({
   }
 });
 var createFrameOperationsChoiceList = (operations) => createFrameOperationValue({
+  ui: (form) => form.list({
+    element: () => form.choice({
+      items: () => ({
+        ...Object.fromEntries(
+          Object.entries(operations).map(([k, v]) => {
+            return [
+              k,
+              form.group({
+                items: () => ({
+                  ...v.ui(form),
+                  __preview: form.inlineRun({})
+                })
+              })
+            ];
+          })
+        )
+      })
+    })
+  }),
+  run: (state, form, frame) => {
+    const { runtime, graph } = state;
+    for (const listItem of form) {
+      const listItemGroupOptFields = listItem;
+      for (const [opName, op] of Object.entries(operations)) {
+        const opGroupOptValue = listItemGroupOptFields[opName];
+        if (opGroupOptValue == null) {
+          continue;
+        }
+        frame = {
+          ...frame,
+          ...op.run(state, opGroupOptValue, frame)
+        };
+        if (opGroupOptValue.__preview) {
+          graph.PreviewImage({ images: frame.image });
+          graph.PreviewImage({ images: graph.MaskToImage({ mask: frame.mask }) });
+          graph.PreviewImage({
+            images: graph.ImageBlend({
+              image1: frame.image,
+              image2: graph.MaskToImage({ mask: frame.mask }),
+              blend_mode: `normal`,
+              blend_factor: 0.5
+            })
+          });
+          throw new PreviewStopError(void 0);
+        }
+      }
+    }
+    return frame;
+  }
+});
+
+// library/ricklove/my-cushy-deck/src/_operations/_frameCached.ts
+var CacheStopError = class extends Error {
+  constructor(onCacheCreated, wasAlreadyCached) {
+    super();
+    this.onCacheCreated = onCacheCreated;
+    this.wasAlreadyCached = wasAlreadyCached;
+  }
+};
+var createFrameOperationValue_cached = (op) => op;
+var createFrameOperationsChoiceList_cached = (operations) => createFrameOperationValue_cached({
   ui: (form) => form.list({
     element: () => form.choice({
       items: () => ({
@@ -2327,6 +2381,12 @@ var allOperationsList = createFrameOperationsChoiceList({
   ...resizingOperations,
   ...storageOperations
 });
+var allOperationsList_cached = createFrameOperationsChoiceList_cached({
+  ...imageOperations,
+  ...maskOperations,
+  ...resizingOperations,
+  ...storageOperations
+});
 
 // library/ricklove/my-cushy-deck/raw-power.ts
 appOptimized({
@@ -2516,26 +2576,12 @@ appOptimized({
           });
           const result = allOperationsList.run(
             {
-              ...state,
-              cacheState: {
-                exists: () => false,
-                get: () => void 0,
-                set: () => {
-                  return {
-                    onCacheCreated: () => {
-                    }
-                  };
-                }
-              }
+              ...state
             },
             form.testAllOperationsList,
             {
               image: startImage,
-              mask: fullMask,
-              // ignored
-              cacheStepIndex_current: 0,
-              cacheStepIndex_stop: 1e4,
-              cacheFrameId: 0
+              mask: fullMask
             }
           );
           return {

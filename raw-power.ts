@@ -231,25 +231,11 @@ appOptimized({
                     const result = allOperationsList.run(
                         {
                             ...state,
-                            cacheState: {
-                                exists: () => false,
-                                get: () => undefined,
-                                set: () => {
-                                    //ignore
-                                    return {
-                                        onCacheCreated: () => {},
-                                    }
-                                },
-                            },
                         },
                         form.testAllOperationsList,
                         {
                             image: startImage,
                             mask: fullMask,
-                            // ignored
-                            cacheStepIndex_current: 0,
-                            cacheStepIndex_stop: 10000,
-                            cacheFrameId: 0,
                         },
                     )
                     return {

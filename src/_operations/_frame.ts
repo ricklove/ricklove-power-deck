@@ -3,38 +3,21 @@ import { WidgetDict } from 'src/cards/Card'
 import { AppState, PreviewStopError } from '../_appState'
 import { createRandomGenerator } from '../_random'
 
-type CacheData = { frame: Pick<Frame, `image` | `mask`>; scopeStack: AppState[`scopeStack`] }
-export type AppStateWithCache = AppState & {
-    cacheState: {
-        exists: (cacheIndex: number, dependencyKey: string, cacheFrameId: number) => boolean
-        get: (cacheIndex: number, dependencyKey: string, cacheFrameId: number) => undefined | CacheData
-        set: (cacheIndex: number, dependencyKey: string, cacheFrameId: number, data: CacheData) => { onCacheCreated: () => void }
-    }
-}
-
-export class CacheStopError extends Error {
-    constructor(public onCacheCreated: () => void, public wasAlreadyCached: boolean) {
-        super()
-    }
-}
-
 export type Frame = {
     image: _IMAGE
     mask: _MASK
-    cacheStepIndex_current: number
-    cacheStepIndex_stop: number
-    cacheFrameId: number
 }
 export type FrameOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields
-    run: (state: AppStateWithCache, form: { [k in keyof TFields]: TFields[k]['$Output'] }, frame: Frame) => Partial<Frame>
+    run: (state: AppState, form: { [k in keyof TFields]: TFields[k]['$Output'] }, frame: Frame) => Partial<Frame>
 }
 export const createFrameOperation = <TFields extends WidgetDict>(op: FrameOperation<TFields>): FrameOperation<TFields> => op
 
 export const createFrameOperationValue = <TValue extends Widget>(op: {
     ui: (form: FormBuilder) => TValue
-    run: (state: AppStateWithCache, form: TValue['$Output'], frame: Frame) => Frame
+    run: (state: AppState, form: TValue['$Output'], frame: Frame) => Frame
 }) => op
+
 export const createFrameOperationsGroupList = <TOperations extends Record<string, FrameOperation<any>>>(
     operations: TOperations,
 ) =>
@@ -113,7 +96,6 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                         form.group({
                                             items: () => ({
                                                 ...v.ui(form),
-                                                __cache: form.bool({}),
                                                 __preview: form.inlineRun({}),
                                             }),
                                         }),
@@ -126,88 +108,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
         run: (state, form, frame) => {
             const { runtime, graph } = state
 
-            // console.log(`createFrameOperationsChoiceList: run`, { operations, form })
-
-            const opCacheState = {
-                dependencyKey: `42`,
-                cacheStepIndex: frame.cacheStepIndex_current,
-            }
-
-            const opStates = form.map((x) => {
-                const cleanedFormItem = {
-                    ...Object.fromEntries(
-                        Object.entries(x).map(([k, v]) => [
-                            k,
-                            !v
-                                ? undefined
-                                : {
-                                      ...v,
-                                      __cache: undefined,
-                                      __preview: undefined,
-                                  },
-                        ]),
-                    ),
-                }
-                const dependencyKey = (opCacheState.dependencyKey = `${createRandomGenerator(
-                    `${opCacheState.dependencyKey}:${JSON.stringify(cleanedFormItem)}`,
-                ).randomInt()}`)
-                // const shouldCache = Object.entries(x).some(([k, v]) => v?.__cache)
-                const shouldCache = true
-                const cacheStepIndex = !shouldCache
-                    ? opCacheState.cacheStepIndex
-                    : (opCacheState.cacheStepIndex = opCacheState.cacheStepIndex + 1)
-                const isCached = state.cacheState.exists(cacheStepIndex, dependencyKey, frame.cacheFrameId)
-
-                return {
-                    item: x,
-                    dependencyKey,
-                    cacheStepIndex,
-                    shouldCache,
-                    isCached,
-                }
-            })
-            const opStatesWithRequired = opStates.map((x, i) => ({
-                ...x,
-                isRequired: !opStates[i + 1]?.isCached,
-                isLast: i === opStates.length - 1,
-            }))
-
-            // console.log(`createFrameOperationsChoiceList:opStates ${frame.cacheStepIndex_stop}@${frame.cacheFrameId}`, {
-            //     opStatesWithRequired,
-            // })
-
-            for (const {
-                item: listItem,
-                dependencyKey,
-                isCached,
-                cacheStepIndex,
-                shouldCache,
-                isLast,
-                isRequired,
-            } of opStatesWithRequired) {
-                if (isCached) {
-                    if (isRequired) {
-                        const cacheResult = state.cacheState.get(cacheStepIndex, dependencyKey, frame.cacheFrameId)
-                        if (!cacheResult) {
-                            throw new Error(
-                                `Cache is missing, but reported as existing ${JSON.stringify({ cacheStepIndex, listItem })}`,
-                            )
-                        }
-                        frame = { ...frame, ...cacheResult.frame }
-                        state.scopeStack = cacheResult.scopeStack
-                    }
-
-                    if (cacheStepIndex >= frame.cacheStepIndex_stop) {
-                        throw new CacheStopError(() => {}, true)
-                    }
-
-                    continue
-                }
-
-                console.log(`createFrameOperationsChoiceList: NOT CACHED ${frame.cacheStepIndex_stop}@${frame.cacheFrameId}`, {
-                    opStatesWithRequired,
-                })
-
+            for (const listItem of form) {
                 const listItemGroupOptFields = listItem as unknown as Widget_group_output<
                     Record<string, Widget_groupOpt<Record<string, Widget>>>
                 >
@@ -241,22 +142,6 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                             }),
                         })
                         throw new PreviewStopError(undefined)
-                    }
-                }
-
-                if (shouldCache) {
-                    // save the cache
-                    const { onCacheCreated } = state.cacheState.set(cacheStepIndex, dependencyKey, frame.cacheFrameId, {
-                        frame,
-                        scopeStack: state.scopeStack,
-                    })
-
-                    frame = {
-                        ...frame,
-                        cacheStepIndex_current: cacheStepIndex,
-                    }
-                    if (cacheStepIndex >= frame.cacheStepIndex_stop) {
-                        throw new CacheStopError(onCacheCreated, false)
                     }
                 }
             }

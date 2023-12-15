@@ -1,9 +1,9 @@
 import { ScopeStackValueKind, ScopeStackValueType, PreviewStopError } from './src/_appState'
 import { appOptimized } from './src/optimizer'
 import { createRandomGenerator } from './src/_random'
-import { allOperationsList } from './src/_operations/allOperations'
+import { allOperationsList_cached as allOperationsList } from './src/_operations/allOperations'
 import { CustomDataL } from 'src/models/CustomData'
-import { AppStateWithCache, CacheStopError } from './src/_operations/_frame'
+import { AppStateWithCache, CacheStopError } from './src/_operations/_frameCached'
 import { AppStateWithCacheDirectories, cacheImageBuilder, cacheMaskBuilder } from './src/_cache'
 
 export type AppState = AppStateWithCache & AppStateWithCacheDirectories
