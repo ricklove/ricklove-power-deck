@@ -316,6 +316,7 @@ ${JSON.stringify(
                         allOperationsList.run(state, form.operations, {
                             image: initialImage,
                             mask: initialMask,
+                            frameId: () => frameId,
                             cacheStepIndex_current: 0,
                             cacheStepIndex_stop: cacheCount_stop,
                             cacheFrameId: frameId,

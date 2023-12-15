@@ -228,6 +228,10 @@ appOptimized({
                         height: imageSize.outputs.INT_1,
                         value: 0xffffff,
                     })
+                    const frameIdProvider = {
+                        state: 0,
+                        get: () => frameIdProvider.state,
+                    }
                     const result = allOperationsList.run(
                         {
                             ...state,
@@ -236,15 +240,16 @@ appOptimized({
                         {
                             image: startImage,
                             mask: fullMask,
+                            frameId: frameIdProvider.get,
                         },
                     )
                     return {
-                        nodes: {},
+                        nodes: { frameIdProvider },
                         outputs: { image_testAllOperationsList: result.image, mask_testAllOperationsList: result.mask },
                     }
                 },
                 modify: ({ nodes, frameIndex }) => {
-                    // nothing specific to the frameIndex
+                    nodes.frameIdProvider.state = frameIndex
                 },
             })
 

@@ -5,6 +5,7 @@ import { maskOperations } from './mask'
 import { resizingOperations } from './resizing'
 import { storageOperations } from './storage'
 import { samplingOperations } from './sampling'
+import { fileOperations } from './files'
 
 const divider = createFrameOperation({
     ui: (form) => ({}),
@@ -19,6 +20,7 @@ export const allOperationsList = createFrameOperationsChoiceList({
     ...resizingOperations,
     ...storageOperations,
     ...samplingOperations,
+    ...fileOperations,
     [`---`]: divider,
 })
 
@@ -28,5 +30,6 @@ export const allOperationsList_cached = createFrameOperationsChoiceList_cached({
     ...resizingOperations,
     ...storageOperations,
     ...samplingOperations,
+    ...fileOperations,
     [`---`]: divider,
 })

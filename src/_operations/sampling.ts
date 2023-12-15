@@ -12,6 +12,7 @@ const sampler = createFrameOperation({
             element: () =>
                 form.group({
                     items: () => ({
+                        enabled: form.bool({ default: true }),
                         controlNet: form.enum({
                             enumName: 'Enum_ControlNetLoader_control_net_name',
                             default: 'sdxl-depth-mid.safetensors',
@@ -53,6 +54,10 @@ const sampler = createFrameOperation({
 
         let controlNetStack = undefined as undefined | CONTROL_NET_STACK
         for (const c of form.controlNet) {
+            if (!c.enabled) {
+                continue
+            }
+
             const image = loadFromScope<_IMAGE>(state, c.imageVariable ?? ``) ?? startImage
 
             if (c.preview) {

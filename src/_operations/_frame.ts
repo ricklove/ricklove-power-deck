@@ -7,6 +7,7 @@ import { storageOperations } from './storage'
 export type Frame = {
     image: _IMAGE
     mask: _MASK
+    frameId: () => number
 }
 export type FrameOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields

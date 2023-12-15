@@ -1288,6 +1288,7 @@ var sampler = createFrameOperation({
     controlNet: form.list({
       element: () => form.group({
         items: () => ({
+          enabled: form.bool({ default: true }),
           controlNet: form.enum({
             enumName: "Enum_ControlNetLoader_control_net_name",
             default: "sdxl-depth-mid.safetensors"
@@ -1324,6 +1325,9 @@ var sampler = createFrameOperation({
     const replaceMask = mask;
     let controlNetStack = void 0;
     for (const c of form.controlNet) {
+      if (!c.enabled) {
+        continue;
+      }
       const image2 = loadFromScope(state, c.imageVariable ?? ``) ?? startImage;
       if (c.preview) {
         graph.PreviewImage({ images: image2 });
@@ -1430,6 +1434,106 @@ var samplingOperations = {
 };
 var samplingOperationsList = createFrameOperationsGroupList(samplingOperations);
 
+// library/ricklove/my-cushy-deck/src/_operations/files.ts
+var saveImageFrame = createFrameOperation({
+  ui: (form) => ({
+    path: form.string({ default: `../input/working/#####.png` })
+  }),
+  run: ({ graph }, form, { image, frameId }) => {
+    graph.RL$_SaveImageSequence({
+      images: image,
+      current_frame: frameId,
+      path: form.path
+    });
+    return {};
+  }
+});
+var loadImageFrame = createFrameOperation({
+  ui: (form) => ({
+    path: form.string({ default: `../input/working/#####.png` })
+  }),
+  run: ({ graph }, form, { image, frameId }) => {
+    const resultImage = graph.RL$_LoadImageSequence({
+      current_frame: frameId,
+      path: form.path
+    });
+    return { image: resultImage };
+  }
+});
+var cacheImageFrame = createFrameOperation({
+  ui: (form) => ({
+    path: form.string({ default: `../input/working/NAME/#####.png` }),
+    image: form.strOpt({ default: `imageFinal` }),
+    imageVariables: form.list({
+      element: () => form.string({ default: `imageVariable` })
+    }),
+    mask: form.strOpt({ default: `maskFinal` }),
+    maskVariables: form.list({
+      element: () => form.string({ default: `maskVariable` })
+    })
+  }),
+  run: (state, form, { image, mask, frameId }) => {
+    const { graph } = state;
+    const createCachedImage = (name, image2) => {
+      graph.RL$_SaveImageSequence({
+        images: image2,
+        current_frame: frameId,
+        path: form.path.replace(`NAME`, name)
+      });
+      const cachedImage = graph.RL$_LoadImageSequence({
+        current_frame: frameId,
+        path: form.path.replace(`NAME`, name)
+      });
+      return cachedImage;
+    };
+    const createCachedMask = (name, mask2) => {
+      graph.RL$_SaveImageSequence({
+        images: graph.MaskToImage({ mask: mask2 }),
+        current_frame: frameId,
+        path: form.path.replace(`NAME`, name)
+      });
+      const cachedImage = graph.RL$_LoadImageSequence({
+        current_frame: frameId,
+        path: form.path.replace(`NAME`, name)
+      });
+      const cachedMask = graph.Image_To_Mask({
+        image: cachedImage,
+        method: `intensity`
+      });
+      return cachedMask;
+    };
+    const resultImage = !form.image ? void 0 : createCachedImage(form.image, image);
+    for (const k of form.imageVariables) {
+      const variableImage = loadFromScope(state, k);
+      if (!variableImage) {
+        continue;
+      }
+      storeInScope(state, k, `image`, createCachedImage(k, variableImage));
+    }
+    const resultMask = !form.mask ? void 0 : createCachedMask(form.mask, mask);
+    for (const k of form.maskVariables) {
+      const variableMask = loadFromScope(state, k);
+      if (!variableMask) {
+        continue;
+      }
+      storeInScope(state, k, `mask`, createCachedMask(k, variableMask));
+    }
+    return { image: resultImage, mask: resultMask };
+  }
+});
+var fileOperations = {
+  saveImageFrame,
+  loadImageFrame,
+  cacheImageFrame
+  // loadImageVariable,
+  // storeImageVarible,
+  // storeMaskVariable,
+  // loadMaskVariable,
+  // loadVariables,
+  // storeVariables,
+};
+var fileOperationsList = createFrameOperationsGroupList(fileOperations);
+
 // library/ricklove/my-cushy-deck/src/_operations/allOperations.ts
 var divider = createFrameOperation({
   ui: (form) => ({}),
@@ -1443,6 +1547,7 @@ var allOperationsList = createFrameOperationsChoiceList({
   ...resizingOperations,
   ...storageOperations,
   ...samplingOperations,
+  ...fileOperations,
   [`---`]: divider
 });
 var allOperationsList_cached = createFrameOperationsChoiceList_cached({
@@ -1451,6 +1556,7 @@ var allOperationsList_cached = createFrameOperationsChoiceList_cached({
   ...resizingOperations,
   ...storageOperations,
   ...samplingOperations,
+  ...fileOperations,
   [`---`]: divider
 });
 
@@ -1927,6 +2033,7 @@ ${JSON.stringify(
             allOperationsList_cached.run(state, form.operations, {
               image: initialImage,
               mask: initialMask,
+              frameId: () => frameId,
               cacheStepIndex_current: 0,
               cacheStepIndex_stop: cacheCount_stop,
               cacheFrameId: frameId
