@@ -7,42 +7,91 @@ import { storageOperations } from './storage'
 export type Frame = {
     image: _IMAGE
     mask: _MASK
-    frameIdProvider: { subscribe: (callback: (value: number) => void) => void }
+    frameIdProvider: ReturnType<typeof createFrameIdProvider>
 }
 
-export const createFrameIdProvider = (frameIds: number[]) => {
-    const getBatch = (frameIds: number[], currentFrameId: number, leftCount: number, rightCount?: number) => {
-        const iFrameId = frameIds.indexOf(currentFrameId)
-        const iStart = Math.max(0, iFrameId - leftCount)
-        const iEndInclusive = Math.min(frameIds.length - 1, iFrameId + (rightCount ?? leftCount))
-        return [...new Array(iEndInclusive - iStart + 1)].map((_, i) => frameIds[iStart + i])
+type FrameIdsPattern = {
+    startIndex: number
+    iterationCount: number
+    selectEveryNth?: null | number
+}
+export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
+    const frameIds = [...new Array(frameIdsPattern.iterationCount)].map(
+        (_, i) => frameIdsPattern.startIndex + i * (frameIdsPattern.selectEveryNth ?? 1),
+    )
+
+    const getBatchAtFrameIdIndex = (
+        frameIds: number[],
+        frameIdsPattern: FrameIdsPattern,
+        iFrameId: number,
+        batchSize: number,
+        overlap = 0,
+    ) => {
+        // (batchSize:5 - len:20 - overlap:0) % 5 = 0
+        // (batchSize:5 - len:21 - overlap:0) % 5 = 4
+        // (batchSize:5 - len:20 - overlap:1) % 5 = 4
+        const lastActiveStartOffset = (batchSize - frameIds.length - overlap) % batchSize
+        const iLastActiveStart = frameIds.length - 1 - lastActiveStartOffset
+        const isActive = iFrameId < iLastActiveStart ? iFrameId % batchSize === 0 : iFrameId === iLastActiveStart
+
+        return {
+            isActive,
+            startFrameId: frameIds[iFrameId],
+            count: Math.min(batchSize, frameIds.length - iFrameId),
+            selectEveryNth: frameIdsPattern.selectEveryNth ?? 1,
+        }
     }
-    type GetBatch = ReturnType<typeof getBatch>
+
+    const state = {
+        frameIdsPattern: {
+            startIndex: frameIdsPattern.startIndex,
+            iterationCount: frameIdsPattern.iterationCount,
+            selectEveryNth: frameIdsPattern.selectEveryNth,
+        },
+        frameIds,
+        currentFrameIdIndex: 0,
+        callbacks: [] as ((value: number) => void)[],
+    }
 
     const frameIdProvider = {
-        _frameIds: frameIds,
-        _currentFrameId: 0,
-        _callbacks: [] as ((value: number) => void)[],
-        subscribe: (callback: (value: number) => void) => {
-            frameIdProvider._callbacks.push(callback)
+        _state: state,
+        subscribe: (callback: (currentFrameId: number) => void) => {
+            state.callbacks.push(callback)
         },
-        set: (value: number) => {
-            frameIdProvider._currentFrameId = value
-            for (const cb of frameIdProvider._callbacks) {
-                try {
-                    cb(value)
-                } catch (err) {
-                    // ignore subscriber errors
-                    console.error(`frameIdProvider.callback error`, err)
-                }
+        // setCurrentFrameId: (value: number) => {
+        //     state._currentFrameId = value
+        //     for (const cb of state.callbacks) {
+        //         try {
+        //             cb(value)
+        //         } catch (err) {
+        //             // ignore subscriber errors
+        //             console.error(`frameIdProvider.callback error`, err)
+        //         }
+        //     }
+        // },
+        get: () => {
+            return {
+                frameId: state.frameIds[state.currentFrameIdIndex],
             }
         },
-        get: () => {
-            console.log(`frameIdProvider.get`, { frameIdProvider })
-            return frameIdProvider._currentFrameId
+        iterator: {
+            next: () => {
+                if (state.currentFrameIdIndex < state.frameIds.length - 1) {
+                    state.currentFrameIdIndex++
+                    return { value: state.frameIds[state.currentFrameIdIndex]!, done: false }
+                }
+                return { value: undefined as unknown as number, done: true }
+            },
+            reset: () => {
+                state.currentFrameIdIndex = 0
+            },
         },
-        getBatch: (left: number, right?: number) =>
-            getBatch(frameIdProvider._frameIds, frameIdProvider._currentFrameId, left, right),
+        [Symbol.iterator]() {
+            frameIdProvider.iterator.reset()
+            return frameIdProvider.iterator
+        },
+        getBatch: (batchSize: number, overlap?: number) =>
+            getBatchAtFrameIdIndex(state.frameIds, state.frameIdsPattern, state.currentFrameIdIndex, batchSize, overlap),
     }
     return frameIdProvider
 }

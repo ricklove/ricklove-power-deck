@@ -247,7 +247,7 @@ appOptimized({
                     }
                 },
                 modify: ({ nodes, frameIndex }) => {
-                    nodes.frameIdProvider.set(frameIndex)
+                    nodes.frameIdProvider.setCurrentFrameId(frameIndex)
                 },
             })
 

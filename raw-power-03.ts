@@ -42,15 +42,12 @@ appOptimized({
             scopeStack: [{}],
         }
         const graph = state.graph
-        const frameIds = [...new Array(form.imageSource.iterationCount)].map(
-            (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1),
-        )
-        const frameIdProvider = createFrameIdProvider()
+        const frameIdProvider = createFrameIdProvider(form.imageSource)
 
         const imageDir = form.imageSource.directory.replace(/\/$/g, ``)
         const loadImageNode = graph.RL$_LoadImageSequence({
             path: `${imageDir}/${form.imageSource.filePattern}`,
-            current_frame: frameIdProvider.get,
+            current_frame: frameIdProvider.get().frameId,
         })
         frameIdProvider.subscribe((v) => (loadImageNode.inputs.current_frame = v))
         const initialImage = loadImageNode.outputs.image
@@ -74,8 +71,7 @@ appOptimized({
                 graph.PreviewImage({
                     images: runtime.AUTO,
                 })
-                for (const frameId of frameIds) {
-                    frameIdProvider.set(frameId)
+                for (const frameId of frameIdProvider) {
                     await runtime.PROMPT()
                 }
                 return
@@ -87,8 +83,7 @@ appOptimized({
                 frameIdProvider,
             })
 
-            for (const frameId of frameIds) {
-                frameIdProvider.set(frameId)
+            for (const frameId of frameIdProvider) {
                 await runtime.PROMPT()
             }
         } catch (err) {
@@ -100,8 +95,7 @@ appOptimized({
             // graph.PreviewImage({
             //     images: runtime.AUTO,
             // })
-            for (const frameId of frameIds) {
-                frameIdProvider.set(frameId)
+            for (const frameId of frameIdProvider) {
                 await runtime.PROMPT()
             }
             // await runtime.PROMPT()

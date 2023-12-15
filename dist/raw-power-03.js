@@ -274,35 +274,69 @@ var appOptimized = ({ ui, run }) => {
 };
 
 // library/ricklove/my-cushy-deck/src/_operations/_frame.ts
-var createFrameIdProvider = (frameIds) => {
-  const getBatch = (frameIds2, currentFrameId, leftCount, rightCount) => {
-    const iFrameId = frameIds2.indexOf(currentFrameId);
-    const iStart = Math.max(0, iFrameId - leftCount);
-    const iEndInclusive = Math.min(frameIds2.length - 1, iFrameId + (rightCount ?? leftCount));
-    return [...new Array(iEndInclusive - iStart + 1)].map((_, i) => frameIds2[iStart + i]);
+var createFrameIdProvider = (frameIdsPattern) => {
+  const frameIds = [...new Array(frameIdsPattern.iterationCount)].map(
+    (_, i) => frameIdsPattern.startIndex + i * (frameIdsPattern.selectEveryNth ?? 1)
+  );
+  const getBatchAtFrameIdIndex = (frameIds2, frameIdsPattern2, iFrameId, batchSize, overlap = 0) => {
+    const lastActiveStartOffset = (batchSize - frameIds2.length - overlap) % batchSize;
+    const iLastActiveStart = frameIds2.length - 1 - lastActiveStartOffset;
+    const isActive = iFrameId < iLastActiveStart ? iFrameId % batchSize === 0 : iFrameId === iLastActiveStart;
+    return {
+      isActive,
+      startFrameId: frameIds2[iFrameId],
+      count: Math.min(batchSize, frameIds2.length - iFrameId),
+      selectEveryNth: frameIdsPattern2.selectEveryNth ?? 1
+    };
+  };
+  const state = {
+    frameIdsPattern: {
+      startIndex: frameIdsPattern.startIndex,
+      iterationCount: frameIdsPattern.iterationCount,
+      selectEveryNth: frameIdsPattern.selectEveryNth
+    },
+    frameIds,
+    currentFrameIdIndex: 0,
+    callbacks: []
   };
   const frameIdProvider = {
-    _frameIds: frameIds,
-    _currentFrameId: 0,
-    _callbacks: [],
+    _state: state,
     subscribe: (callback) => {
-      frameIdProvider._callbacks.push(callback);
+      state.callbacks.push(callback);
     },
-    set: (value) => {
-      frameIdProvider._currentFrameId = value;
-      for (const cb of frameIdProvider._callbacks) {
-        try {
-          cb(value);
-        } catch (err) {
-          console.error(`frameIdProvider.callback error`, err);
+    // setCurrentFrameId: (value: number) => {
+    //     state._currentFrameId = value
+    //     for (const cb of state.callbacks) {
+    //         try {
+    //             cb(value)
+    //         } catch (err) {
+    //             // ignore subscriber errors
+    //             console.error(`frameIdProvider.callback error`, err)
+    //         }
+    //     }
+    // },
+    get: () => {
+      return {
+        frameId: state.frameIds[state.currentFrameIdIndex]
+      };
+    },
+    iterator: {
+      next: () => {
+        if (state.currentFrameIdIndex < state.frameIds.length - 1) {
+          state.currentFrameIdIndex++;
+          return { value: state.frameIds[state.currentFrameIdIndex], done: false };
         }
+        return { value: void 0, done: true };
+      },
+      reset: () => {
+        state.currentFrameIdIndex = 0;
       }
     },
-    get: () => {
-      console.log(`frameIdProvider.get`, { frameIdProvider });
-      return frameIdProvider._currentFrameId;
+    [Symbol.iterator]() {
+      frameIdProvider.iterator.reset();
+      return frameIdProvider.iterator;
     },
-    getBatch: (left, right) => getBatch(frameIdProvider._frameIds, frameIdProvider._currentFrameId, left, right)
+    getBatch: (batchSize, overlap) => getBatchAtFrameIdIndex(state.frameIds, state.frameIdsPattern, state.currentFrameIdIndex, batchSize, overlap)
   };
   return frameIdProvider;
 };
@@ -1648,14 +1682,11 @@ appOptimized({
       scopeStack: [{}]
     };
     const graph = state.graph;
-    const frameIds = [...new Array(form.imageSource.iterationCount)].map(
-      (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
-    );
-    const frameIdProvider = createFrameIdProvider();
+    const frameIdProvider = createFrameIdProvider(form.imageSource);
     const imageDir = form.imageSource.directory.replace(/\/$/g, ``);
     const loadImageNode = graph.RL$_LoadImageSequence({
       path: `${imageDir}/${form.imageSource.filePattern}`,
-      current_frame: frameIdProvider.get
+      current_frame: frameIdProvider.get().frameId
     });
     frameIdProvider.subscribe((v) => loadImageNode.inputs.current_frame = v);
     const initialImage = loadImageNode.outputs.image;
@@ -1672,8 +1703,7 @@ appOptimized({
         graph.PreviewImage({
           images: runtime.AUTO
         });
-        for (const frameId of frameIds) {
-          frameIdProvider.set(frameId);
+        for (const frameId of frameIdProvider) {
           await runtime.PROMPT();
         }
         return;
@@ -1683,16 +1713,14 @@ appOptimized({
         mask: initialMask,
         frameIdProvider
       });
-      for (const frameId of frameIds) {
-        frameIdProvider.set(frameId);
+      for (const frameId of frameIdProvider) {
         await runtime.PROMPT();
       }
     } catch (err) {
       if (!(err instanceof PreviewStopError)) {
         throw err;
       }
-      for (const frameId of frameIds) {
-        frameIdProvider.set(frameId);
+      for (const frameId of frameIdProvider) {
         await runtime.PROMPT();
       }
     }
