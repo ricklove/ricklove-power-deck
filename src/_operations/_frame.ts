@@ -131,16 +131,21 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                     }
 
                     if (opGroupOptValue.__preview) {
-                        graph.PreviewImage({ images: frame.image })
-                        graph.PreviewImage({ images: graph.MaskToImage({ mask: frame.mask }) })
                         graph.PreviewImage({
-                            images: graph.ImageBlend({
-                                image1: frame.image,
-                                image2: graph.MaskToImage({ mask: frame.mask }),
-                                blend_mode: `normal`,
-                                blend_factor: 0.5,
+                            images: graph.ImageBatch({
+                                image1: graph.MaskToImage({ mask: frame.mask }),
+                                image2: graph.ImageBatch({
+                                    image1: graph.ImageBlend({
+                                        image1: frame.image,
+                                        image2: graph.MaskToImage({ mask: frame.mask }),
+                                        blend_mode: `normal`,
+                                        blend_factor: 0.5,
+                                    }),
+                                    image2: frame.image,
+                                }),
                             }),
                         })
+
                         throw new PreviewStopError(undefined)
                     }
                 }

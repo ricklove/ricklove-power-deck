@@ -1,7 +1,4 @@
-import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
-import { imageOperations } from './image'
-import { maskOperations } from './mask'
 import { storageOperations } from './storage'
 
 const cropResizeByMask = createFrameOperation({
@@ -109,7 +106,61 @@ const cropResizeByMask = createFrameOperation({
     },
 })
 
+const upscaleWithModel = createFrameOperation({
+    ui: (form) => ({
+        model: form.enum({
+            enumName: `Enum_UpscaleModelLoader_model_name`,
+            default: `8x_NMKD-Superscale_150000_G.pth`,
+        }),
+        resize: form.choice({
+            items: () => ({
+                none: form.bool({ default: false }),
+                ratio: form.float({ default: 1 }),
+                targetWidth: form.int({ default: 1024 }),
+                targetHeight: form.int({ default: 1024 }),
+            }),
+        }),
+    }),
+    run: ({ graph }, form, { image, mask }) => {
+        const upscaledImage = graph.ImageUpscaleWithModel({
+            image,
+            upscale_model: graph.UpscaleModelLoader({
+                model_name: form.model,
+            }),
+        }).outputs.IMAGE
+
+        const resizedImage = form.resize.ratio
+            ? graph.ImageTransformResizeRelative({
+                  images: upscaledImage,
+                  method: `lanczos`,
+                  scale_width: form.resize.ratio,
+                  scale_height: form.resize.ratio,
+              })
+            : form.resize.targetHeight || form.resize.targetWidth
+            ? graph.RL$_Crop$_Resize({
+                  image: upscaledImage,
+                  width: form.resize.targetWidth,
+                  height: form.resize.targetHeight,
+              })
+            : upscaledImage
+
+        const size = graph.Get_image_size({ image: resizedImage })
+        const resizedMask = graph.Image_To_Mask({
+            method: `intensity`,
+            image: graph.ImageTransformResizeAbsolute({
+                images: graph.MaskToImage({ mask }),
+                method: `lanczos`,
+                width: size.outputs.INT,
+                height: size.outputs.INT_1,
+            }),
+        }).outputs.MASK
+
+        return { image: resizedImage, mask: resizedMask }
+    },
+})
+
 export const resizingOperations = {
     cropResizeByMask,
+    upscaleWithModel,
 }
 export const resizingOperationsList = createFrameOperationsGroupList(resizingOperations)

@@ -168,9 +168,9 @@ const operation_openPosePreprocessor = createImageOperation({
     ui: (form) => ({
         openPose: form.groupOpt({
             items: () => ({
-                body: form.bool({}),
-                face: form.bool({}),
-                hand: form.bool({}),
+                body: form.bool({ default: true }),
+                face: form.bool({ default: true }),
+                hand: form.bool({ default: true }),
             }),
         }),
     }),

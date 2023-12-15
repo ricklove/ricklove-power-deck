@@ -1420,241 +1420,12 @@ var allOperationsList_cached = createFrameOperationsChoiceList_cached({
   ...samplingOperations
 });
 
-// library/ricklove/my-cushy-deck/src/humor/_loading.ts
-var loadingMessages = `
-"Calibrating the hyperdrive with unicorn whispers."
-"Translating alien emojis into Earthly emotions."
-"Dancing the binary code at the intergalactic disco."
-"Inflating space bubbles for zero-gravity pillow fights."
-"Convincing black holes to join a sing-along choir."
-"Wrestling quantum particles for a game of subatomic tag."
-"Tickling extraterrestrial amoebas just for kicks."
-"Polishing time-travel mirrors to see reflections from tomorrow."
-"Juggling antimatter snowflakes in a cosmic blizzard."
-"Babysitting baby star clusters during naptime."
-"Bottling the laughter of wormholes for later enjoyment."
-"Teaching interstellar crabs the moonwalk."
-"Balancing the cosmic equation with rubber duckies."
-"Dusting off ancient alien artifacts with laser feather dusters."
-"Organizing a parallel universe hide-and-seek tournament."
-"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
-"Negotiating peace treaties between parallel universe pandas and robots."
-"Training intergalactic snails for the great space race."
-"Herding quantum sheep through the fabric of spacetime."
-"Reciting Vogon poetry in an attempt to repel invaders."
-"Hosting a telepathic tea party for sentient clouds."
-"Coaxing malfunctioning robots with lullabies and oil massages."
-"Moonwalking on the event horizon of a cosmic donut."
-"Conducting a symphony of alien frequencies with a light saber baton."
-"Negotiating a trade deal between time-traveling pirates and space ninjas."
-"Babbling in an ancient alien dialect to confuse rogue AIs."
-"Playing hopscotch on the rings of Saturn with zero-gravity boots."
-"Befriending interdimensional dolphins fluent in binary."
-"Convincing dark matter to attend a glow-in-the-dark party."
-"Practicing levitation with levitating space jellyfish."
-"Hitching a ride on a comet while juggling star clusters."
-"Teaching a robot dance crew the art of emotional expression."
-"Summoning UFOs with interpretative dance rituals."
-"Creating crop circles in zero-gravity fields with tractor beams."
-"Impersonating a solar flare to confuse sunspot observers."
-"Diplomacy with alien diplomats through interpretive dance-offs."
-"Playing chess with a sentient nebula and losing gracefully."
-"Negotiating peace treaties between time-traveling dinosaurs and future robots."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Conducting an orchestra of alien bug symphonies."
-"Teleporting through dimensions with a rainbow-colored pogo stick."
-"Translating Morse code messages from extraterrestrial fireflies."
-"Attending a zero-gravity synchronized swimming competition."
-"Participating in a relay race across the rings of Jupiter."
-"Defying gravity by hosting upside-down picnics on magnetic asteroids."
-"Exchanging love letters with parallel universe versions of oneself."
-"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
-"Playing hide-and-seek with the shadows of dark matter."
-"Having a tea party with time-traveling dinosaurs and robot butlers."
-"Juggling quantum entangled particles while riding a quantum unicycle."
-"Hosting a holographic game night with ghostly entities."
-"Impersonating a comet to get a front-row seat at a cosmic concert."
-"Negotiating peace treaties between time-traveling pirates and space ninjas."
-"Having a conversation with extraterrestrial rock formations using telepathic vibrations."
-"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
-"Participating in a zero-gravity synchronized swimming competition."
-"Attempting to communicate with intergalactic space chickens using semaphore signals."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Convincing black holes to participate in a gravity-defying dance-off."
-"Befriending time-traveling flamingos in a temporal oasis."
-"Wrestling quantum particles for a game of subatomic tag."
-"Polishing the interstellar mirror for a reflection of parallel selves."
-"Organizing a parallel universe hide-and-seek tournament."
-"Playing chess with a sentient nebula and losing gracefully."
-"Hosting a telepathic tea party for sentient clouds."
-"Creating crop circles in zero-gravity fields with tractor beams."
-"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
-"Conducting an orchestra of alien bug symphonies."
-"Summoning UFOs with interpretative dance rituals."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Practicing levitation with levitating space jellyfish."
-"Attending a zero-gravity synchronized swimming competition."
-"Participating in a relay race across the rings of Jupiter."
-"Defying gravity by hosting upside-down picnics on magnetic asteroids."
-"Negotiating peace treaties between time-traveling dinosaurs and future robots."
-"Juggling quantum entangled particles while riding a quantum unicycle."
-"Having a tea party with time-traveling dinosaurs and robot butlers."
-"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
-"Playing hide-and-seek with the shadows of dark matter."
-"Exchanging love letters with parallel universe versions of oneself."
-"Impersonating a comet to get a front-row seat at a cosmic concert."
-"Negotiating peace treaties between time-traveling pirates and space ninjas."
-"Having a conversation with extraterrestrial rock formations using telepathic vibrations."
-"Playing hide-and-seek with Schroedinger's cat in a teleportation maze."
-"Participating in a zero-gravity synchronized swimming competition."
-"Attempting to communicate with intergalactic space chickens using semaphore signals."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Convincing black holes to participate in a gravity-defying dance-off."
-"Befriending time-traveling flamingos in a temporal oasis."
-"Wrestling quantum particles for a game of subatomic tag."
-"Polishing the interstellar mirror for a reflection of parallel selves."
-"Organizing a parallel universe hide-and-seek tournament."
-"Playing chess with a sentient nebula and losing gracefully."
-"Hosting a telepathic tea party for sentient clouds."
-"Creating crop circles in zero-gravity fields with tractor beams."
-"Negotiating with interdimensional diplomats using interpretive dance diplomacy."
-"Conducting an orchestra of alien bug symphonies."
-"Summoning UFOs with interpretative dance rituals."
-"Building sandcastles on exoplanets with cosmic ocean waves."
-"Practicing levitation with levitating space jellyfish."
-`.split(`
-`).map((x) => x.trim().replace(/"/g, ``)).filter((x) => x);
-
-// library/ricklove/my-cushy-deck/src/_loadingMessage.ts
-var rand = createRandomGenerator(`${Date.now()}`);
-
-// library/ricklove/my-cushy-deck/src/_cache.ts
-var history = {
-  writtenFormSerialWithPath: /* @__PURE__ */ new Set()
-};
-var cacheImageBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
-  const { runtime, graph } = state;
-  const paramsHash = `` + createRandomGenerator(`${JSON.stringify(params)}:${dependencyKeyRef.dependencyKey}`).randomInt();
-  dependencyKeyRef.dependencyKey = paramsHash;
-  const paramsFolderPattern = `${state.workingDirectory}/${folderPrefix}-${paramsHash}`;
-  const location = `input`;
-  const paramsFilePattern = `../${location}/${paramsFolderPattern}/#####.png`;
-  const saveFormSerial = () => {
-    const { comfyUiInputRelativePath } = state;
-    if (!comfyUiInputRelativePath) {
-      return;
-    }
-    const formSerialHash = `` + createRandomGenerator(`${JSON.stringify(runtime.formSerial)}`).randomInt();
-    const formSerialSavePath = runtime.path.join(comfyUiInputRelativePath, paramsFolderPattern, `${formSerialHash}.json`);
-    const formSerialWithPath = `${formSerialHash}:${formSerialSavePath}`;
-    if (history.writtenFormSerialWithPath.has(`${formSerialWithPath}`)) {
-      return;
-    }
-    history.writtenFormSerialWithPath.add(formSerialWithPath);
-    console.log(`formSerialSavePath`, { formSerialSavePath });
-    runtime.fs.mkdirSync(runtime.path.dirname(formSerialSavePath), { recursive: true });
-    runtime.fs.writeFileSync(formSerialSavePath, JSON.stringify(runtime.formSerial));
-  };
-  saveFormSerial();
-  const exists = async (frameIndex) => {
-    return await state.runtime.doesComfyImageExist({
-      type: location,
-      subfolder: paramsFolderPattern,
-      filename: `${`${frameIndex}`.padStart(5, `0`)}.png`
-    });
-  };
-  const loadCached = () => {
-    const loadImageNode = graph.RL$_LoadImageSequence({
-      path: paramsFilePattern,
-      current_frame: 0
-    });
-    const imageReloaded = loadImageNode.outputs.image;
-    return {
-      getOutput: () => imageReloaded,
-      modify: (frameIndex) => {
-        loadImageNode.inputs.current_frame = frameIndex;
-      }
-    };
-  };
-  const createCache = (getValue) => {
-    const image = getValue();
-    if (!image) {
-      return {
-        // undefined
-        getOutput: () => image,
-        modify: (frameIndex) => {
-        }
-      };
-    }
-    const saveImageNode = graph.RL$_SaveImageSequence({
-      images: image,
-      current_frame: 0,
-      path: paramsFilePattern
-    });
-    graph.PreviewImage({
-      images: image
-    });
-    return {
-      getOutput: () => image,
-      modify: (frameIndex) => {
-        saveImageNode.inputs.current_frame = frameIndex;
-      }
-    };
-  };
-  return {
-    exists,
-    loadCached,
-    createCache
-  };
-};
-var cacheMaskBuilder = (state, folderPrefix, params, dependencyKeyRef) => {
-  const { graph } = state;
-  const imageBuilder = cacheImageBuilder(state, folderPrefix, params, dependencyKeyRef);
-  return {
-    exists: imageBuilder.exists,
-    loadCached: () => {
-      const loadCached_image = imageBuilder.loadCached();
-      return {
-        getOutput: () => {
-          const reloadedMaskImage = loadCached_image.getOutput();
-          const maskReloaded = graph.Image_To_Mask({
-            image: reloadedMaskImage,
-            method: `intensity`
-          }).outputs.MASK;
-          return maskReloaded;
-        },
-        modify: (frameIndex) => loadCached_image.modify(frameIndex)
-      };
-    },
-    createCache: (getValue) => {
-      const mask = getValue();
-      if (!mask) {
-        return void 0;
-      }
-      const createCache_image = imageBuilder.createCache(() => {
-        const maskImage = graph.MaskToImage({ mask });
-        return maskImage;
-      });
-      return {
-        getOutput: () => {
-          return mask;
-        },
-        modify: (frameIndex) => createCache_image.modify(frameIndex)
-      };
-    }
-  };
-};
-
-// library/ricklove/my-cushy-deck/raw-power-02.ts
+// library/ricklove/my-cushy-deck/raw-power-03.ts
 appOptimized({
   ui: (form) => ({
     cancel: form.inlineRun({
       kind: `warning`,
       text: `Cancel!`
-    }),
-    clearCache: form.inlineRun({
-      kind: `warning`,
-      text: `Clear Cache!!!`
     }),
     imageSource: form.group({
       items: () => ({
@@ -1671,7 +1442,7 @@ appOptimized({
       })
     }),
     // size: form.size({}),
-    operations: allOperationsList_cached.ui(form)
+    operations: allOperationsList.ui(form)
   }),
   run: async (runtime, form) => {
     const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState`, () => ({
@@ -1682,186 +1453,13 @@ appOptimized({
       jobState.isCancelled = true;
       return;
     }
-    const cacheStatusStore = runtime.getStore_orCreateIfMissing(`cacheStatus`, () => ({
-      cache: []
-    }));
-    const cacheStatus = cacheStatusStore.get();
-    console.log(`cacheStatus`, { cacheStatus: JSON.stringify(cacheStatus) });
-    if (form.clearCache) {
-      cacheStatus.cache = [];
-      return;
-    }
-    const graph = runtime.nodes;
     const state = {
+      graph: runtime.nodes,
       runtime,
-      graph,
-      scopeStack: [{}],
-      workingDirectory: `../input/working`,
-      comfyUiInputRelativePath: `../comfyui/ComfyUI/input`,
-      cacheState: {
-        exists: (cacheStepIndex, dependencyKey, cacheFrameId) => {
-          console.log(`cacheState: exists`, {
-            cacheStepIndex,
-            dependencyKey,
-            cacheFrameId,
-            cacheStatus: JSON.parse(JSON.stringify(cacheStatus))
-          });
-          const cacheResult = cacheStatus.cache.find(
-            (x) => x.dependencyKey === dependencyKey && x.cacheFrameId === cacheFrameId
-          );
-          return cacheResult?.status === `cached`;
-        },
-        get: (cacheStepIndex, dependencyKey, cacheFrameId) => {
-          console.log(`cacheState: get`, {
-            cacheStepIndex,
-            dependencyKey,
-            cacheFrameId,
-            cacheStatus: JSON.parse(JSON.stringify(cacheStatus))
-          });
-          const cacheResult = cacheStatus.cache.find(
-            (x) => x.dependencyKey === dependencyKey && x.cacheFrameId === cacheFrameId
-          );
-          if (!cacheResult) {
-            return void 0;
-          }
-          const getCachedObject = (sourceName, entries) => {
-            return Object.fromEntries(
-              entries.map((x) => {
-                const cacheBuilerResult = x.kind === `mask` ? cacheMaskBuilder(
-                  state,
-                  `${cacheStepIndex.toString().padStart(4, `0`)}_${sourceName}_${x.key}`,
-                  [],
-                  {
-                    dependencyKey
-                  }
-                ).loadCached() : cacheImageBuilder(
-                  state,
-                  `${cacheStepIndex.toString().padStart(4, `0`)}_${sourceName}_${x.key}`,
-                  [],
-                  {
-                    dependencyKey
-                  }
-                ).loadCached();
-                const nodeOutput = cacheBuilerResult.getOutput();
-                cacheBuilerResult.modify(cacheFrameId);
-                return [x.key, { value: nodeOutput, kind: x.kind }];
-              })
-            );
-          };
-          const frame01 = getCachedObject(`frame`, cacheResult.valueKeys.frame.entries);
-          const frame = {
-            image: frame01[`image`].value,
-            mask: frame01[`mask`].value
-          };
-          const scopeStack = cacheResult.valueKeys.scopeStack.map(
-            (s, i) => getCachedObject(`scopeStack${i.toString().padStart(2, `0`)}`, s.entries)
-          );
-          return { frame, scopeStack };
-        },
-        set: (cacheStepIndex, dependencyKey, cacheFrameId, data) => {
-          console.log(`cacheState: set`, {
-            cacheStepIndex,
-            dependencyKey,
-            cacheFrameId,
-            data,
-            cacheStatus: JSON.parse(JSON.stringify(cacheStatus))
-          });
-          const setCachedObject = (sourceName, data2) => {
-            const result = Object.fromEntries(
-              Object.entries(data2).map(([k, v]) => {
-                if (!v) {
-                  return [k, void 0];
-                }
-                const cacheBuilerResult = v.kind === `mask` ? cacheMaskBuilder(
-                  state,
-                  `${cacheStepIndex.toString().padStart(4, `0`)}_${sourceName}_${k}`,
-                  [],
-                  {
-                    dependencyKey
-                  }
-                ).createCache(() => v.value) : cacheImageBuilder(
-                  state,
-                  `${cacheStepIndex.toString().padStart(4, `0`)}_${sourceName}_${k}`,
-                  [],
-                  {
-                    dependencyKey
-                  }
-                ).createCache(() => v.value);
-                if (!cacheBuilerResult) {
-                  throw new Error(`cache failed to be created`);
-                }
-                const nodeOutput = cacheBuilerResult.getOutput();
-                cacheBuilerResult.modify(cacheFrameId);
-                return [k, nodeOutput];
-              }).filter((k, v) => !!v)
-            );
-            return result;
-          };
-          const frame = setCachedObject(`frame`, {
-            image: { value: data.frame.image, kind: `image` },
-            mask: { value: data.frame.mask, kind: `mask` }
-          });
-          const scopeStack = data.scopeStack.map(
-            (s, i) => setCachedObject(`scopeStack${i.toString().padStart(2, `0`)}`, s)
-          );
-          const valueKeys = {
-            frame: {
-              entries: [
-                {
-                  key: `image`,
-                  kind: `image`
-                },
-                {
-                  key: `mask`,
-                  kind: `mask`
-                }
-              ]
-            },
-            scopeStack: data.scopeStack.map((s, i) => ({
-              entries: Object.entries(s).filter(([k, v]) => !!v).map(([k, v]) => {
-                return {
-                  key: k,
-                  kind: v.kind
-                };
-              })
-            }))
-          };
-          const cacheValue = JSON.parse(
-            JSON.stringify({
-              cacheStepIndex,
-              dependencyKey,
-              cacheFrameId,
-              status: `cached`,
-              valueKeys
-            })
-          );
-          const onCacheCreated = () => cacheStatus.cache.push(cacheValue);
-          return { frame, scopeStack, onCacheCreated };
-        }
-      }
+      scopeStack: [{}]
     };
-    const runNext = () => {
-      setTimeout(() => {
-        if (jobState.isCancelled) {
-          jobState.isCancelled = false;
-          return;
-        }
-        runtime.st.currentDraft?.start();
-      }, 10);
-    };
+    const graph = state.graph;
     try {
-      runtime.output_text({
-        title: `START`,
-        message: `START
-
-${JSON.stringify(
-          {
-            cacheStatus
-          },
-          null,
-          2
-        )}`
-      });
       const frameIds = [...new Array(form.imageSource.iterationCount)].map(
         (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
       );
@@ -1879,46 +1477,20 @@ ${JSON.stringify(
         height,
         value: 1
       });
-      let cacheCount_stop = 0;
-      while (true) {
-        cacheCount_stop++;
-        let wasCacheStopped = false;
-        for (const frameId of frameIds) {
-          loadImageNode.inputs.current_frame = frameId;
-          if (form.imageSource.preview) {
-            throw new PreviewStopError(() => {
-            });
-          }
-          try {
-            allOperationsList_cached.run(state, form.operations, {
-              image: initialImage,
-              mask: initialMask,
-              cacheStepIndex_current: 0,
-              cacheStepIndex_stop: cacheCount_stop,
-              cacheFrameId: frameId
-            });
-            continue;
-          } catch (err) {
-            if (!(err instanceof CacheStopError)) {
-              throw err;
-            }
-            wasCacheStopped = true;
-            if (err.wasAlreadyCached) {
-              console.log(`CACHE wasAlreadyCached`, { frameId, cacheCount_stop });
-              continue;
-            }
-            graph.PreviewImage({
-              images: runtime.AUTO
-            });
-            await runtime.PROMPT();
-            err.onCacheCreated();
-            console.log(`CACHE created`, { frameId, cacheCount_stop });
-            return runNext();
-          }
+      for (const frameId of frameIds) {
+        loadImageNode.inputs.current_frame = frameId;
+        if (form.imageSource.preview) {
+          throw new PreviewStopError(() => {
+          });
         }
-        if (!wasCacheStopped) {
-          return;
-        }
+        allOperationsList.run(state, form.operations, {
+          image: initialImage,
+          mask: initialMask
+        });
+        graph.PreviewImage({
+          images: runtime.AUTO
+        });
+        await runtime.PROMPT();
       }
     } catch (err) {
       if (!(err instanceof PreviewStopError)) {
@@ -1929,19 +1501,6 @@ ${JSON.stringify(
         images: runtime.AUTO
       });
       await runtime.PROMPT();
-    } finally {
-      runtime.output_text({
-        title: `DONE`,
-        message: `DONE
-
-${JSON.stringify(
-          {
-            cacheStatus
-          },
-          null,
-          2
-        )}`
-      });
     }
   }
 });

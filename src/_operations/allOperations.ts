@@ -4,12 +4,14 @@ import { imageOperations } from './image'
 import { maskOperations } from './mask'
 import { resizingOperations } from './resizing'
 import { storageOperations } from './storage'
+import { samplingOperations } from './sampling'
 
 export const allOperationsList = createFrameOperationsChoiceList({
     ...imageOperations,
     ...maskOperations,
     ...resizingOperations,
     ...storageOperations,
+    ...samplingOperations,
 })
 
 export const allOperationsList_cached = createFrameOperationsChoiceList_cached({
@@ -17,4 +19,5 @@ export const allOperationsList_cached = createFrameOperationsChoiceList_cached({
     ...maskOperations,
     ...resizingOperations,
     ...storageOperations,
+    ...samplingOperations,
 })

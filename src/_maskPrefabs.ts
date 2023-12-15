@@ -130,7 +130,7 @@ const operation_sam = createMaskOperation({
                 threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
                 detection_hint: form.enum({
                     enumName: `Enum_SAMDetectorCombined_detection_hint`,
-                    default: `center-1`,
+                    default: `none`,
                 }),
                 mask_hint_use_negative: form.enum({
                     enumName: `Enum_SAMDetectorCombined_mask_hint_use_negative`,
