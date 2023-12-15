@@ -1,7 +1,8 @@
 import { FormBuilder, Widget, Widget_groupOpt, Widget_group_output } from 'src'
 import { WidgetDict } from 'src/cards/Card'
-import { AppState, PreviewStopError } from '../_appState'
+import { AppState, PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createRandomGenerator } from '../_random'
+import { storageOperations } from './storage'
 
 export type Frame = {
     image: _IMAGE
@@ -95,7 +96,19 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                         k,
                                         form.group({
                                             items: () => ({
+                                                __loadVariables: form.groupOpt({
+                                                    items: () => ({
+                                                        image: form.stringOpt({ default: `a` }),
+                                                        mask: form.stringOpt({ default: `a` }),
+                                                    }),
+                                                }),
                                                 ...v.ui(form),
+                                                __storeVariables: form.groupOpt({
+                                                    items: () => ({
+                                                        image: form.stringOpt({ default: `a` }),
+                                                        mask: form.stringOpt({ default: `a` }),
+                                                    }),
+                                                }),
                                                 __preview: form.inlineRun({}),
                                             }),
                                         }),
@@ -125,9 +138,24 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         continue
                     }
 
+                    frame = { ...frame }
+                    if (opGroupOptValue.__loadVariables?.image) {
+                        frame.image = loadFromScope(state, opGroupOptValue.__loadVariables.image) ?? frame.image
+                    }
+                    if (opGroupOptValue.__loadVariables?.mask) {
+                        frame.mask = loadFromScope(state, opGroupOptValue.__loadVariables.mask) ?? frame.mask
+                    }
+
                     frame = {
                         ...frame,
                         ...op.run(state, opGroupOptValue, frame),
+                    }
+
+                    if (opGroupOptValue.__storeVariables?.image) {
+                        storeInScope(state, opGroupOptValue.__storeVariables.image, `image`, frame.image)
+                    }
+                    if (opGroupOptValue.__storeVariables?.mask) {
+                        storeInScope(state, opGroupOptValue.__storeVariables.mask, `mask`, frame.mask)
                     }
 
                     if (opGroupOptValue.__preview) {

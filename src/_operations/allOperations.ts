@@ -1,4 +1,4 @@
-import { createFrameOperationsChoiceList } from './_frame'
+import { createFrameOperation, createFrameOperationsChoiceList } from './_frame'
 import { createFrameOperationsChoiceList_cached } from './_frameCached'
 import { imageOperations } from './image'
 import { maskOperations } from './mask'
@@ -6,12 +6,20 @@ import { resizingOperations } from './resizing'
 import { storageOperations } from './storage'
 import { samplingOperations } from './sampling'
 
+const divider = createFrameOperation({
+    ui: (form) => ({}),
+    run: ({ runtime, graph }, form, { image }) => {
+        return {}
+    },
+})
+
 export const allOperationsList = createFrameOperationsChoiceList({
     ...imageOperations,
     ...maskOperations,
     ...resizingOperations,
     ...storageOperations,
     ...samplingOperations,
+    [`---`]: divider,
 })
 
 export const allOperationsList_cached = createFrameOperationsChoiceList_cached({
@@ -20,4 +28,5 @@ export const allOperationsList_cached = createFrameOperationsChoiceList_cached({
     ...resizingOperations,
     ...storageOperations,
     ...samplingOperations,
+    [`---`]: divider,
 })

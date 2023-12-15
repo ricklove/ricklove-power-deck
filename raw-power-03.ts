@@ -41,18 +41,17 @@ appOptimized({
             scopeStack: [{}],
         }
         const graph = state.graph
+        const frameIds = [...new Array(form.imageSource.iterationCount)].map(
+            (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1),
+        )
+        const imageDir = form.imageSource.directory.replace(/\/$/g, ``)
+        const loadImageNode = graph.RL$_LoadImageSequence({
+            path: `${imageDir}/${form.imageSource.filePattern}`,
+            current_frame: frameIds[0],
+        })
+        const initialImage = loadImageNode.outputs.image
 
         try {
-            const frameIds = [...new Array(form.imageSource.iterationCount)].map(
-                (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1),
-            )
-            const imageDir = form.imageSource.directory.replace(/\/$/g, ``)
-            const loadImageNode = graph.RL$_LoadImageSequence({
-                path: `${imageDir}/${form.imageSource.filePattern}`,
-                current_frame: frameIds[0],
-            })
-            const initialImage = loadImageNode.outputs.image
-
             const { INT: width, INT_1: height } = graph.Get_Image_Size({
                 image: initialImage,
             }).outputs
@@ -67,22 +66,24 @@ appOptimized({
                 value: 1,
             })
 
-            // Loop through all frames in a single job
-            for (const frameId of frameIds) {
-                loadImageNode.inputs.current_frame = frameId
-                if (form.imageSource.preview) {
-                    throw new PreviewStopError(() => {})
-                }
-
-                allOperationsList.run(state, form.operations, {
-                    image: initialImage,
-                    mask: initialMask,
-                })
-
-                // only if no cache was created - actually done with all steps for this frame
+            if (form.imageSource.preview) {
                 graph.PreviewImage({
                     images: runtime.AUTO,
                 })
+                for (const frameId of frameIds) {
+                    loadImageNode.inputs.current_frame = frameId
+                    await runtime.PROMPT()
+                }
+                return
+            }
+
+            allOperationsList.run(state, form.operations, {
+                image: initialImage,
+                mask: initialMask,
+            })
+
+            for (const frameId of frameIds) {
+                loadImageNode.inputs.current_frame = frameId
                 await runtime.PROMPT()
             }
         } catch (err) {
@@ -90,11 +91,15 @@ appOptimized({
                 throw err
             }
 
-            const graph = state.graph
-            graph.PreviewImage({
-                images: runtime.AUTO,
-            })
-            await runtime.PROMPT()
+            // const graph = state.graph
+            // graph.PreviewImage({
+            //     images: runtime.AUTO,
+            // })
+            for (const frameId of frameIds) {
+                loadImageNode.inputs.current_frame = frameId
+                await runtime.PROMPT()
+            }
+            // await runtime.PROMPT()
         }
     },
 })

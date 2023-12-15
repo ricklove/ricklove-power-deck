@@ -17,6 +17,7 @@ var PreviewStopError = class extends Error {
 var storeInScope = (state, name, kind, value) => {
   const { scopeStack } = state;
   scopeStack[scopeStack.length - 1][name] = value == void 0 ? void 0 : { value, kind };
+  console.log(`storeInScope`, { scopeStack });
 };
 var loadFromScope = (state, name) => {
   const { scopeStack } = state;
@@ -326,7 +327,19 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
               k,
               form.group({
                 items: () => ({
+                  __loadVariables: form.groupOpt({
+                    items: () => ({
+                      image: form.stringOpt({ default: `a` }),
+                      mask: form.stringOpt({ default: `a` })
+                    })
+                  }),
                   ...v.ui(form),
+                  __storeVariables: form.groupOpt({
+                    items: () => ({
+                      image: form.stringOpt({ default: `a` }),
+                      mask: form.stringOpt({ default: `a` })
+                    })
+                  }),
                   __preview: form.inlineRun({})
                 })
               })
@@ -345,10 +358,23 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
         if (opGroupOptValue == null) {
           continue;
         }
+        frame = { ...frame };
+        if (opGroupOptValue.__loadVariables?.image) {
+          frame.image = loadFromScope(state, opGroupOptValue.__loadVariables.image) ?? frame.image;
+        }
+        if (opGroupOptValue.__loadVariables?.mask) {
+          frame.mask = loadFromScope(state, opGroupOptValue.__loadVariables.mask) ?? frame.mask;
+        }
         frame = {
           ...frame,
           ...op.run(state, opGroupOptValue, frame)
         };
+        if (opGroupOptValue.__storeVariables?.image) {
+          storeInScope(state, opGroupOptValue.__storeVariables.image, `image`, frame.image);
+        }
+        if (opGroupOptValue.__storeVariables?.mask) {
+          storeInScope(state, opGroupOptValue.__storeVariables.mask, `mask`, frame.mask);
+        }
         if (opGroupOptValue.__preview) {
           graph.PreviewImage({
             images: graph.ImageBatch({
@@ -1405,19 +1431,27 @@ var samplingOperations = {
 var samplingOperationsList = createFrameOperationsGroupList(samplingOperations);
 
 // library/ricklove/my-cushy-deck/src/_operations/allOperations.ts
+var divider = createFrameOperation({
+  ui: (form) => ({}),
+  run: ({ runtime, graph }, form, { image }) => {
+    return {};
+  }
+});
 var allOperationsList = createFrameOperationsChoiceList({
   ...imageOperations,
   ...maskOperations,
   ...resizingOperations,
   ...storageOperations,
-  ...samplingOperations
+  ...samplingOperations,
+  [`---`]: divider
 });
 var allOperationsList_cached = createFrameOperationsChoiceList_cached({
   ...imageOperations,
   ...maskOperations,
   ...resizingOperations,
   ...storageOperations,
-  ...samplingOperations
+  ...samplingOperations,
+  [`---`]: divider
 });
 
 // library/ricklove/my-cushy-deck/src/humor/_loading.ts

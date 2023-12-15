@@ -38,6 +38,8 @@ export const storeInScope = <T extends null | ScopeStackValueType>(
 ) => {
     const { scopeStack } = state
     scopeStack[scopeStack.length - 1][name] = value == undefined ? undefined : { value: value, kind }
+
+    console.log(`storeInScope`, { scopeStack })
 }
 
 export const loadFromScope = <T extends null | ScopeStackValueType>(state: AppState, name: string): undefined | T => {

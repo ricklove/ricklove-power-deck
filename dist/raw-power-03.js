@@ -17,6 +17,7 @@ var PreviewStopError = class extends Error {
 var storeInScope = (state, name, kind, value) => {
   const { scopeStack } = state;
   scopeStack[scopeStack.length - 1][name] = value == void 0 ? void 0 : { value, kind };
+  console.log(`storeInScope`, { scopeStack });
 };
 var loadFromScope = (state, name) => {
   const { scopeStack } = state;
@@ -326,7 +327,19 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
               k,
               form.group({
                 items: () => ({
+                  __loadVariables: form.groupOpt({
+                    items: () => ({
+                      image: form.stringOpt({ default: `a` }),
+                      mask: form.stringOpt({ default: `a` })
+                    })
+                  }),
                   ...v.ui(form),
+                  __storeVariables: form.groupOpt({
+                    items: () => ({
+                      image: form.stringOpt({ default: `a` }),
+                      mask: form.stringOpt({ default: `a` })
+                    })
+                  }),
                   __preview: form.inlineRun({})
                 })
               })
@@ -345,10 +358,23 @@ var createFrameOperationsChoiceList = (operations) => createFrameOperationValue(
         if (opGroupOptValue == null) {
           continue;
         }
+        frame = { ...frame };
+        if (opGroupOptValue.__loadVariables?.image) {
+          frame.image = loadFromScope(state, opGroupOptValue.__loadVariables.image) ?? frame.image;
+        }
+        if (opGroupOptValue.__loadVariables?.mask) {
+          frame.mask = loadFromScope(state, opGroupOptValue.__loadVariables.mask) ?? frame.mask;
+        }
         frame = {
           ...frame,
           ...op.run(state, opGroupOptValue, frame)
         };
+        if (opGroupOptValue.__storeVariables?.image) {
+          storeInScope(state, opGroupOptValue.__storeVariables.image, `image`, frame.image);
+        }
+        if (opGroupOptValue.__storeVariables?.mask) {
+          storeInScope(state, opGroupOptValue.__storeVariables.mask, `mask`, frame.mask);
+        }
         if (opGroupOptValue.__preview) {
           graph.PreviewImage({
             images: graph.ImageBatch({
@@ -1405,19 +1431,27 @@ var samplingOperations = {
 var samplingOperationsList = createFrameOperationsGroupList(samplingOperations);
 
 // library/ricklove/my-cushy-deck/src/_operations/allOperations.ts
+var divider = createFrameOperation({
+  ui: (form) => ({}),
+  run: ({ runtime, graph }, form, { image }) => {
+    return {};
+  }
+});
 var allOperationsList = createFrameOperationsChoiceList({
   ...imageOperations,
   ...maskOperations,
   ...resizingOperations,
   ...storageOperations,
-  ...samplingOperations
+  ...samplingOperations,
+  [`---`]: divider
 });
 var allOperationsList_cached = createFrameOperationsChoiceList_cached({
   ...imageOperations,
   ...maskOperations,
   ...resizingOperations,
   ...storageOperations,
-  ...samplingOperations
+  ...samplingOperations,
+  [`---`]: divider
 });
 
 // library/ricklove/my-cushy-deck/raw-power-03.ts
@@ -1459,16 +1493,16 @@ appOptimized({
       scopeStack: [{}]
     };
     const graph = state.graph;
+    const frameIds = [...new Array(form.imageSource.iterationCount)].map(
+      (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
+    );
+    const imageDir = form.imageSource.directory.replace(/\/$/g, ``);
+    const loadImageNode = graph.RL$_LoadImageSequence({
+      path: `${imageDir}/${form.imageSource.filePattern}`,
+      current_frame: frameIds[0]
+    });
+    const initialImage = loadImageNode.outputs.image;
     try {
-      const frameIds = [...new Array(form.imageSource.iterationCount)].map(
-        (_, i) => form.imageSource.startIndex + i * (form.imageSource.selectEveryNth ?? 1)
-      );
-      const imageDir = form.imageSource.directory.replace(/\/$/g, ``);
-      const loadImageNode = graph.RL$_LoadImageSequence({
-        path: `${imageDir}/${form.imageSource.filePattern}`,
-        current_frame: frameIds[0]
-      });
-      const initialImage = loadImageNode.outputs.image;
       const { INT: width, INT_1: height } = graph.Get_Image_Size({
         image: initialImage
       }).outputs;
@@ -1477,30 +1511,32 @@ appOptimized({
         height,
         value: 1
       });
-      for (const frameId of frameIds) {
-        loadImageNode.inputs.current_frame = frameId;
-        if (form.imageSource.preview) {
-          throw new PreviewStopError(() => {
-          });
-        }
-        allOperationsList.run(state, form.operations, {
-          image: initialImage,
-          mask: initialMask
-        });
+      if (form.imageSource.preview) {
         graph.PreviewImage({
           images: runtime.AUTO
         });
+        for (const frameId of frameIds) {
+          loadImageNode.inputs.current_frame = frameId;
+          await runtime.PROMPT();
+        }
+        return;
+      }
+      allOperationsList.run(state, form.operations, {
+        image: initialImage,
+        mask: initialMask
+      });
+      for (const frameId of frameIds) {
+        loadImageNode.inputs.current_frame = frameId;
         await runtime.PROMPT();
       }
     } catch (err) {
       if (!(err instanceof PreviewStopError)) {
         throw err;
       }
-      const graph2 = state.graph;
-      graph2.PreviewImage({
-        images: runtime.AUTO
-      });
-      await runtime.PROMPT();
+      for (const frameId of frameIds) {
+        loadImageNode.inputs.current_frame = frameId;
+        await runtime.PROMPT();
+      }
     }
   }
 });
