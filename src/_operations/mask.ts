@@ -2,19 +2,6 @@ import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
 
-const hedEdge = createFrameOperation({
-    ui: (form) => ({}),
-    run: ({ runtime, graph }, form, { image }) => {
-        const resultImage = graph.HEDPreprocessor({
-            image,
-            safe: `enable`,
-            version: `v1.1`,
-        }).outputs.IMAGE
-
-        return { image: resultImage }
-    },
-})
-
 const clipSeg = createFrameOperation({
     ui: (form) => ({
         prompt: form.str({ default: `ball` }),
@@ -133,6 +120,9 @@ const sam = createFrameOperation({
 })
 
 const combineMasks = createFrameOperation({
+    options: {
+        hideLoadVariables: true,
+    },
     ui: (form) => ({
         operation: form.selectOne({
             choices: [{ id: `union` }, { id: `intersection` }],

@@ -31,10 +31,10 @@ const loadImageFrame = createFrameOperation({
     },
 })
 
-const cacheImageFrame = createFrameOperation({
+const cacheEverything = createFrameOperation({
     options: { simple: true },
     ui: (form) => ({
-        buildCache: form.inlineRun({ text: `Cache It!!!`, kind: `special` }),
+        buildCache: form.inlineRun({ text: `Cache Me If You Can!`, kind: `special` }),
         // path: form.string({ default: `../input/working/NAME/#####.png` }),
         // image: form.strOpt({ default: `imageFinal` }),
         // imageVariables: form.list({
@@ -49,6 +49,8 @@ const cacheImageFrame = createFrameOperation({
         const { graph } = state
         const pathPattern = `${workingDirectory}/NAME/#####.png`
 
+        const previewImages = true
+
         const createCachedImage = (name: string, image: _IMAGE) => {
             if (form.buildCache) {
                 const saveNode = graph.RL$_SaveImageSequence({
@@ -56,6 +58,9 @@ const cacheImageFrame = createFrameOperation({
                     current_frame: 0,
                     path: pathPattern.replace(`NAME`, name),
                 })
+                if (previewImages) {
+                    graph.PreviewImage({ images: image })
+                }
                 frameIdProvider.subscribe((v) => (saveNode.inputs.current_frame = v))
                 return undefined
             }
@@ -69,11 +74,15 @@ const cacheImageFrame = createFrameOperation({
         }
         const createCachedMask = (name: string, mask: _MASK) => {
             if (form.buildCache) {
+                const maskImage = graph.MaskToImage({ mask })
                 const saveNode = graph.RL$_SaveImageSequence({
-                    images: graph.MaskToImage({ mask }),
+                    images: maskImage,
                     current_frame: 0,
                     path: pathPattern.replace(`NAME`, name),
                 })
+                if (previewImages) {
+                    graph.PreviewImage({ images: maskImage })
+                }
                 frameIdProvider.subscribe((v) => (saveNode.inputs.current_frame = v))
                 return undefined
             }
@@ -95,18 +104,24 @@ const cacheImageFrame = createFrameOperation({
         const resultImage = createCachedImage(`${namePrefix}-image`, image)
         const resultMask = createCachedMask(`${namePrefix}-mask`, mask)
 
-        const allScopKeys = getAllScopeKeys(state)
+        const allScopeKeys = getAllScopeKeys(state)
 
-        for (const k of allScopKeys) {
+        for (const k of allScopeKeys) {
             const v = loadFromScopeWithExtras(state, k)
-            if (!v || v.isCache) {
+            if (!v?.value || v.isCache) {
                 continue
             }
             if (v.kind === `image`) {
-                storeInScope(state, `${namePrefix}-${k}`, `image`, createCachedImage(k, v.value as _IMAGE) ?? v.value)
+                storeInScope(state, k, `image`, createCachedImage(`${namePrefix}-${k}`, v.value as _IMAGE) ?? v.value, {
+                    isCache: true,
+                })
+                continue
             }
             if (v.kind === `mask`) {
-                storeInScope(state, `${namePrefix}-${k}`, `mask`, createCachedMask(k, v.value as _MASK) ?? v.value)
+                storeInScope(state, k, `mask`, createCachedMask(`${namePrefix}-${k}`, v.value as _MASK) ?? v.value, {
+                    isCache: true,
+                })
+                continue
             }
         }
 
@@ -178,7 +193,7 @@ const cacheImageFrame = createFrameOperation({
 export const fileOperations = {
     saveImageFrame,
     loadImageFrame,
-    cacheImageFrame,
+    cacheEverything,
     // loadImageVariable,
     // storeImageVarible,
     // storeMaskVariable,

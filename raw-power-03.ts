@@ -28,6 +28,8 @@ appOptimized({
         operations: allOperationsList.ui(form),
     }),
     run: async (runtime, form) => {
+        console.log(`formSerial`, { formSerial: runtime.formSerial })
+
         const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState`, () => ({
             isCancelled: false,
         }))

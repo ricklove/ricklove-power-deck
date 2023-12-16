@@ -32,6 +32,7 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
         // batchSize:5, len:20 => 0-4,5-9,10-14,15-19 (iLastActive = 15)
         // batchSize:5, len:19 => 0-4,5-9,10-14,14-18 (iLastActive = 14)
         // batchSize:6, overlap:1, len:20 => 0-5,5-10,10-15,14-19 (iLastActive = 14)
+        // batchSize:7, len:3 => 0-2 (iLastActive = 0)
         const iLastActive = Math.max(0, frameIds.length - batchSize)
         const b = Math.max(1, batchSize - overlap)
         const isActive = iFrameId < iLastActive ? iFrameId % b === 0 : iFrameId === iLastActive
@@ -52,19 +53,21 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
             selectEveryNth: frameIdsPattern.selectEveryNth,
         },
         frameIds,
-        currentFrameIdIndex: 0,
+        currentFrameIdIndex: -1,
         callbacks: [] as ((value: number) => void)[],
     }
 
-    const setCurrentFrameIdIndex = (iFramdId: number) => {
-        state.currentFrameIdIndex = iFramdId
+    const setCurrentFrameIdIndex = (frameIdIndex: number) => {
+        console.log(`frameIdProvider: setCurrentFrameIdIndex()`, JSON.parse(JSON.stringify({ frameIdIndex, state })))
+
+        state.currentFrameIdIndex = frameIdIndex
         const value = state.frameIds[state.currentFrameIdIndex]
         for (const cb of state.callbacks) {
             try {
                 cb(value)
             } catch (err) {
                 // ignore subscriber errors
-                console.error(`frameIdProvider.callback error`, err)
+                console.error(`frameIdProvider: callback error`, err)
             }
         }
     }
@@ -82,6 +85,7 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
         },
         iterator: {
             next: () => {
+                console.log(`frameIdProvider: next()`, JSON.parse(JSON.stringify({ state })))
                 if (state.currentFrameIdIndex < state.frameIds.length - 1) {
                     setCurrentFrameIdIndex(state.currentFrameIdIndex + 1)
                     return { value: state.frameIds[state.currentFrameIdIndex]!, done: false }
@@ -89,10 +93,12 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
                 return { value: undefined as unknown as number, done: true }
             },
             reset: () => {
-                setCurrentFrameIdIndex(0)
+                console.log(`frameIdProvider: reset()`, JSON.parse(JSON.stringify({ state })))
+                state.currentFrameIdIndex = -1
             },
         },
         [Symbol.iterator]() {
+            console.log(`frameIdProvider: [Symbol.iterator]()`, JSON.parse(JSON.stringify({ state })))
             frameIdProvider.iterator.reset()
             return frameIdProvider.iterator
         },
