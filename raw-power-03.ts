@@ -11,7 +11,8 @@ appOptimized({
         }),
         imageSource: form.group({
             items: () => ({
-                directory: form.string({ default: `video` }),
+                directory: form.string({ default: `../input/video` }),
+                workingDirectory: form.string({ default: `../input/video/working` }),
                 filePattern: form.string({ default: `#####.png` }),
                 // pattern: form.string({ default: `*.png` }),
                 startIndex: form.int({ default: 1, min: 0 }),
@@ -80,7 +81,9 @@ appOptimized({
             allOperationsList.run(state, form.operations, {
                 image: initialImage,
                 mask: initialMask,
+                cacheIndex: 0,
                 frameIdProvider,
+                workingDirectory: form.imageSource.workingDirectory,
             })
 
             for (const frameId of frameIdProvider) {

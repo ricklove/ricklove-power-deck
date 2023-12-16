@@ -249,6 +249,9 @@ const colorSelect = createFrameOperation({
 })
 
 const blendImages = createFrameOperation({
+    options: {
+        hideLoadVariables: true,
+    },
     ui: (form) => ({
         // operation: form.selectOne({
         //     choices: [{ id: `union` }, { id: `intersection` }],

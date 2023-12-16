@@ -8,6 +8,8 @@ export type Frame = {
     image: _IMAGE
     mask: _MASK
     frameIdProvider: ReturnType<typeof createFrameIdProvider>
+    cacheIndex: number
+    workingDirectory: string
 }
 
 type FrameIdsPattern = {
@@ -30,7 +32,7 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
         // batchSize:5, len:20 => 0-4,5-9,10-14,15-19 (iLastActive = 15)
         // batchSize:5, len:19 => 0-4,5-9,10-14,14-18 (iLastActive = 14)
         // batchSize:6, overlap:1, len:20 => 0-5,5-10,10-15,14-19 (iLastActive = 14)
-        const iLastActive = frameIds.length - batchSize
+        const iLastActive = Math.max(0, frameIds.length - batchSize)
         const b = Math.max(1, batchSize - overlap)
         const isActive = iFrameId < iLastActive ? iFrameId % b === 0 : iFrameId === iLastActive
 
@@ -103,6 +105,12 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
 export type FrameOperation<TFields extends WidgetDict> = {
     ui: (form: FormBuilder) => TFields
     run: (state: AppState, form: { [k in keyof TFields]: TFields[k]['$Output'] }, frame: Frame) => Partial<Frame>
+    options?: {
+        simple?: boolean
+        hidePreview?: boolean
+        hideLoadVariables?: boolean
+        hideStoreVariables?: boolean
+    }
 }
 export const createFrameOperation = <TFields extends WidgetDict>(op: FrameOperation<TFields>): FrameOperation<TFields> => op
 
@@ -184,25 +192,54 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         items: () => ({
                             ...Object.fromEntries(
                                 Object.entries(operations).map(([k, v]) => {
+                                    const { simple, hidePreview, hideLoadVariables, hideStoreVariables } = v.options ?? {}
+                                    const showLoadVariables = !simple && !hideLoadVariables
+                                    const showStoreVariables = !simple && !hideStoreVariables
+                                    const showPreview = !simple && !hidePreview
+
                                     return [
                                         k,
                                         form.group({
-                                            // label: `test`,
                                             items: () => ({
-                                                __loadVariables: form.groupOpt({
-                                                    items: () => ({
-                                                        image: form.stringOpt({ default: `a` }),
-                                                        mask: form.stringOpt({ default: `a` }),
-                                                    }),
-                                                }),
+                                                ...(!showLoadVariables
+                                                    ? {}
+                                                    : {
+                                                          __loadVariables: form.group({
+                                                              className: `text-xs`,
+                                                              label: false,
+                                                              items: () => ({
+                                                                  loadVariables: form.groupOpt({
+                                                                      items: () => ({
+                                                                          image: form.stringOpt({}),
+                                                                          mask: form.stringOpt({}),
+                                                                      }),
+                                                                  }),
+                                                              }),
+                                                          }),
+                                                      }),
+
                                                 ...v.ui(form),
-                                                __storeVariables: form.groupOpt({
-                                                    items: () => ({
-                                                        image: form.stringOpt({ default: `a` }),
-                                                        mask: form.stringOpt({ default: `a` }),
-                                                    }),
-                                                }),
-                                                __preview: form.inlineRun({}),
+                                                ...(!showStoreVariables
+                                                    ? {}
+                                                    : {
+                                                          __storeVariables: form.group({
+                                                              className: `text-xs`,
+                                                              label: false,
+                                                              items: () => ({
+                                                                  storeVariables: form.groupOpt({
+                                                                      items: () => ({
+                                                                          image: form.stringOpt({}),
+                                                                          mask: form.stringOpt({}),
+                                                                      }),
+                                                                  }),
+                                                              }),
+                                                          }),
+                                                      }),
+                                                ...(!showPreview
+                                                    ? {}
+                                                    : {
+                                                          __preview: form.inlineRun({}),
+                                                      }),
                                             }),
                                         }),
                                     ]
@@ -232,11 +269,12 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                     }
 
                     frame = { ...frame }
-                    if (opGroupOptValue.__loadVariables?.image) {
-                        frame.image = loadFromScope(state, opGroupOptValue.__loadVariables.image) ?? frame.image
+                    const { loadVariables } = opGroupOptValue.__loadVariables ?? {}
+                    if (loadVariables?.image) {
+                        frame.image = loadFromScope(state, loadVariables.image) ?? frame.image
                     }
-                    if (opGroupOptValue.__loadVariables?.mask) {
-                        frame.mask = loadFromScope(state, opGroupOptValue.__loadVariables.mask) ?? frame.mask
+                    if (loadVariables?.mask) {
+                        frame.mask = loadFromScope(state, loadVariables.mask) ?? frame.mask
                     }
 
                     frame = {
@@ -244,11 +282,13 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         ...op.run(state, opGroupOptValue, frame),
                     }
 
-                    if (opGroupOptValue.__storeVariables?.image) {
-                        storeInScope(state, opGroupOptValue.__storeVariables.image, `image`, frame.image)
+                    const { storeVariables } = opGroupOptValue.__storeVariables ?? {}
+
+                    if (storeVariables?.image) {
+                        storeInScope(state, storeVariables.image, `image`, frame.image)
                     }
-                    if (opGroupOptValue.__storeVariables?.mask) {
-                        storeInScope(state, opGroupOptValue.__storeVariables.mask, `mask`, frame.mask)
+                    if (storeVariables?.mask) {
+                        storeInScope(state, storeVariables.mask, `mask`, frame.mask)
                     }
 
                     if (opGroupOptValue.__preview) {

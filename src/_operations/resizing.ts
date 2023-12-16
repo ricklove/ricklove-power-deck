@@ -2,6 +2,9 @@ import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
 import { storageOperations } from './storage'
 
 const cropResizeByMask = createFrameOperation({
+    options: {
+        hideStoreVariables: true,
+    },
     ui: (form) => ({
         padding: form.int({ default: 0 }),
         size: form.choice({

@@ -1,4 +1,4 @@
-import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
+import { PreviewStopError, getAllScopeKeys, loadFromScope, loadFromScopeWithExtras, storeInScope } from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
 
 const saveImageFrame = createFrameOperation({
@@ -32,33 +32,36 @@ const loadImageFrame = createFrameOperation({
 })
 
 const cacheImageFrame = createFrameOperation({
+    options: { simple: true },
     ui: (form) => ({
         buildCache: form.inlineRun({ text: `Cache It!!!`, kind: `special` }),
-        path: form.string({ default: `../input/working/NAME/#####.png` }),
-        image: form.strOpt({ default: `imageFinal` }),
-        imageVariables: form.list({
-            element: () => form.string({ default: `imageVariable` }),
-        }),
-        mask: form.strOpt({ default: `maskFinal` }),
-        maskVariables: form.list({
-            element: () => form.string({ default: `maskVariable` }),
-        }),
+        // path: form.string({ default: `../input/working/NAME/#####.png` }),
+        // image: form.strOpt({ default: `imageFinal` }),
+        // imageVariables: form.list({
+        //     element: () => form.string({ default: `imageVariable` }),
+        // }),
+        // mask: form.strOpt({ default: `maskFinal` }),
+        // maskVariables: form.list({
+        //     element: () => form.string({ default: `maskVariable` }),
+        // }),
     }),
-    run: (state, form, { image, mask, frameIdProvider }) => {
+    run: (state, form, { image, mask, frameIdProvider, cacheIndex, workingDirectory }) => {
         const { graph } = state
+        const pathPattern = `${workingDirectory}/NAME/#####.png`
+
         const createCachedImage = (name: string, image: _IMAGE) => {
             if (form.buildCache) {
                 const saveNode = graph.RL$_SaveImageSequence({
                     images: image,
                     current_frame: 0,
-                    path: form.path.replace(`NAME`, name),
+                    path: pathPattern.replace(`NAME`, name),
                 })
                 frameIdProvider.subscribe((v) => (saveNode.inputs.current_frame = v))
                 return undefined
             }
             const cachedImageNode = graph.RL$_LoadImageSequence({
                 current_frame: 0,
-                path: form.path.replace(`NAME`, name),
+                path: pathPattern.replace(`NAME`, name),
             })
             frameIdProvider.subscribe((v) => (cachedImageNode.inputs.current_frame = v))
 
@@ -69,14 +72,14 @@ const cacheImageFrame = createFrameOperation({
                 const saveNode = graph.RL$_SaveImageSequence({
                     images: graph.MaskToImage({ mask }),
                     current_frame: 0,
-                    path: form.path.replace(`NAME`, name),
+                    path: pathPattern.replace(`NAME`, name),
                 })
                 frameIdProvider.subscribe((v) => (saveNode.inputs.current_frame = v))
                 return undefined
             }
             const cachedImageNode = graph.RL$_LoadImageSequence({
                 current_frame: 0,
-                path: form.path.replace(`NAME`, name),
+                path: pathPattern.replace(`NAME`, name),
             })
             frameIdProvider.subscribe((v) => (cachedImageNode.inputs.current_frame = v))
 
@@ -87,29 +90,31 @@ const cacheImageFrame = createFrameOperation({
             return cachedMask
         }
 
-        const resultImage = !form.image ? undefined : createCachedImage(form.image, image)
-        for (const k of form.imageVariables) {
-            const variableImage = loadFromScope<_IMAGE>(state, k)
-            if (!variableImage) {
-                continue
-            }
-            storeInScope(state, k, `image`, createCachedImage(k, variableImage) ?? variableImage)
-        }
+        const namePrefix = `${cacheIndex.toString().padStart(4, `0`)}`
 
-        const resultMask = !form.mask ? undefined : createCachedMask(form.mask, mask)
-        for (const k of form.maskVariables) {
-            const variableMask = loadFromScope<_MASK>(state, k)
-            if (!variableMask) {
+        const resultImage = createCachedImage(`${namePrefix}-image`, image)
+        const resultMask = createCachedMask(`${namePrefix}-mask`, mask)
+
+        const allScopKeys = getAllScopeKeys(state)
+
+        for (const k of allScopKeys) {
+            const v = loadFromScopeWithExtras(state, k)
+            if (!v || v.isCache) {
                 continue
             }
-            storeInScope(state, k, `mask`, createCachedMask(k, variableMask) ?? variableMask)
+            if (v.kind === `image`) {
+                storeInScope(state, `${namePrefix}-${k}`, `image`, createCachedImage(k, v.value as _IMAGE) ?? v.value)
+            }
+            if (v.kind === `mask`) {
+                storeInScope(state, `${namePrefix}-${k}`, `mask`, createCachedMask(k, v.value as _MASK) ?? v.value)
+            }
         }
 
         if (form.buildCache) {
             throw new PreviewStopError(() => {})
         }
 
-        return { image: resultImage, mask: resultMask }
+        return { image: resultImage, mask: resultMask, cacheIndex: cacheIndex + 1 }
     },
 })
 

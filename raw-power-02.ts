@@ -314,7 +314,11 @@ ${JSON.stringify(
                     }
 
                     try {
-                        const frameIdProvider = createFrameIdProvider()
+                        const frameIdProvider = createFrameIdProvider({
+                            // This is ignored
+                            iterationCount: 1,
+                            startIndex: 0,
+                        })
 
                         allOperationsList.run(state, form.operations, {
                             image: initialImage,
@@ -323,6 +327,10 @@ ${JSON.stringify(
                             cacheStepIndex_current: 0,
                             cacheStepIndex_stop: cacheCount_stop,
                             cacheFrameId: frameId,
+
+                            // added after this was deprecated
+                            cacheIndex: 0,
+                            workingDirectory: ``,
                         })
 
                         // It finished without any caching, so just keep going
