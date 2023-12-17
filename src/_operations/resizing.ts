@@ -1,4 +1,6 @@
+import { loadFromScope, loadFromScopeWithExtras } from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { getCacheFilePattern } from './files'
 import { storageOperations } from './storage'
 
 const cropResizeByMask = createFrameOperation({
@@ -18,6 +20,18 @@ const cropResizeByMask = createFrameOperation({
                 }),
             }),
         }),
+        interpolate: form.groupOpt({
+            items: () => ({
+                maskVariableCachedName: form.str({ default: `maskA` }),
+
+                // firstMaskImageFilePath: form.str({ default: `../input/00001.png` }),
+                // lastMaskImageFilePath: form.str({ default: `../input/01000.png` }),
+                // firstFrameId: form.int({default:0}),
+                // lastFrameId: form.int({}),
+                // lastMaskVariable: form.str({ default: `maskB` }),
+                // useFrameIdIndexRatio: form.bool({ default: true }),
+            }),
+        }),
         storeVariables: form.groupOpt({
             items: () => ({
                 startImage: form.strOpt({ default: `beforeCropImage` }),
@@ -33,6 +47,55 @@ const cropResizeByMask = createFrameOperation({
         const { image, mask } = frame
         const startImage = image
         const cropMask = mask
+        let interpolate_mask_a = undefined as undefined | _MASK
+        let interpolate_mask_b = undefined as undefined | _MASK
+
+        if (form.interpolate) {
+            const { maskVariableCachedName } = form.interpolate
+            const markVar = loadFromScopeWithExtras(state, form.interpolate.maskVariableCachedName)
+
+            const loadMaskFromCachedFile = () => {
+                const loadMaskImageNode = graph.RL$_LoadImageSequence({
+                    path: getCacheFilePattern(frame.workingDirectory, maskVariableCachedName, markVar?.cacheIndex ?? 0),
+                    current_frame: 0,
+                })
+                const mask = graph.Image_To_Mask({
+                    image: loadMaskImageNode.outputs.image,
+                    method: `intensity`,
+                }).outputs.MASK
+
+                return {
+                    mask,
+                    loadMaskImageNode,
+                }
+            }
+
+            const maskA = loadMaskFromCachedFile()
+            const maskB = loadMaskFromCachedFile()
+            interpolate_mask_a = maskA.mask
+            interpolate_mask_b = maskB.mask
+
+            frame.frameIdProvider.subscribe((v) => {
+                const { firstFrameId, lastFrameId, currentFrameIdIndex, frameCount } = frame.frameIdProvider.get()
+                const ratio = frameCount <= 1 ? 0 : currentFrameIdIndex / (frameCount - 1)
+
+                resizeNode.inputs.interpolate_ratio = ratio
+                maskA.loadMaskImageNode.inputs.current_frame = firstFrameId
+                maskB.loadMaskImageNode.inputs.current_frame = lastFrameId
+            })
+        }
+
+        const resizeNode = graph.RL$_Crop$_Resize({
+            image: startImage,
+            mask: cropMask,
+            padding: form.padding,
+            max_side_length: form.size.maxSideLength ?? undefined,
+            width: form.size.target?.width ?? undefined,
+            height: form.size.target?.height ?? undefined,
+            interpolate_mask_a,
+            interpolate_mask_b,
+            interpolate_ratio: 0,
+        })
 
         const {
             cropped_image: croppedImage,
@@ -41,14 +104,7 @@ const cropResizeByMask = createFrameOperation({
             right_source,
             top_source,
             bottom_source,
-        } = graph.RL$_Crop$_Resize({
-            image: startImage,
-            mask: cropMask,
-            padding: form.padding,
-            max_side_length: form.size.maxSideLength ?? undefined,
-            width: form.size.target?.width ?? undefined,
-            height: form.size.target?.height ?? undefined,
-        }).outputs
+        } = resizeNode.outputs
 
         const startImageSize = graph.Get_Image_Size({
             image: startImage,

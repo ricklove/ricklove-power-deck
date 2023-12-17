@@ -1,5 +1,13 @@
-import { PreviewStopError, getAllScopeKeys, loadFromScope, loadFromScopeWithExtras, storeInScope } from '../_appState'
+import {
+    PreviewStopError,
+    disableNodesAfterInclusive,
+    getAllScopeKeys,
+    loadFromScope,
+    loadFromScopeWithExtras,
+    storeInScope,
+} from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { disableUnusedGraph } from './_graph'
 
 const saveImageFrame = createFrameOperation({
     ui: (form) => ({
@@ -31,6 +39,9 @@ const loadImageFrame = createFrameOperation({
     },
 })
 
+export const getCacheFilePattern = (workingDirectory: string, name: string, cacheIndex: number) =>
+    `${workingDirectory}/${cacheIndex.toString().padStart(4, `0`)}-${name}/#####.png`
+
 const cacheEverything = createFrameOperation({
     options: { simple: true },
     ui: (form) => ({
@@ -47,8 +58,6 @@ const cacheEverything = createFrameOperation({
     }),
     run: (state, form, { image, mask, frameIdProvider, cacheIndex, workingDirectory }) => {
         const { graph } = state
-        const pathPattern = `${workingDirectory}/NAME/#####.png`
-
         const previewImages = true
 
         const createCachedImage = (name: string, image: _IMAGE) => {
@@ -56,7 +65,7 @@ const cacheEverything = createFrameOperation({
                 const saveNode = graph.RL$_SaveImageSequence({
                     images: image,
                     current_frame: 0,
-                    path: pathPattern.replace(`NAME`, name),
+                    path: getCacheFilePattern(workingDirectory, name, cacheIndex),
                 })
                 if (previewImages) {
                     graph.PreviewImage({ images: image })
@@ -66,7 +75,7 @@ const cacheEverything = createFrameOperation({
             }
             const cachedImageNode = graph.RL$_LoadImageSequence({
                 current_frame: 0,
-                path: pathPattern.replace(`NAME`, name),
+                path: getCacheFilePattern(workingDirectory, name, cacheIndex),
             })
             frameIdProvider.subscribe((v) => (cachedImageNode.inputs.current_frame = v))
 
@@ -78,7 +87,7 @@ const cacheEverything = createFrameOperation({
                 const saveNode = graph.RL$_SaveImageSequence({
                     images: maskImage,
                     current_frame: 0,
-                    path: pathPattern.replace(`NAME`, name),
+                    path: getCacheFilePattern(workingDirectory, name, cacheIndex),
                 })
                 if (previewImages) {
                     graph.PreviewImage({ images: maskImage })
@@ -88,7 +97,7 @@ const cacheEverything = createFrameOperation({
             }
             const cachedImageNode = graph.RL$_LoadImageSequence({
                 current_frame: 0,
-                path: pathPattern.replace(`NAME`, name),
+                path: getCacheFilePattern(workingDirectory, name, cacheIndex),
             })
             frameIdProvider.subscribe((v) => (cachedImageNode.inputs.current_frame = v))
 
@@ -99,27 +108,25 @@ const cacheEverything = createFrameOperation({
             return cachedMask
         }
 
-        const namePrefix = `${cacheIndex.toString().padStart(4, `0`)}`
-
-        const resultImage = createCachedImage(`${namePrefix}-image`, image)
-        const resultMask = createCachedMask(`${namePrefix}-mask`, mask)
+        const resultImage = createCachedImage(`image`, image)
+        const resultMask = createCachedMask(`mask`, mask)
 
         const allScopeKeys = getAllScopeKeys(state)
 
         for (const k of allScopeKeys) {
             const v = loadFromScopeWithExtras(state, k)
-            if (!v?.value || v.isCache) {
+            if (!v?.value || v.cacheIndex != undefined) {
                 continue
             }
             if (v.kind === `image`) {
-                storeInScope(state, k, `image`, createCachedImage(`${namePrefix}-${k}`, v.value as _IMAGE) ?? v.value, {
-                    isCache: true,
+                storeInScope(state, k, `image`, createCachedImage(k, v.value as _IMAGE) ?? v.value, {
+                    cacheIndex,
                 })
                 continue
             }
             if (v.kind === `mask`) {
-                storeInScope(state, k, `mask`, createCachedMask(`${namePrefix}-${k}`, v.value as _MASK) ?? v.value, {
-                    isCache: true,
+                storeInScope(state, k, `mask`, createCachedMask(k, v.value as _MASK) ?? v.value, {
+                    cacheIndex,
                 })
                 continue
             }
@@ -129,6 +136,7 @@ const cacheEverything = createFrameOperation({
             throw new PreviewStopError(() => {})
         }
 
+        disableUnusedGraph(state, { keepNodes: { resultImage, resultMask }, keepScopeNodes: true })
         return { image: resultImage, mask: resultMask, cacheIndex: cacheIndex + 1 }
     },
 })

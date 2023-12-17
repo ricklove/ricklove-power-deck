@@ -81,6 +81,10 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
         get: () => {
             return {
                 frameId: state.frameIds[state.currentFrameIdIndex],
+                firstFrameId: state.frameIds[0],
+                lastFrameId: state.frameIds[state.frameIds.length - 1],
+                currentFrameIdIndex: state.currentFrameIdIndex,
+                frameCount: state.frameIds.length,
             }
         },
         iterator: {

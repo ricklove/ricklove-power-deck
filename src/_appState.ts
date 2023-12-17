@@ -1,5 +1,6 @@
 import { Runtime } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
+import { ComfyNode } from 'src/core/ComfyNode'
 
 export class PreviewStopError extends Error {
     constructor(public setFrameIndex: undefined | ((frameIndex: number) => void)) {
@@ -12,7 +13,7 @@ export type ScopeStackValueKind = `image` | `mask`
 export type ScopeStackValueData<T extends null | ScopeStackValueType = ScopeStackValueType> = {
     value: T
     kind: ScopeStackValueKind
-    isCache?: boolean
+    cacheIndex?: number
 }
 export type AppState = {
     runtime: Runtime
@@ -28,8 +29,15 @@ export const setNodesDisabled = (runtime: Runtime, disabled: boolean, iNodeStart
     runtime.workflow.nodes.slice(iNodeStart, iNodeStart + count).forEach((x) => (x.disabled = disabled))
 }
 
-export const disableNodesAfterInclusive = (runtime: Runtime, iNodeStartDisable: number) => {
-    runtime.workflow.nodes.slice(iNodeStartDisable).forEach((x) => x.disable())
+export const disableNodesAfterInclusive = (
+    runtime: Runtime,
+    iNodeStartDisable: number,
+    filter?: (x: ComfyNode<any>) => boolean,
+) => {
+    runtime.workflow.nodes
+        .slice(iNodeStartDisable)
+        .filter((x) => filter?.(x) ?? true)
+        .forEach((x) => x.disable())
 }
 
 export const getEnabledNodeNames = (runtime: Runtime) => {
@@ -44,7 +52,7 @@ export const storeInScope = <T extends null | ScopeStackValueType>(
     name: string,
     kind: ScopeStackValueKind,
     value: T,
-    extra?: { isCache?: boolean },
+    extra?: { cacheIndex?: number },
 ) => {
     const { scopeStack } = state
     scopeStack[scopeStack.length - 1][name] = value == undefined ? undefined : { value: value, kind, ...extra }

@@ -117,7 +117,7 @@ const filmInterpolationDoubleBack = createFrameOperation({
 
         const loadCurrentFrameResultNode = graph.RL$_LoadImageSequence({
             current_frame: 0,
-            path: form.inputPath,
+            path: form.outputPath,
         })
         const resultImage = loadCurrentFrameResultNode.outputs.image
 

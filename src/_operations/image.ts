@@ -120,6 +120,92 @@ const threshold = createFrameOperation({
     },
 })
 
+const grayscale = createFrameOperation({
+    ui: (form) => ({}),
+    run: ({ runtime, graph }, form, { image }) => {
+        const resultImage = graph.ImageEffectsGrayscale({
+            images: image,
+        }).outputs.IMAGE
+
+        return { image: resultImage }
+    },
+})
+
+const selectChannel = createFrameOperation({
+    ui: (form) => ({
+        channel: form.enum({
+            enumName: `Enum_Image_Select_Channel_channel`,
+        }),
+    }),
+    run: ({ runtime, graph }, form, { image }) => {
+        const channelImage = graph.Image_Select_Channel({
+            image: image,
+            channel: form.channel,
+        }).outputs.IMAGE
+
+        const imageSize = graph.Get_image_size({
+            image: channelImage,
+        })
+        const blackImage = graph.EmptyImage({
+            width: imageSize.outputs.INT,
+            height: imageSize.outputs.INT_1,
+        })
+        const singleChannel = graph.Image_Mix_RGB_Channels({
+            red_channel: form.channel === `red` ? channelImage : blackImage,
+            green_channel: form.channel === `green` ? channelImage : blackImage,
+            blue_channel: form.channel === `blue` ? channelImage : blackImage,
+        }).outputs.IMAGE
+
+        return { image: singleChannel }
+    },
+})
+
+const adjustChannelLevels = createFrameOperation({
+    ui: (form) => ({
+        redMin: form.int({ default: 0, min: 0, max: 255 }),
+        redMax: form.int({ default: 255, min: 0, max: 255 }),
+        greenMin: form.int({ default: 0, min: 0, max: 255 }),
+        greenMax: form.int({ default: 255, min: 0, max: 255 }),
+        blueMin: form.int({ default: 0, min: 0, max: 255 }),
+        blueMax: form.int({ default: 255, min: 0, max: 255 }),
+    }),
+    run: ({ runtime, graph }, form, { image }) => {
+        const imageSize = graph.Get_image_size({
+            image,
+        })
+        const blackImage = graph.EmptyImage({
+            width: imageSize.outputs.INT,
+            height: imageSize.outputs.INT_1,
+        }).outputs.IMAGE
+        const adjustChannel = (name: `red` | `green` | `blue`) => {
+            const channelImage = graph.Image_Select_Channel({
+                image: image,
+                channel: `red`,
+            }).outputs.IMAGE
+            const minLevel = form[`${name}Min`]
+            const maxLevel = form[`${name}Max`]
+            if (minLevel === maxLevel) {
+                return blackImage
+            }
+            const adjustedChannel = graph.Image_Levels_Adjustment({
+                image: channelImage,
+                black_level: minLevel,
+                white_level: maxLevel,
+                mid_level: (minLevel + maxLevel) / 2.0,
+            })
+            return adjustedChannel.outputs.IMAGE
+        }
+
+        const resultImage = graph.Image_Mix_RGB_Channels({
+            red_channel: adjustChannel(`red`),
+            green_channel: adjustChannel(`green`),
+            blue_channel: adjustChannel(`blue`),
+        }).outputs.IMAGE
+
+        return { image: resultImage }
+    },
+})
+
 const baeNormal = createFrameOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
@@ -211,7 +297,7 @@ const enhanceLighting = createFrameOperation({
     },
 })
 
-const colorSelect = createFrameOperation({
+const selectColor = createFrameOperation({
     ui: (form) => ({
         color: form.color({ default: `#000000` }),
         variance: form.int({ default: 10, min: 0, max: 255 }),
@@ -343,7 +429,10 @@ export const imageOperations = {
     baeNormal,
     openPose,
     threshold,
-    colorSelect,
+    grayscale,
+    selectChannel,
+    selectColor,
+    adjustChannelLevels,
     blendImages,
 }
 export const imageOperationsList = createFrameOperationsGroupList(imageOperations)
