@@ -34,11 +34,11 @@ const cropResizeByMask = createFrameOperation({
         }),
         storeVariables: form.groupOpt({
             items: () => ({
-                startImage: form.strOpt({ default: `beforeCropImage` }),
-                startMask: form.strOpt({ default: `beforeCropMask` }),
-                cropAreaMask: form.strOpt({ default: `cropArea` }),
-                endImage: form.strOpt({ default: `afterCropImage` }),
-                endMask: form.strOpt({ default: `afterCropMask` }),
+                beforeCropImage: form.strOpt({ default: `beforeCropImage` }),
+                beforeCropMask: form.strOpt({ default: `beforeCropMask` }),
+                cropAreaMask: form.strOpt({ default: `cropAreaMask` }),
+                afterCropImage: form.strOpt({ default: `afterCropImage` }),
+                afterCropMask: form.strOpt({ default: `afterCropMask` }),
             }),
         }),
     }),
@@ -52,11 +52,11 @@ const cropResizeByMask = createFrameOperation({
 
         if (form.interpolate) {
             const { maskVariableCachedName } = form.interpolate
-            const markVar = loadFromScopeWithExtras(state, form.interpolate.maskVariableCachedName)
+            const maskVar = loadFromScopeWithExtras(state, form.interpolate.maskVariableCachedName)
 
             const loadMaskFromCachedFile = () => {
                 const loadMaskImageNode = graph.RL$_LoadImageSequence({
-                    path: getCacheFilePattern(frame.workingDirectory, maskVariableCachedName, markVar?.cacheIndex ?? 0),
+                    path: getCacheFilePattern(frame.workingDirectory, maskVariableCachedName, maskVar?.cacheIndex ?? 0),
                     current_frame: 0,
                 })
                 const mask = graph.Image_To_Mask({
@@ -137,21 +137,25 @@ const cropResizeByMask = createFrameOperation({
             method: `intensity`,
         })
 
-        if (form.storeVariables?.startImage) {
-            storageOperations.storeImageVarible.run(state, { name: form.storeVariables.startImage }, { ...frame, image })
+        if (form.storeVariables?.beforeCropImage) {
+            storageOperations.storeImageVarible.run(state, { name: form.storeVariables.beforeCropImage }, { ...frame, image })
         }
-        if (form.storeVariables?.endImage) {
+        if (form.storeVariables?.afterCropImage) {
             storageOperations.storeImageVarible.run(
                 state,
-                { name: form.storeVariables.endImage },
+                { name: form.storeVariables.afterCropImage },
                 { ...frame, image: croppedImage },
             )
         }
-        if (form.storeVariables?.startMask) {
-            storageOperations.storeMaskVariable.run(state, { name: form.storeVariables.startMask }, { ...frame, mask })
+        if (form.storeVariables?.beforeCropMask) {
+            storageOperations.storeMaskVariable.run(state, { name: form.storeVariables.beforeCropMask }, { ...frame, mask })
         }
-        if (form.storeVariables?.endMask) {
-            storageOperations.storeMaskVariable.run(state, { name: form.storeVariables.endMask }, { ...frame, mask: croppedMask })
+        if (form.storeVariables?.afterCropMask) {
+            storageOperations.storeMaskVariable.run(
+                state,
+                { name: form.storeVariables.afterCropMask },
+                { ...frame, mask: croppedMask },
+            )
         }
         if (form.storeVariables?.cropAreaMask) {
             storageOperations.storeMaskVariable.run(
@@ -165,6 +169,58 @@ const cropResizeByMask = createFrameOperation({
     },
 })
 
+const uncrop = createFrameOperation({
+    options: {
+        hideLoadVariables: true,
+    },
+    ui: (form) => ({
+        variables: form.group({
+            items: () => ({
+                beforeCropImage: form.str({ default: `beforeCropImage` }),
+                cropAreaMask: form.str({ default: `cropAreaMask` }),
+                pasteImage: form.str({ default: `pasteImage` }),
+                pasteMask: form.str({ default: `pasteMask` }),
+            }),
+        }),
+    }),
+    run: (state, form, { image, mask }) => {
+        const { graph } = state
+
+        const beforeCropImage = loadFromScope<_IMAGE>(state, form.variables.beforeCropImage) ?? image
+        const cropAreaMask = loadFromScope<_MASK>(state, form.variables.cropAreaMask) ?? mask
+        const pasteImage = loadFromScope<_IMAGE>(state, form.variables.pasteImage) ?? image
+        const pasteMask = loadFromScope<_MASK>(state, form.variables.pasteMask) ?? mask
+        const cropAreaMaskImage = graph.MaskToImage({
+            mask: cropAreaMask,
+        })
+        const pasteMaskImage = graph.MaskToImage({
+            mask: pasteMask,
+        })
+
+        const uncroppedReplaceMaskImage = graph.Paste_By_Mask({
+            image_base: cropAreaMaskImage,
+            image_to_paste: pasteMaskImage,
+            mask: cropAreaMaskImage,
+            resize_behavior: `resize`,
+        }).outputs.IMAGE
+
+        const uncroppedFinalImage = graph.Paste_By_Mask({
+            image_base: beforeCropImage,
+            image_to_paste: pasteImage,
+            mask: cropAreaMaskImage,
+            resize_behavior: `resize`,
+        }).outputs.IMAGE
+
+        const restoredImage = graph.Image_Blend_by_Mask({
+            image_a: beforeCropImage,
+            image_b: uncroppedFinalImage,
+            mask: uncroppedReplaceMaskImage,
+            blend_percentage: 1,
+        }).outputs.IMAGE
+
+        return { image: restoredImage }
+    },
+})
 const upscaleWithModel = createFrameOperation({
     ui: (form) => ({
         model: form.enum({
@@ -220,6 +276,7 @@ const upscaleWithModel = createFrameOperation({
 
 export const resizingOperations = {
     cropResizeByMask,
+    uncrop,
     upscaleWithModel,
 }
 export const resizingOperationsList = createFrameOperationsGroupList(resizingOperations)

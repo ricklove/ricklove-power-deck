@@ -1,5 +1,13 @@
-import { PreviewStopError, getNextActiveNodeIndex, loadFromScope, setNodesDisabled, storeInScope } from '../_appState'
+import {
+    PreviewStopError,
+    getNextActiveNodeIndex,
+    loadFromScope,
+    loadFromScopeWithExtras,
+    setNodesDisabled,
+    storeInScope,
+} from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { getCacheFilePattern } from './files'
 
 const filmInterpolationDoubleBack = createFrameOperation({
     ui: (form) => ({
@@ -8,17 +16,24 @@ const filmInterpolationDoubleBack = createFrameOperation({
         batchOverlap: form.int({ default: 0 }),
         iterations: form.int({ default: 1 }),
         // interpolate: form.int({ default: 1 }),
-        inputPath: form.string({ default: `../input/working/input/#####.png` }),
-        outputPath: form.string({ default: `../input/working/output/#####.png` }),
+        inputVariableName: form.string({ default: `image` }),
+        outputVariableName: form.string({ default: `image` }),
+        // inputPath: form.string({ default: `../input/working/input/#####.png` }),
+        // outputPath: form.string({ default: `../input/working/output/#####.png` }),
     }),
-    run: ({ runtime, graph }, form, { image, frameIdProvider }) => {
+    run: (state, form, { image, frameIdProvider, workingDirectory, cacheIndex }) => {
+        const { runtime, graph } = state
         if (form.generate) {
             const iNodeStart = getNextActiveNodeIndex(runtime)
             const loadImageBatchNode = graph.RL$_LoadImageSequence({
                 current_frame: 0,
                 count: 1,
                 select_every_nth: 1,
-                path: form.inputPath,
+                path: getCacheFilePattern(
+                    workingDirectory,
+                    form.inputVariableName,
+                    loadFromScopeWithExtras(state, form.inputVariableName)?.cacheIndex ?? 0,
+                ),
             })
             const filmModelNode = graph.Load_Film_Model_$1mtb$2({
                 film_model: `Style`,
@@ -76,7 +91,7 @@ const filmInterpolationDoubleBack = createFrameOperation({
                 current_frame: 0,
                 count: 1,
                 select_every_nth: 1,
-                path: form.outputPath,
+                path: getCacheFilePattern(workingDirectory, form.outputVariableName, cacheIndex),
             })
             const previewCompareNode = graph.ImageBlend({
                 image1: loadImageBatchNode.outputs.image,
@@ -117,14 +132,14 @@ const filmInterpolationDoubleBack = createFrameOperation({
 
         const loadCurrentFrameResultNode = graph.RL$_LoadImageSequence({
             current_frame: 0,
-            path: form.outputPath,
+            path: getCacheFilePattern(workingDirectory, form.outputVariableName, cacheIndex),
         })
         const resultImage = loadCurrentFrameResultNode.outputs.image
 
         frameIdProvider.subscribe((v) => {
             loadCurrentFrameResultNode.inputs.current_frame = v
         })
-        return { image: resultImage }
+        return { image: resultImage, cacheIndex: cacheIndex + 1 }
     },
 })
 
