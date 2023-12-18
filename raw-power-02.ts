@@ -310,7 +310,7 @@ ${JSON.stringify(
                 for (const frameId of frameIds) {
                     loadImageNode.inputs.current_frame = frameId
                     if (form.imageSource.preview) {
-                        throw new PreviewStopError(() => {})
+                        throw new PreviewStopError(undefined)
                     }
 
                     try {
@@ -331,6 +331,7 @@ ${JSON.stringify(
                             // added after this was deprecated
                             cacheIndex: 0,
                             workingDirectory: ``,
+                            afterFramePrompt: [],
                         })
 
                         // It finished without any caching, so just keep going

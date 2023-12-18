@@ -80,16 +80,24 @@ appOptimized({
                 return
             }
 
-            allOperationsList.run(state, form.operations, {
+            const result = allOperationsList.run(state, form.operations, {
                 image: initialImage,
                 mask: initialMask,
                 cacheIndex: 0,
                 frameIdProvider,
                 workingDirectory: form.imageSource.workingDirectory,
+                afterFramePrompt: [],
             })
 
             for (const frameId of frameIdProvider) {
                 await runtime.PROMPT()
+                result.afterFramePrompt.forEach((x) => {
+                    try {
+                        x()
+                    } catch (err) {
+                        console.error(`ERROR afterFramePrompt`, { err })
+                    }
+                })
             }
         } catch (err) {
             if (!(err instanceof PreviewStopError)) {
@@ -102,6 +110,14 @@ appOptimized({
             // })
             for (const frameId of frameIdProvider) {
                 await runtime.PROMPT()
+
+                err.afterFramePrompt?.forEach((x) => {
+                    try {
+                        x()
+                    } catch (err) {
+                        console.error(`ERROR afterFramePrompt`, { err })
+                    }
+                })
             }
             // await runtime.PROMPT()
         }

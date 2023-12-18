@@ -283,7 +283,7 @@ const enhanceLighting = createFrameOperation({
             graph.PreviewImage({
                 images: imageShadowNode.outputs[activiatePreviewKey],
             })
-            throw new PreviewStopError(() => {})
+            throw new PreviewStopError(undefined)
         }
 
         const selectedImage = imageShadowNode.outputs[form.selected.id] ?? image
@@ -291,7 +291,7 @@ const enhanceLighting = createFrameOperation({
             graph.PreviewImage({
                 images: selectedImage,
             })
-            throw new PreviewStopError(() => {})
+            throw new PreviewStopError(undefined)
         }
         return { image: selectedImage }
     },

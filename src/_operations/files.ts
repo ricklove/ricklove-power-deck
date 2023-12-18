@@ -42,6 +42,9 @@ const loadImageFrame = createFrameOperation({
 export const getCacheFilePattern = (workingDirectory: string, name: string, cacheIndex: number) =>
     `${workingDirectory}/${cacheIndex.toString().padStart(4, `0`)}-${name}/#####.png`
 
+// TODO: automate caching
+// - cacheAfter option
+// - cache unnamed image and mask
 const cacheEverything = createFrameOperation({
     options: { simple: true },
     ui: (form) => ({
@@ -56,7 +59,7 @@ const cacheEverything = createFrameOperation({
         //     element: () => form.string({ default: `maskVariable` }),
         // }),
     }),
-    run: (state, form, { image, mask, frameIdProvider, cacheIndex, workingDirectory }) => {
+    run: (state, form, { image, mask, frameIdProvider, cacheIndex, workingDirectory, cacheIndex_run }) => {
         const { graph } = state
         const previewImages = true
 
@@ -133,7 +136,7 @@ const cacheEverything = createFrameOperation({
         }
 
         if (form.buildCache) {
-            throw new PreviewStopError(() => {})
+            throw new PreviewStopError(undefined)
         }
 
         disableUnusedGraph(state, { keepNodes: { resultImage, resultMask }, keepScopeNodes: true })

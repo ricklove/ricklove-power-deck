@@ -250,7 +250,7 @@ const operation_enhanceLighting = createImageOperation({
             graph.PreviewImage({
                 images: imageShadowNode.outputs[activiatePreviewKey],
             })
-            throw new PreviewStopError(() => {})
+            throw new PreviewStopError(undefined)
         }
 
         const selectedImage = imageShadowNode.outputs[form.enhanceLighting.selected.id] ?? image
@@ -258,7 +258,7 @@ const operation_enhanceLighting = createImageOperation({
             graph.PreviewImage({
                 images: selectedImage,
             })
-            throw new PreviewStopError(() => {})
+            throw new PreviewStopError(undefined)
         }
         return selectedImage
     },

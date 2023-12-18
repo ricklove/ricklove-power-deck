@@ -229,7 +229,11 @@ appOptimized({
                         height: imageSize.outputs.INT_1,
                         value: 0xffffff,
                     })
-                    const frameIdProvider = createFrameIdProvider()
+                    const frameIdProvider = createFrameIdProvider({
+                        iterationCount: 1,
+                        startIndex: 1,
+                        selectEveryNth: 1,
+                    })
                     const result = allOperationsList.run(
                         {
                             ...state,
@@ -239,6 +243,10 @@ appOptimized({
                             image: startImage,
                             mask: fullMask,
                             frameIdProvider: frameIdProvider,
+                            // added after this was deprecated
+                            cacheIndex: 0,
+                            workingDirectory: ``,
+                            afterFramePrompt: [],
                         },
                     )
                     return {

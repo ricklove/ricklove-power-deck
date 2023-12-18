@@ -7,6 +7,7 @@ import { storageOperations } from './storage'
 import { samplingOperations } from './sampling'
 import { fileOperations } from './files'
 import { videoOperations } from './video'
+import { outputOperations } from './output'
 
 const divider = createFrameOperation({
     ui: (form) => ({}),
@@ -23,6 +24,7 @@ export const allOperationsList = createFrameOperationsChoiceList({
     ...samplingOperations,
     ...fileOperations,
     ...videoOperations,
+    ...outputOperations,
     [`---`]: divider,
 })
 
@@ -34,5 +36,6 @@ export const allOperationsList_cached = createFrameOperationsChoiceList_cached({
     ...samplingOperations,
     ...fileOperations,
     ...videoOperations,
+    ...outputOperations,
     [`---`]: divider,
 })

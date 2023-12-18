@@ -3,7 +3,7 @@ import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { ComfyNode } from 'src/core/ComfyNode'
 
 export class PreviewStopError extends Error {
-    constructor(public setFrameIndex: undefined | ((frameIndex: number) => void)) {
+    constructor(public afterFramePrompt: undefined | (() => void)[]) {
         super()
     }
 }

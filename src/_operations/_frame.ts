@@ -9,7 +9,9 @@ export type Frame = {
     mask: _MASK
     frameIdProvider: ReturnType<typeof createFrameIdProvider>
     cacheIndex: number
+    cacheIndex_run?: number
     workingDirectory: string
+    afterFramePrompt: (() => void)[]
 }
 
 type FrameIdsPattern = {
@@ -317,7 +319,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                             }),
                         })
 
-                        throw new PreviewStopError(undefined)
+                        throw new PreviewStopError(frame.afterFramePrompt)
                     }
                 }
             }

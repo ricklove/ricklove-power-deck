@@ -424,15 +424,15 @@ export const createStepsSystem = (appState: Omit<AppStateWithStepDirectories, `w
 
             for (const frameIndex of frameIndexes) {
                 changeFrame(frameIndex)
-                if (err.setFrameIndex) {
-                    err.setFrameIndex(frameIndex)
-                }
+                // if (err.setFrameIndex) {
+                //     err.setFrameIndex(frameIndex)
+                // }
 
                 // throw new StopError(() => {})
                 await _state.runtime.PROMPT()
             }
 
-            throw new PreviewStopError(() => {})
+            throw new PreviewStopError(undefined)
         }
 
         return dependencyKeyRef

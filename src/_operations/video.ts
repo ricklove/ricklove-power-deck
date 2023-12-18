@@ -135,6 +135,7 @@ const filmInterpolationDoubleBack = createFrameOperation({
             path: getCacheFilePattern(workingDirectory, form.outputVariableName, cacheIndex),
         })
         const resultImage = loadCurrentFrameResultNode.outputs.image
+        storeInScope(state, form.outputVariableName, `image`, resultImage)
 
         frameIdProvider.subscribe((v) => {
             loadCurrentFrameResultNode.inputs.current_frame = v
