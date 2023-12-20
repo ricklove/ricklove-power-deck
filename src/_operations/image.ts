@@ -109,12 +109,17 @@ const scribbleEdge = createFrameOperation({
 const threshold = createFrameOperation({
     ui: (form) => ({
         threshold: form.int({ default: 128, min: 0, max: 255 }),
+        invertInput: form.boolean({ default: true }),
+        invertOutput: form.boolean({ default: true }),
     }),
     run: ({ runtime, graph }, form, { image }) => {
-        const resultImage = graph.BinaryPreprocessor({
-            image,
+        const resultImage01 = graph.BinaryPreprocessor({
+            image: form.invertInput ? graph.ImageInvert({ image }).outputs.IMAGE : image,
             threshold: form.threshold,
         }).outputs.IMAGE
+
+        // results are inverted from expected
+        const resultImage = form.invertOutput ? resultImage01 : graph.ImageInvert({ image: resultImage01 }).outputs.IMAGE
 
         return { image: resultImage }
     },

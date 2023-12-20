@@ -1,5 +1,6 @@
-import { loadFromScope, storeInScope } from '../_appState'
+import { getNextActiveNodeIndex, loadFromScope, loadFromScopeWithExtras, setNodesDisabled, storeInScope } from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { getCacheFilePattern } from './files'
 
 const output3d = createFrameOperation({
     options: {
@@ -42,27 +43,63 @@ const output3d = createFrameOperation({
             })
         })
 
-        // state.runtime.output_3dImage({
-        //     image: form.imageFilePrefix,
-        //     depth: form.depthFilePrefix,
-        //     normal: form.normalFilePrefix,
-        // })
-
-        // this.st.db.media_3d_displacement.create({
-        //     // type: 'displaced-image',
-        //     width: image.data.width ?? 512,
-        //     height: image.data.height ?? 512,
-        //     image: image.url,
-        //     depthMap: depth.url,
-        //     normalMap: normal.url,
-        //     stepID: this.step.id,
-        // })
-
         return { image }
+    },
+})
+
+const outputVideo = createFrameOperation({
+    options: {
+        hideLoadVariables: true,
+        hideStoreVariables: true,
+    },
+    ui: (form) => ({
+        imageVariable: form.string({ default: `a` }),
+    }),
+    run: (state, form, { image, workingDirectory, frameIdProvider }) => {
+        const { graph, runtime } = state
+
+        const iNodeStart = getNextActiveNodeIndex(runtime)
+
+        const loadImageBatchNode = graph.RL$_LoadImageSequence({
+            path: getCacheFilePattern(
+                workingDirectory,
+                form.imageVariable,
+                loadFromScopeWithExtras(state, form.imageVariable)?.cacheIndex ?? 0,
+            ),
+            count: 1,
+            current_frame: 0,
+            select_every_nth: 1,
+        })
+        graph.VHS$_VideoCombine({
+            images: loadImageBatchNode.outputs.image,
+            format: `video/h264-mp4`,
+        })
+
+        const iNodeAfterEnd = getNextActiveNodeIndex(runtime)
+
+        // output in case it is disabled to prevent error message
+        const backupOutputNode = graph.PreviewImage({
+            images: image,
+        })
+
+        frameIdProvider.subscribe((_) => {
+            const batch = frameIdProvider.getBatch(frameIdProvider._state.frameIds.length, 0)
+            loadImageBatchNode.inputs.current_frame = batch.startFrameId
+            loadImageBatchNode.inputs.count = batch.count
+            loadImageBatchNode.inputs.select_every_nth = batch.selectEveryNth
+
+            setNodesDisabled(runtime, !batch.isActive, iNodeStart, iNodeAfterEnd - iNodeStart)
+
+            // ensure there is output on disabled frames
+            backupOutputNode.disabled = batch.isActive
+        })
+
+        return {}
     },
 })
 
 export const outputOperations = {
     output3d,
+    outputVideo,
 }
 export const outputOperationsList = createFrameOperationsGroupList(outputOperations)
