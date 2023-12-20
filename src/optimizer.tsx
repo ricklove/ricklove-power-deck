@@ -1,6 +1,6 @@
 import { CustomWidgetProps } from 'src'
 import { FormBuilder, Widget, Widget_floatOpt_opts, Widget_float_opts, Widget_intOpt_opts, Widget_int_opts } from 'src'
-import { GlobalFunctionToDefineAnApp } from 'src/cards/Card'
+import type { GlobalFunctionToDefineAnApp } from 'src/cards/App'
 import { observer } from 'mobx-react-lite'
 import { Fragment } from 'react'
 
@@ -154,27 +154,24 @@ const formOptimize = <TOpts, TResult extends Widget, TResultNonOpt extends Widge
 let autoRunsRemaining = 0
 export const appOptimized: GlobalFunctionToDefineAnApp = ({ ui, run }) => {
     return app({
-        ui: !ui
-            ? undefined
-            : (form) => {
-                  const formBuilderCustom = {
-                      ...form,
-                      int: (opts: Widget_int_opts) =>
-                          formOptimize(form, form.int, opts, { isOptional: false, includeMinMax: true }),
-                      intOpt: (opts: Widget_intOpt_opts) =>
-                          formOptimize(form, form.int, opts, { isOptional: true, includeMinMax: true }),
-                      float: (opts: Widget_float_opts) =>
-                          formOptimize(form, form.float, opts, { isOptional: false, includeMinMax: true }),
-                      floatOpt: (opts: Widget_floatOpt_opts) =>
-                          formOptimize(form, form.float, opts, { isOptional: true, includeMinMax: true }),
-                  }
+        ui: (form) => {
+            const formBuilderCustom = {
+                ...form,
+                int: (opts: Widget_int_opts) => formOptimize(form, form.int, opts, { isOptional: false, includeMinMax: true }),
+                intOpt: (opts: Widget_intOpt_opts) =>
+                    formOptimize(form, form.int, opts, { isOptional: true, includeMinMax: true }),
+                float: (opts: Widget_float_opts) =>
+                    formOptimize(form, form.float, opts, { isOptional: false, includeMinMax: true }),
+                floatOpt: (opts: Widget_floatOpt_opts) =>
+                    formOptimize(form, form.float, opts, { isOptional: true, includeMinMax: true }),
+            }
 
-                  const uiResult = ui(formBuilderCustom as unknown as FormBuilder)
-                  return {
-                      ...uiResult,
-                      clearOptimization: form.inlineRun({ kind: `warning` }),
-                  } as typeof uiResult
-              },
+            const uiResult = ui(formBuilderCustom as unknown as FormBuilder)
+            return {
+                ...uiResult,
+                clearOptimization: form.inlineRun({ kind: `warning` }),
+            } as typeof uiResult
+        },
         run: async (runtime, formResultsRaw) => {
             const currentDraft = runtime.st.currentDraft
             const formSerial = runtime.formSerial
