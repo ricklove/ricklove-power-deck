@@ -1,5 +1,5 @@
 import { FormBuilder, Widget, Widget_groupOpt, Widget_group_output } from 'src'
-import { WidgetDict } from 'src/cards/Card'
+import type { WidgetDict } from 'src/cards/App'
 import { AppState, PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createRandomGenerator } from '../_random'
 import { storageOperations } from './storage'
@@ -8,10 +8,15 @@ export type Frame = {
     image: _IMAGE
     mask: _MASK
     frameIdProvider: ReturnType<typeof createFrameIdProvider>
-    cacheIndex: number
-    cacheIndex_run?: number
+    cache: CacheState
     workingDirectory: string
     afterFramePrompt: (() => void)[]
+}
+
+export type CacheState = {
+    cacheIndex: number
+    cacheIndex_run?: number
+    dependencyKey: number
 }
 
 type FrameIdsPattern = {

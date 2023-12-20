@@ -16,7 +16,7 @@ const loadImageVariable = createFrameOperation({
         name: form.string({ default: `a` }),
     }),
     run: (state, form, { image }) => {
-        return { image: loadFromScope(state, form.name) ?? image }
+        return { image: loadFromScope<_IMAGE>(state, form.name) ?? image }
     },
 })
 
@@ -35,7 +35,7 @@ const loadMaskVariable = createFrameOperation({
         name: form.string({ default: `a` }),
     }),
     run: (state, form, { mask }) => {
-        return { mask: loadFromScope(state, form.name) ?? mask }
+        return { mask: loadFromScope<_MASK>(state, form.name) ?? mask }
     },
 })
 
@@ -62,8 +62,8 @@ const loadVariables = createFrameOperation({
     }),
     run: (state, form, {}) => {
         return {
-            image: form.image ? loadFromScope(state, form.image) : undefined,
-            mask: form.mask ? loadFromScope(state, form.mask) : undefined,
+            image: form.image ? loadFromScope<_IMAGE>(state, form.image) : undefined,
+            mask: form.mask ? loadFromScope<_MASK>(state, form.mask) : undefined,
         }
     },
 })

@@ -83,7 +83,7 @@ appOptimized({
             const result = allOperationsList.run(state, form.operations, {
                 image: initialImage,
                 mask: initialMask,
-                cacheIndex: 0,
+                cache: { cacheIndex: 0, dependencyKey: 42 },
                 frameIdProvider,
                 workingDirectory: form.imageSource.workingDirectory,
                 afterFramePrompt: [],

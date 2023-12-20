@@ -8,6 +8,8 @@ import { samplingOperations } from './sampling'
 import { fileOperations } from './files'
 import { videoOperations } from './video'
 import { outputOperations } from './output'
+import { zeroOperations } from './zero123'
+import { faceOperations } from './face'
 
 const divider = createFrameOperation({
     ui: (form) => ({}),
@@ -24,6 +26,8 @@ export const allOperationsList = createFrameOperationsChoiceList({
     ...samplingOperations,
     ...fileOperations,
     ...videoOperations,
+    ...zeroOperations,
+    ...faceOperations,
     ...outputOperations,
     [`---`]: divider,
 })
@@ -36,6 +40,8 @@ export const allOperationsList_cached = createFrameOperationsChoiceList_cached({
     ...samplingOperations,
     ...fileOperations,
     ...videoOperations,
+    ...zeroOperations,
+    ...faceOperations,
     ...outputOperations,
     [`---`]: divider,
 })

@@ -6,8 +6,9 @@ import {
     setNodesDisabled,
     storeInScope,
 } from '../_appState'
+import { createRandomGenerator } from '../_random'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
-import { getCacheFilePattern } from './files'
+import { calculateDependencyKey, getCacheFilePattern } from './files'
 
 const filmInterpolationDoubleBack = createFrameOperation({
     ui: (form) => ({
@@ -21,8 +22,11 @@ const filmInterpolationDoubleBack = createFrameOperation({
         // inputPath: form.string({ default: `../input/working/input/#####.png` }),
         // outputPath: form.string({ default: `../input/working/output/#####.png` }),
     }),
-    run: (state, form, { image, frameIdProvider, workingDirectory, cacheIndex }) => {
+    run: (state, form, { image, frameIdProvider, workingDirectory, cache }) => {
         const { runtime, graph } = state
+        const { cacheIndex } = cache
+        const dependencyKey = calculateDependencyKey(cache, form)
+
         if (form.generate) {
             const iNodeStart = getNextActiveNodeIndex(runtime)
             const loadImageBatchNode = graph.RL$_LoadImageSequence({
@@ -140,7 +144,14 @@ const filmInterpolationDoubleBack = createFrameOperation({
         frameIdProvider.subscribe((v) => {
             loadCurrentFrameResultNode.inputs.current_frame = v
         })
-        return { image: resultImage, cacheIndex: cacheIndex + 1 }
+        return {
+            image: resultImage,
+            cache: {
+                ...cache,
+                cacheIndex: cacheIndex + 1,
+                dependencyKey,
+            },
+        }
     },
 })
 

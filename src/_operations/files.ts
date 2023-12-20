@@ -6,7 +6,8 @@ import {
     loadFromScopeWithExtras,
     storeInScope,
 } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createRandomGenerator } from '../_random'
+import { CacheState, createFrameOperation, createFrameOperationsGroupList } from './_frame'
 import { disableUnusedGraph } from './_graph'
 
 const saveImageFrame = createFrameOperation({
@@ -42,6 +43,10 @@ const loadImageFrame = createFrameOperation({
 export const getCacheFilePattern = (workingDirectory: string, name: string, cacheIndex: number) =>
     `${workingDirectory}/${cacheIndex.toString().padStart(4, `0`)}-${name}/#####.png`
 
+export const calculateDependencyKey = (cache: CacheState, form: Record<string, unknown>) => {
+    return createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(form)}`).randomInt()
+}
+
 // TODO: automate caching
 // - cacheAfter option
 // - cache unnamed image and mask
@@ -59,9 +64,11 @@ const cacheEverything = createFrameOperation({
         //     element: () => form.string({ default: `maskVariable` }),
         // }),
     }),
-    run: (state, form, { image, mask, frameIdProvider, cacheIndex, workingDirectory, cacheIndex_run }) => {
+    run: (state, form, { image, mask, frameIdProvider, cache, workingDirectory }) => {
         const { graph } = state
         const previewImages = true
+        const { cacheIndex } = cache
+        const dependencyKey = calculateDependencyKey(cache, form)
 
         const createCachedImage = (name: string, image: _IMAGE) => {
             if (form.buildCache) {
@@ -140,7 +147,15 @@ const cacheEverything = createFrameOperation({
         }
 
         disableUnusedGraph(state, { keepNodes: { resultImage, resultMask }, keepScopeNodes: true })
-        return { image: resultImage, mask: resultMask, cacheIndex: cacheIndex + 1 }
+        return {
+            image: resultImage,
+            mask: resultMask,
+            cache: {
+                ...cache,
+                cacheIndex: cacheIndex + 1,
+                dependencyKey,
+            },
+        }
     },
 })
 
