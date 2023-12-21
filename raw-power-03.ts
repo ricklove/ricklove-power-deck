@@ -58,91 +58,119 @@ appOptimized({
         frameIdProvider.subscribe((v) => (loadImageNode.inputs.current_frame = v))
         const initialImage = loadImageNode.outputs.image
 
-        try {
-            const { INT: width, INT_1: height } = graph.Get_Image_Size({
-                image: initialImage,
-            }).outputs
-            // const initialImage = graph.EmptyImage({
-            //     width: size.width,
-            //     height: size.height,
-            //     color: iJob,
-            // })
-            const initialMask = graph.SolidMask({
-                width: width,
-                height: height,
-                value: 1,
+        const { INT: width, INT_1: height } = graph.Get_Image_Size({
+            image: initialImage,
+        }).outputs
+        // const initialImage = graph.EmptyImage({
+        //     width: size.width,
+        //     height: size.height,
+        //     color: iJob,
+        // })
+        const initialMask = graph.SolidMask({
+            width: width,
+            height: height,
+            value: 1,
+        })
+
+        if (form.imageSource.preview) {
+            graph.PreviewImage({
+                images: runtime.AUTO,
+            })
+            for (const frameId of frameIdProvider) {
+                await runtime.PROMPT()
+                if (form.cancel) {
+                    jobState.isCancelled = true
+                    return
+                }
+            }
+            return
+        }
+
+        let cacheIndex_run = 0
+        while (cacheIndex_run < 10) {
+            state.runtime.output_text({
+                title: `cacheIndex_run`,
+                message: `@[${cacheIndex_run}] START`,
             })
 
-            if (form.imageSource.preview) {
-                graph.PreviewImage({
-                    images: runtime.AUTO,
+            try {
+                const cache: CacheState = {
+                    cacheIndex: 0,
+                    cacheIndex_run,
+                    dependencyKey: 42,
+                }
+                const result = allOperationsList.run(state, form.operations, {
+                    image: initialImage,
+                    mask: initialMask,
+                    cache: { ...cache, dependencyKey: calculateDependencyKey(cache, form.imageSource) },
+                    frameIdProvider,
+                    workingDirectory: form.imageSource.workingDirectory,
+                    afterFramePrompt: [],
                 })
+
                 for (const frameId of frameIdProvider) {
                     await runtime.PROMPT()
+
                     if (form.cancel) {
                         jobState.isCancelled = true
                         return
                     }
+
+                    result.afterFramePrompt.forEach((x) => {
+                        try {
+                            x()
+                        } catch (err) {
+                            console.error(`ERROR afterFramePrompt`, { err })
+                        }
+                    })
                 }
+
+                // reached the end - so done
                 return
-            }
-
-            const cache: CacheState = { cacheIndex: 0, dependencyKey: 42 }
-            const result = allOperationsList.run(state, form.operations, {
-                image: initialImage,
-                mask: initialMask,
-                cache: { ...cache, dependencyKey: calculateDependencyKey(cache, form.imageSource) },
-                frameIdProvider,
-                workingDirectory: form.imageSource.workingDirectory,
-                afterFramePrompt: [],
-            })
-
-            for (const frameId of frameIdProvider) {
-                await runtime.PROMPT()
-                if (form.cancel) {
-                    jobState.isCancelled = true
-                    return
+            } catch (err) {
+                if (!(err instanceof PreviewStopError)) {
+                    throw err
                 }
 
-                result.afterFramePrompt.forEach((x) => {
-                    try {
-                        x()
-                    } catch (err) {
-                        console.error(`ERROR afterFramePrompt`, { err })
-                    }
-                })
-            }
-        } catch (err) {
-            if (!(err instanceof PreviewStopError)) {
-                throw err
-            }
-
-            // const graph = state.graph
-            // graph.PreviewImage({
-            //     images: runtime.AUTO,
-            // })
-            let i = 0
-            for (const frameId of frameIdProvider) {
-                await runtime.PROMPT()
-                if (form.cancel) {
-                    jobState.isCancelled = true
-                    return
-                }
-
-                err.options?.afterFramePrompt?.forEach((x) => {
-                    try {
-                        x()
-                    } catch (err) {
-                        console.error(`ERROR afterFramePrompt`, { err })
-                    }
+                state.runtime.output_text({
+                    title: `stale cache!`,
+                    message: `[${err.options?.cacheIndex}] @[${err.options?.cacheIndex_run}] ${
+                        err.options?.cachedAlready ? `Already cached` : `Running!`
+                    }`,
                 })
 
-                i++
-                if (err.options?.previewCount && err.options.previewCount > i) {
-                    break
+                if (!err.options?.cachedAlready) {
+                    // const graph = state.graph
+                    // graph.PreviewImage({
+                    //     images: runtime.AUTO,
+                    // })
+                    let i = 0
+                    for (const frameId of frameIdProvider) {
+                        await runtime.PROMPT()
+
+                        if (form.cancel) {
+                            jobState.isCancelled = true
+                            return
+                        }
+
+                        err.options?.afterFramePrompt?.forEach((x) => {
+                            try {
+                                x()
+                            } catch (err) {
+                                console.error(`ERROR afterFramePrompt`, { err })
+                            }
+                        })
+
+                        i++
+                        if (err.options?.previewCount && err.options.previewCount > i) {
+                            break
+                        }
+                    }
+                    // await runtime.PROMPT()
                 }
             }
-            // await runtime.PROMPT()
+
+            cacheIndex_run++
         }
     },
 })

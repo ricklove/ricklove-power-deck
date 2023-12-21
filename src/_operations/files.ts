@@ -158,7 +158,7 @@ const cacheEverything = createFrameOperation({
             }
 
             cacheStore.isCached = true
-            throw new PreviewStopError(undefined)
+            throw new PreviewStopError({ cacheIndex, cacheIndex_run: cache.cacheIndex_run, cachedAlready: !shouldBuildCache })
         }
 
         if (!cacheStore.isCached) {

@@ -129,7 +129,8 @@ const filmInterpolationDoubleBack = createFrameOperation({
             })
         }
         if (buildCacheTriggered) {
-            throw new PreviewStopError(undefined)
+            cacheStore.isCached = true
+            throw new PreviewStopError({ cacheIndex, cacheIndex_run: cache.cacheIndex_run, cachedAlready: !shouldBuildCache })
         }
 
         const loadCurrentFrameResultNode = graph.RL$_LoadImageSequence({

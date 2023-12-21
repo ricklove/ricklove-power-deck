@@ -7,7 +7,10 @@ export class PreviewStopError extends Error {
     constructor(
         public options?: {
             previewCount?: number
-            afterFramePrompt: undefined | (() => void)[]
+            cacheIndex?: number
+            cacheIndex_run?: number
+            cachedAlready?: boolean
+            afterFramePrompt?: undefined | (() => void)[]
         },
     ) {
         super()
