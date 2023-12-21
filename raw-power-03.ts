@@ -1,7 +1,7 @@
 import { PreviewStopError, AppState } from './src/_appState'
 import { appOptimized } from './src/optimizer'
 import { allOperationsList } from './src/_operations/allOperations'
-import { createFrameIdProvider } from './src/_operations/_frame'
+import { CacheState, calculateDependencyKey, createFrameIdProvider } from './src/_operations/_frame'
 
 appOptimized({
     ui: (form) => ({
@@ -30,9 +30,12 @@ appOptimized({
     run: async (runtime, form) => {
         console.log(`formSerial`, { formSerial: runtime.formSerial })
 
-        const jobStateStore = runtime.getStore_orCreateIfMissing(`jobState`, () => ({
-            isCancelled: false,
-        }))
+        const jobStateStore = runtime.store.getOrCreate({
+            key: `jobState`,
+            makeDefaultValue: () => ({
+                isCancelled: false,
+            }),
+        })
         const jobState = jobStateStore.get()
         if (form.cancel) {
             jobState.isCancelled = true
@@ -76,14 +79,19 @@ appOptimized({
                 })
                 for (const frameId of frameIdProvider) {
                     await runtime.PROMPT()
+                    if (form.cancel) {
+                        jobState.isCancelled = true
+                        return
+                    }
                 }
                 return
             }
 
+            const cache: CacheState = { cacheIndex: 0, dependencyKey: 42 }
             const result = allOperationsList.run(state, form.operations, {
                 image: initialImage,
                 mask: initialMask,
-                cache: { cacheIndex: 0, dependencyKey: 42 },
+                cache: { ...cache, dependencyKey: calculateDependencyKey(cache, form.imageSource) },
                 frameIdProvider,
                 workingDirectory: form.imageSource.workingDirectory,
                 afterFramePrompt: [],
@@ -91,6 +99,11 @@ appOptimized({
 
             for (const frameId of frameIdProvider) {
                 await runtime.PROMPT()
+                if (form.cancel) {
+                    jobState.isCancelled = true
+                    return
+                }
+
                 result.afterFramePrompt.forEach((x) => {
                     try {
                         x()
@@ -108,16 +121,26 @@ appOptimized({
             // graph.PreviewImage({
             //     images: runtime.AUTO,
             // })
+            let i = 0
             for (const frameId of frameIdProvider) {
                 await runtime.PROMPT()
+                if (form.cancel) {
+                    jobState.isCancelled = true
+                    return
+                }
 
-                err.afterFramePrompt?.forEach((x) => {
+                err.options?.afterFramePrompt?.forEach((x) => {
                     try {
                         x()
                     } catch (err) {
                         console.error(`ERROR afterFramePrompt`, { err })
                     }
                 })
+
+                i++
+                if (err.options?.previewCount && err.options.previewCount > i) {
+                    break
+                }
             }
             // await runtime.PROMPT()
         }

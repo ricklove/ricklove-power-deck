@@ -1,18 +1,9 @@
-import {
-    PreviewStopError,
-    getNextActiveNodeIndex,
-    loadFromScope,
-    loadFromScopeWithExtras,
-    setNodesDisabled,
-    storeInScope,
-} from '../_appState'
-import { createRandomGenerator } from '../_random'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
-import { calculateDependencyKey, getCacheFilePattern } from './files'
+import { PreviewStopError, getNextActiveNodeIndex, loadFromScopeWithExtras, setNodesDisabled, storeInScope } from '../_appState'
+import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern, getCacheStore } from './_frame'
 
 const filmInterpolationDoubleBack = createFrameOperation({
     ui: (form) => ({
-        generate: form.inlineRun({ kind: `special`, text: `Interpolate!!!` }),
+        buildCache: form.inlineRun({ kind: `special`, text: `Interpolate!!!` }),
         batchSize: form.int({ default: 3 }),
         batchOverlap: form.int({ default: 0 }),
         iterations: form.int({ default: 1 }),
@@ -24,10 +15,16 @@ const filmInterpolationDoubleBack = createFrameOperation({
     }),
     run: (state, form, { image, frameIdProvider, workingDirectory, cache }) => {
         const { runtime, graph } = state
-        const { cacheIndex } = cache
-        const dependencyKey = calculateDependencyKey(cache, form)
+        const { cacheIndex, dependencyKey } = cache
+        const cacheStore = getCacheStore(state, cache)
+        const buildCacheTriggered = form.buildCache || cache.cacheIndex_run === cache.cacheIndex
+        const shouldBuildCache = (form.buildCache || cache.cacheIndex_run === cache.cacheIndex) && !cacheStore.isCached
+        if (!cacheStore.isCached) {
+            // invalidate dependency key if cache is stale
+            cache.dependencyKey += 10000
+        }
 
-        if (form.generate) {
+        if (shouldBuildCache) {
             const iNodeStart = getNextActiveNodeIndex(runtime)
             const loadImageBatchNode = graph.RL$_LoadImageSequence({
                 current_frame: 0,
@@ -130,7 +127,8 @@ const filmInterpolationDoubleBack = createFrameOperation({
                 // ensure there is output on disabled frames
                 backupOutputNode.disabled = batch.isActive
             })
-
+        }
+        if (buildCacheTriggered) {
             throw new PreviewStopError(undefined)
         }
 

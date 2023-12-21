@@ -1,8 +1,7 @@
-import { FormBuilder, Widget, Widget_groupOpt, Widget_group_output } from 'src'
+import type { FormBuilder, Widget, Widget_groupOpt, Widget_group_output } from 'src'
 import type { WidgetDict } from 'src/cards/App'
 import { AppState, PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createRandomGenerator } from '../_random'
-import { storageOperations } from './storage'
 
 export type Frame = {
     image: _IMAGE
@@ -17,6 +16,36 @@ export type CacheState = {
     cacheIndex: number
     cacheIndex_run?: number
     dependencyKey: number
+}
+
+export const getCacheStore = (state: AppState, cache: CacheState) => {
+    return state.runtime.store
+        .getOrCreate({
+            key: `${cache.dependencyKey}`,
+            scope: `draft`,
+            makeDefaultValue: () => ({
+                isCached: false,
+            }),
+        })
+        .get()
+}
+
+export const getCacheFilePattern = (workingDirectory: string, name: string, cacheIndex: number) =>
+    `${workingDirectory}/${cacheIndex.toString().padStart(4, `0`)}-${name}/#####.png`
+
+export const calculateDependencyKey = (cache: CacheState, form: Record<string, unknown>) => {
+    console.log(`calculateDependencyKey`, { cache, form })
+
+    const formCleaned = {
+        ...form,
+        // previews should not affect the cache key
+        preview: undefined,
+        buildCache: undefined,
+        rebuildCache: undefined,
+        __preview: undefined,
+    }
+
+    return createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(formCleaned)}`).randomInt()
 }
 
 type FrameIdsPattern = {
@@ -296,6 +325,13 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
 
                     frame = {
                         ...frame,
+                        cache: {
+                            ...frame.cache,
+                            dependencyKey: calculateDependencyKey(frame.cache, opGroupOptValue),
+                        },
+                    }
+                    frame = {
+                        ...frame,
                         ...op.run(state, opGroupOptValue, frame),
                     }
 
@@ -324,7 +360,10 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                             }),
                         })
 
-                        throw new PreviewStopError(frame.afterFramePrompt)
+                        throw new PreviewStopError({
+                            previewCount: !frame.afterFramePrompt ? 3 : undefined,
+                            afterFramePrompt: frame.afterFramePrompt,
+                        })
                     }
                 }
             }

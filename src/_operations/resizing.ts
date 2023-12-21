@@ -1,6 +1,5 @@
 import { loadFromScope, loadFromScopeWithExtras } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
-import { getCacheFilePattern } from './files'
+import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern } from './_frame'
 import { storageOperations } from './storage'
 
 const cropResizeByMask = createFrameOperation({

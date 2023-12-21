@@ -1,6 +1,6 @@
 import { getNextActiveNodeIndex, loadFromScope, loadFromScopeWithExtras, setNodesDisabled, storeInScope } from '../_appState'
 import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
-import { getCacheFilePattern } from './files'
+import { getCacheFilePattern } from './_frame'
 
 const output3d = createFrameOperation({
     options: {

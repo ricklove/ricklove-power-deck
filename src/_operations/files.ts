@@ -1,13 +1,5 @@
-import {
-    PreviewStopError,
-    disableNodesAfterInclusive,
-    getAllScopeKeys,
-    loadFromScope,
-    loadFromScopeWithExtras,
-    storeInScope,
-} from '../_appState'
-import { createRandomGenerator } from '../_random'
-import { CacheState, createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { PreviewStopError, getAllScopeKeys, loadFromScopeWithExtras, storeInScope } from '../_appState'
+import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern, getCacheStore } from './_frame'
 import { disableUnusedGraph } from './_graph'
 
 const saveImageFrame = createFrameOperation({
@@ -40,13 +32,6 @@ const loadImageFrame = createFrameOperation({
     },
 })
 
-export const getCacheFilePattern = (workingDirectory: string, name: string, cacheIndex: number) =>
-    `${workingDirectory}/${cacheIndex.toString().padStart(4, `0`)}-${name}/#####.png`
-
-export const calculateDependencyKey = (cache: CacheState, form: Record<string, unknown>) => {
-    return createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(form)}`).randomInt()
-}
-
 // TODO: automate caching
 // - cacheAfter option
 // - cache unnamed image and mask
@@ -54,6 +39,7 @@ const cacheEverything = createFrameOperation({
     options: { simple: true },
     ui: (form) => ({
         buildCache: form.inlineRun({ text: `Cache Me If You Can!`, kind: `special` }),
+        rebuildCache: form.inlineRun({ text: `Do it again!`, kind: `special` }),
         // path: form.string({ default: `../input/working/NAME/#####.png` }),
         // image: form.strOpt({ default: `imageFinal` }),
         // imageVariables: form.list({
@@ -67,11 +53,32 @@ const cacheEverything = createFrameOperation({
     run: (state, form, { image, mask, frameIdProvider, cache, workingDirectory }) => {
         const { graph } = state
         const previewImages = true
-        const { cacheIndex } = cache
-        const dependencyKey = calculateDependencyKey(cache, form)
+        const { cacheIndex, dependencyKey } = cache
+        const cacheStore = getCacheStore(state, cache)
+        const buildCacheTriggered = form.rebuildCache || form.buildCache || cache.cacheIndex_run === cache.cacheIndex
+        const shouldBuildCache =
+            form.rebuildCache || ((form.buildCache || cache.cacheIndex_run === cache.cacheIndex) && !cacheStore.isCached)
+        if (!cacheStore.isCached) {
+            // invalidate dependency key if cache is stale
+            cache.dependencyKey += 10000
+        }
+
+        // const cacheStore = state.runtime.store
+        //     .getOrCreate({
+        //         key: `${cacheIndex}`,
+        //         // key: `${dependencyKey}`,
+        //         scope: `draft`,
+        //         makeDefaultValue: () => ({
+        //             dependencyKeys: {} as { [dependencyKey: string]: { isCached: boolean; timestamp: Date } },
+        //             // isCached: false,
+        //         }),
+        //     })
+        //     .get()
+        // console.log(`cacheEverything`, { cacheStore, values: state.runtime.formInstance.state.values })
+        // state.runtime.formInstance.state.values.buildCache.input.kind = cacheStore.isCached ? `special` : `warning`
 
         const createCachedImage = (name: string, image: _IMAGE) => {
-            if (form.buildCache) {
+            if (shouldBuildCache) {
                 const saveNode = graph.RL$_SaveImageSequence({
                     images: image,
                     current_frame: 0,
@@ -92,7 +99,7 @@ const cacheEverything = createFrameOperation({
             return cachedImageNode.outputs.image
         }
         const createCachedMask = (name: string, mask: _MASK) => {
-            if (form.buildCache) {
+            if (shouldBuildCache) {
                 const maskImage = graph.MaskToImage({ mask })
                 const saveNode = graph.RL$_SaveImageSequence({
                     images: maskImage,
@@ -142,8 +149,27 @@ const cacheEverything = createFrameOperation({
             }
         }
 
-        if (form.buildCache) {
+        if (buildCacheTriggered) {
+            if (form.buildCache && cacheStore.isCached) {
+                state.runtime.output_text({
+                    title: `already cached!`,
+                    message: `[${cache.cacheIndex}] cache is already cached!\n\ndependencyKey=${dependencyKey}`,
+                })
+            }
+
+            cacheStore.isCached = true
             throw new PreviewStopError(undefined)
+        }
+
+        if (!cacheStore.isCached) {
+            state.runtime.output_text({
+                title: `stale cache!`,
+                message: `[${cache.cacheIndex}] cache is stale!\n\ndependencyKey=${dependencyKey}\n\n${JSON.stringify(
+                    form,
+                    null,
+                    2,
+                )}`,
+            })
         }
 
         disableUnusedGraph(state, { keepNodes: { resultImage, resultMask }, keepScopeNodes: true })

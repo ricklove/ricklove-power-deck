@@ -1,5 +1,4 @@
 import { createFrameOperation, createFrameOperationsChoiceList } from './_frame'
-import { createFrameOperationsChoiceList_cached } from './_frameCached'
 import { imageOperations } from './image'
 import { maskOperations } from './mask'
 import { resizingOperations } from './resizing'
@@ -19,20 +18,6 @@ const divider = createFrameOperation({
 })
 
 export const allOperationsList = createFrameOperationsChoiceList({
-    ...imageOperations,
-    ...maskOperations,
-    ...resizingOperations,
-    ...storageOperations,
-    ...samplingOperations,
-    ...fileOperations,
-    ...videoOperations,
-    ...zeroOperations,
-    ...faceOperations,
-    ...outputOperations,
-    [`---`]: divider,
-})
-
-export const allOperationsList_cached = createFrameOperationsChoiceList_cached({
     ...imageOperations,
     ...maskOperations,
     ...resizingOperations,

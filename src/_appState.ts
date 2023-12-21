@@ -1,9 +1,15 @@
 import { Runtime } from 'src'
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
+import { WidgetDict } from 'src/cards/App'
 import { ComfyNode } from 'src/core/ComfyNode'
 
 export class PreviewStopError extends Error {
-    constructor(public afterFramePrompt: undefined | (() => void)[]) {
+    constructor(
+        public options?: {
+            previewCount?: number
+            afterFramePrompt: undefined | (() => void)[]
+        },
+    ) {
         super()
     }
 }
@@ -15,8 +21,8 @@ export type ScopeStackValueData<T extends null | ScopeStackValueType = ScopeStac
     kind: ScopeStackValueKind
     cacheIndex?: number
 }
-export type AppState = {
-    runtime: Runtime
+export type AppState<FIELDS extends WidgetDict = any> = {
+    runtime: Runtime<FIELDS>
     graph: ComfyWorkflowBuilder
     scopeStack: Record<string, undefined | ScopeStackValueData>[]
 }
