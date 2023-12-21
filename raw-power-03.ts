@@ -168,6 +168,10 @@ appOptimized({
                     }
                     // await runtime.PROMPT()
                 }
+
+                if (err.options?.cacheIndex == undefined || !err.options.isAutoCache) {
+                    return
+                }
             }
 
             cacheIndex_run++

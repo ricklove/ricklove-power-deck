@@ -55,9 +55,10 @@ const cacheEverything = createFrameOperation({
         const previewImages = true
         const { cacheIndex, dependencyKey } = cache
         const cacheStore = getCacheStore(state, cache)
-        const buildCacheTriggered = form.rebuildCache || form.buildCache || cache.cacheIndex_run === cache.cacheIndex
+        const isManualTrigger = form.rebuildCache || form.buildCache
+        const buildCacheTriggered = form.rebuildCache || form.buildCache || cache.cacheIndex === cache.cacheIndex_run
         const shouldBuildCache =
-            form.rebuildCache || ((form.buildCache || cache.cacheIndex_run === cache.cacheIndex) && !cacheStore.isCached)
+            form.rebuildCache || ((form.buildCache || cache.cacheIndex === cache.cacheIndex_run) && !cacheStore.isCached)
         if (!cacheStore.isCached) {
             // invalidate dependency key if cache is stale
             cache.dependencyKey += 10000
@@ -158,7 +159,13 @@ const cacheEverything = createFrameOperation({
             }
 
             cacheStore.isCached = true
-            throw new PreviewStopError({ cacheIndex, cacheIndex_run: cache.cacheIndex_run, cachedAlready: !shouldBuildCache })
+            throw new PreviewStopError({
+                //
+                isAutoCache: !isManualTrigger,
+                cacheIndex,
+                cacheIndex_run: cache.cacheIndex_run,
+                cachedAlready: !shouldBuildCache,
+            })
         }
 
         if (!cacheStore.isCached) {

@@ -7,6 +7,7 @@ export class PreviewStopError extends Error {
     constructor(
         public options?: {
             previewCount?: number
+            isAutoCache?: boolean
             cacheIndex?: number
             cacheIndex_run?: number
             cachedAlready?: boolean
