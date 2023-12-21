@@ -1,5 +1,5 @@
 import { loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createFrameOperation } from './_frame'
 
 const storeImageVarible = createFrameOperation({
     ui: (form) => ({
@@ -76,4 +76,3 @@ export const storageOperations = {
     loadVariables,
     storeVariables,
 }
-export const storageOperationsList = createFrameOperationsGroupList(storageOperations)

@@ -22,7 +22,7 @@ export const getCacheStore = (state: AppState, cache: CacheState) => {
     return state.runtime.store
         .getOrCreate({
             key: `${cache.dependencyKey}`,
-            scope: `draft`,
+            scope: `app`,
             makeDefaultValue: () => ({
                 isCached: false,
             }),
@@ -156,6 +156,7 @@ export type FrameOperation<TFields extends WidgetDict> = {
         hidePreview?: boolean
         hideLoadVariables?: boolean
         hideStoreVariables?: boolean
+        title?: () => string
     }
 }
 export const createFrameOperation = <TFields extends WidgetDict>(op: FrameOperation<TFields>): FrameOperation<TFields> => op
@@ -164,68 +165,6 @@ export const createFrameOperationValue = <TValue extends Widget>(op: {
     ui: (form: FormBuilder) => TValue
     run: (state: AppState, form: TValue['$Output'], frame: Frame) => Frame
 }) => op
-
-export const createFrameOperationsGroupList = <TOperations extends Record<string, FrameOperation<any>>>(
-    operations: TOperations,
-) =>
-    createFrameOperationValue({
-        ui: (form) =>
-            form.list({
-                element: () =>
-                    form.group({
-                        layout: 'V',
-                        items: () => ({
-                            ...Object.fromEntries(
-                                Object.entries(operations).map(([k, v]) => {
-                                    return [
-                                        k,
-                                        form.groupOpt({
-                                            items: () => v.ui(form),
-                                        }),
-                                    ]
-                                }),
-                            ),
-                            preview: form.inlineRun({}),
-                        }),
-                    }),
-            }),
-        run: (state, form, frame) => {
-            const { runtime, graph } = state
-
-            // console.log(`createFrameOperationsList run`, { operations, form })
-
-            for (const listItem of form) {
-                const listItemGroupOptFields = listItem as unknown as Widget_group_output<
-                    Record<string, Widget_groupOpt<Record<string, Widget>>>
-                >
-                for (const [opName, op] of Object.entries(operations)) {
-                    const opGroupOptValue = listItemGroupOptFields[opName]
-                    // console.log(`createFrameOperationsList loop operations`, {
-                    //     opGroupOptValue,
-                    //     operations,
-                    //     listItemGroupOptFields,
-                    //     form,
-                    // })
-
-                    if (opGroupOptValue == null) {
-                        continue
-                    }
-
-                    frame = {
-                        ...frame,
-                        ...op.run(state, opGroupOptValue, frame),
-                    }
-                }
-
-                if (listItem.preview) {
-                    graph.PreviewImage({ images: frame.image })
-                    throw new PreviewStopError(undefined)
-                }
-            }
-
-            return frame
-        },
-    })
 
 export const createFrameOperationsChoiceList = <TOperations extends Record<string, FrameOperation<any>>>(
     operations: TOperations,

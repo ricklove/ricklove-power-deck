@@ -1,5 +1,5 @@
 import { PreviewStopError, loadFromScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createFrameOperation } from './_frame'
 import { storageOperations } from './storage'
 
 const sampler = createFrameOperation({
@@ -339,4 +339,3 @@ export const samplingOperations = {
     sampler,
     ultimateUpscale,
 }
-export const samplingOperationsList = createFrameOperationsGroupList(samplingOperations)

@@ -1,5 +1,5 @@
 import { loadFromScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createFrameOperation } from './_frame'
 
 const faceSwap = createFrameOperation({
     ui: (form) => ({
@@ -27,4 +27,3 @@ const faceSwap = createFrameOperation({
 export const faceOperations = {
     faceSwap,
 }
-export const faceOperationsList = createFrameOperationsGroupList(faceOperations)

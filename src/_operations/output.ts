@@ -1,5 +1,5 @@
 import { getNextActiveNodeIndex, loadFromScope, loadFromScopeWithExtras, setNodesDisabled, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createFrameOperation } from './_frame'
 import { getCacheFilePattern } from './_frame'
 
 const output3d = createFrameOperation({
@@ -102,4 +102,3 @@ export const outputOperations = {
     output3d,
     outputVideo,
 }
-export const outputOperationsList = createFrameOperationsGroupList(outputOperations)

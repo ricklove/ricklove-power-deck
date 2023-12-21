@@ -1,4 +1,4 @@
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createFrameOperation } from './_frame'
 
 const zero123 = createFrameOperation({
     ui: (form) => ({
@@ -50,4 +50,3 @@ const zero123 = createFrameOperation({
 export const zeroOperations = {
     zero123,
 }
-export const zeroOperationsList = createFrameOperationsGroupList(zeroOperations)

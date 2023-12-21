@@ -1,5 +1,5 @@
 import { PreviewStopError, getNextActiveNodeIndex, loadFromScopeWithExtras, setNodesDisabled, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern, getCacheStore } from './_frame'
+import { createFrameOperation, getCacheFilePattern, getCacheStore } from './_frame'
 
 const filmInterpolationDoubleBack = createFrameOperation({
     ui: (form) => ({
@@ -164,4 +164,3 @@ const filmInterpolationDoubleBack = createFrameOperation({
 export const videoOperations = {
     filmInterpolationDoubleBack,
 }
-export const videoOperationsList = createFrameOperationsGroupList(videoOperations)

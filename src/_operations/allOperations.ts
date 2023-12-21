@@ -17,7 +17,7 @@ const divider = createFrameOperation({
     },
 })
 
-export const allOperationsList = createFrameOperationsChoiceList({
+const alloperations = {
     ...imageOperations,
     ...maskOperations,
     ...resizingOperations,
@@ -28,5 +28,28 @@ export const allOperationsList = createFrameOperationsChoiceList({
     ...zeroOperations,
     ...faceOperations,
     ...outputOperations,
-    [`---`]: divider,
+}
+
+const subOperationsInner = createFrameOperationsChoiceList({
+    ...alloperations,
+})
+
+const subOperations = createFrameOperation({
+    options: {
+        simple: true,
+    },
+    ui: (form) => ({
+        subOperations: subOperationsInner.ui(form),
+        ...fileOperations.cacheEverything.ui(form),
+    }),
+    run: (state, form, frame) => {
+        const result = subOperationsInner.run(state, form.subOperations, frame)
+        const cacheResult = fileOperations.cacheEverything.run(state, form, result)
+        return cacheResult
+    },
+})
+
+export const allOperationsList = createFrameOperationsChoiceList({
+    ...alloperations,
+    subOperations,
 })

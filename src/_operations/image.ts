@@ -1,5 +1,5 @@
 import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createFrameOperation } from './_frame'
 
 const zoeDepth = createFrameOperation({
     ui: (form) => ({
@@ -440,4 +440,3 @@ export const imageOperations = {
     adjustChannelLevels,
     blendImages,
 }
-export const imageOperationsList = createFrameOperationsGroupList(imageOperations)

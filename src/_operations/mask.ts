@@ -1,6 +1,6 @@
 import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createFrameOperation } from './_frame'
 
 const clipSeg = createFrameOperation({
     ui: (form) => ({
@@ -210,4 +210,3 @@ export const maskOperations = {
     erodeOrDilate,
     combineMasks,
 }
-export const maskOperationsList = createFrameOperationsGroupList(maskOperations)

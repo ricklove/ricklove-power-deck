@@ -1,5 +1,5 @@
 import { loadFromScope, loadFromScopeWithExtras } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern } from './_frame'
+import { createFrameOperation, getCacheFilePattern } from './_frame'
 import { storageOperations } from './storage'
 
 const cropResizeByMask = createFrameOperation({
@@ -278,4 +278,3 @@ export const resizingOperations = {
     uncrop,
     upscaleWithModel,
 }
-export const resizingOperationsList = createFrameOperationsGroupList(resizingOperations)

@@ -1,5 +1,5 @@
 import { PreviewStopError, getAllScopeKeys, loadFromScopeWithExtras, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern, getCacheStore } from './_frame'
+import { createFrameOperation, getCacheFilePattern, getCacheStore } from './_frame'
 import { disableUnusedGraph } from './_graph'
 
 const saveImageFrame = createFrameOperation({
@@ -38,8 +38,14 @@ const loadImageFrame = createFrameOperation({
 const cacheEverything = createFrameOperation({
     options: { simple: true },
     ui: (form) => ({
-        buildCache: form.inlineRun({ text: `Cache Me If You Can!`, kind: `special` }),
-        rebuildCache: form.inlineRun({ text: `Do it again!`, kind: `special` }),
+        cache: form.group({
+            label: false,
+            layout: `H`,
+            items: () => ({
+                buildCache: form.inlineRun({ text: `Cache Me If You Can!`, kind: `special` }),
+                rebuildCache: form.inlineRun({ text: `Do it again!`, kind: `special` }),
+            }),
+        }),
         // path: form.string({ default: `../input/working/NAME/#####.png` }),
         // image: form.strOpt({ default: `imageFinal` }),
         // imageVariables: form.list({
@@ -50,11 +56,13 @@ const cacheEverything = createFrameOperation({
         //     element: () => form.string({ default: `maskVariable` }),
         // }),
     }),
-    run: (state, form, { image, mask, frameIdProvider, cache, workingDirectory }) => {
+    run: (state, formRaw, { image, mask, frameIdProvider, cache, workingDirectory }) => {
         const { graph } = state
         const previewImages = true
         const { cacheIndex, dependencyKey } = cache
         const cacheStore = getCacheStore(state, cache)
+
+        const form = formRaw.cache
         const isManualTrigger = form.rebuildCache || form.buildCache
         const buildCacheTriggered = form.rebuildCache || form.buildCache || cache.cacheIndex === cache.cacheIndex_run
         const shouldBuildCache =
@@ -260,4 +268,3 @@ export const fileOperations = {
     // loadVariables,
     // storeVariables,
 }
-export const fileOperationsList = createFrameOperationsGroupList(fileOperations)
