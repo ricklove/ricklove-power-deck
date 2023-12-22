@@ -25,44 +25,29 @@ export const getCacheStore = (
 ): {
     isCached: boolean
 } => {
-    const cacheStore = state.runtime.store
-        .getOrCreate({
-            key: `cacheStore[${cache.cacheIndex}]`,
-            scope: `global`,
-            makeDefaultValue: () => ({
-                dependencyKeys: {} as {
-                    [dependencyKey: string]: { isCached: boolean }
-                },
-            }),
-        })
-        .get()
-
-    const depKeyValue =
-        cacheStore.dependencyKeys[cache.dependencyKey] ?? (cacheStore.dependencyKeys[cache.dependencyKey] = { isCached: false })
-
-    const obs = observable(depKeyValue)
-    console.log(
-        `getCacheStore ${cache.cacheIndex} ${cache.dependencyKey} ${Object.entries(cacheStore.dependencyKeys)
-            .map(([k, v]) => `${k}:${v.isCached}`)
-            .join(`, `)}`,
-        {
-            cacheStore,
-            cache,
-            depKeyValue,
-            obs,
-        },
-    )
-    observe(obs, (x) => {
-        cacheStore.dependencyKeys[cache.dependencyKey] = x.object
-
-        console.log(
-            `getCacheStore: changed ${cache.cacheIndex} ${cache.dependencyKey} ${Object.entries(cacheStore.dependencyKeys)
-                .map(([k, v]) => `${k}:${v.isCached}`)
-                .join(`, `)}`,
-            { x },
-        )
+    const storeAccess = state.runtime.Store.getOrCreate({
+        key: `${cache.dependencyKey}`,
+        scope: `draft`,
+        makeDefaultValue: () => ({
+            isCached: false,
+        }),
     })
-    return obs
+
+    // ideal should auto update
+    // return storeAccess.getWithAutoUpdate()
+
+    // workaround: use observer and call update manually
+    console.log(`getCacheStore: storeAccess`, { storeAccess })
+
+    const storeValue = observable(storeAccess.get())
+    observe(storeValue, (x) => {
+        const v = JSON.parse(JSON.stringify(x.object))
+        console.log(`getCacheStore: changed ${cache.cacheIndex} ${cache.dependencyKey}`, { v, storeValue, x })
+
+        // manually call update
+        storeAccess.update({ json: v })
+    })
+    return storeValue
 }
 
 export const getCacheFilePattern = (workingDirectory: string, name: string, cacheIndex: number) =>

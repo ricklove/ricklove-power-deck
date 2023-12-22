@@ -84,6 +84,7 @@ const outputVideo = createFrameOperation({
 
         frameIdProvider.subscribe((_) => {
             const batch = frameIdProvider.getBatch(frameIdProvider._state.frameIds.length, 0)
+            console.log(`outputVideo`, { batch })
             loadImageBatchNode.inputs.current_frame = batch.startFrameId
             loadImageBatchNode.inputs.count = batch.count
             loadImageBatchNode.inputs.select_every_nth = batch.selectEveryNth

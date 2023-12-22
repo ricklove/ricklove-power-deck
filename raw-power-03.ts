@@ -9,13 +9,13 @@ appOptimized({
             kind: `warning`,
             text: `Cancel!`,
         }),
-        loadFormJson: form.str({
-            textarea: true,
-        }),
-        loadForm: form.inlineRun({
-            kind: `warning`,
-            text: `Load Form!`,
-        }),
+        // loadFormJson: form.str({
+        //     textarea: true,
+        // }),
+        // loadForm: form.inlineRun({
+        //     kind: `warning`,
+        //     text: `Load Form!`,
+        // }),
         imageSource: form.group({
             items: () => ({
                 directory: form.string({ default: `../input/video` }),
@@ -38,19 +38,19 @@ appOptimized({
         console.log(`formSerial`, { formSerial: JSON.stringify(runtime.formSerial) })
         console.log(`formResult`, { formResultJson: JSON.stringify(runtime.formResult) })
 
-        if (form.loadForm) {
-            const formSerial = JSON.parse(form.loadFormJson) as typeof runtime.formSerial
-            console.log(`loadForm`, { formSerial })
+        // if (form.loadForm) {
+        //     const formSerial = JSON.parse(form.loadFormJson) as typeof runtime.formSerial
+        //     console.log(`loadForm`, { formSerial })
 
-            const currentDraft = runtime.st.currentDraft!
-            currentDraft.data.appParams = formSerial
-            currentDraft.isInitialized = false
-            currentDraft.isInitializing = false
-            currentDraft.AWAKE()
-            return
-        }
+        //     const currentDraft = runtime.st.currentDraft!
+        //     currentDraft.data.appParams = formSerial
+        //     currentDraft.isInitialized = false
+        //     currentDraft.isInitializing = false
+        //     currentDraft.AWAKE()
+        //     return
+        // }
 
-        const jobStateStore = runtime.store.getOrCreate({
+        const jobStateStore = runtime.Store.getOrCreate({
             key: `jobState`,
             makeDefaultValue: () => ({
                 isCancelled: false,
@@ -75,7 +75,13 @@ appOptimized({
             path: `${imageDir}/${form.imageSource.filePattern}`,
             current_frame: frameIdProvider.get().frameId,
         })
-        frameIdProvider.subscribe((v) => (loadImageNode.inputs.current_frame = v))
+        frameIdProvider.subscribe((v) => {
+            console.log(`frameIdProvider.subscribe - changing loadImageNode.inputs.current_frame`, {
+                current_frame: loadImageNode.inputs.current_frame,
+                v,
+            })
+            loadImageNode.inputs.current_frame = v
+        })
         const initialImage = loadImageNode.outputs.image
 
         const { INT: width, INT_1: height } = graph.Get_Image_Size({
@@ -107,7 +113,7 @@ appOptimized({
         }
 
         let cacheIndex_run = 0
-        while (cacheIndex_run < 10) {
+        while (cacheIndex_run < 1000) {
             state.runtime.output_text({
                 title: `cacheIndex_run`,
                 message: `@[${cacheIndex_run}] START`,
