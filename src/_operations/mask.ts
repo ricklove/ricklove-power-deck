@@ -62,7 +62,8 @@ const erodeOrDilate = createFrameOperation({
 
 const segment = createFrameOperation({
     ui: (form) => ({
-        segmentIndex: form.int({ min: 0, max: 10 }),
+        keepIndex: form.int({ default: 0, min: 0, max: 10 }),
+        keepCount: form.int({ default: 1, min: 1, max: 10 }),
     }),
     run: ({ runtime, graph }, form, { image, mask }) => {
         const segs = graph.MaskToSEGS({
@@ -72,7 +73,8 @@ const segment = createFrameOperation({
         const segsFilter = graph.ImpactSEGSOrderedFilter({
             segs,
             target: `area(=w*h)`,
-            take_start: form.segmentIndex,
+            take_start: form.keepIndex,
+            take_count: form.keepCount,
         })
 
         const resultMask = graph.SegsToCombinedMask({ segs: segsFilter.outputs.filtered_SEGS }).outputs.MASK

@@ -9,6 +9,13 @@ appOptimized({
             kind: `warning`,
             text: `Cancel!`,
         }),
+        loadFormJson: form.str({
+            textarea: true,
+        }),
+        loadForm: form.inlineRun({
+            kind: `warning`,
+            text: `Load Form!`,
+        }),
         imageSource: form.group({
             items: () => ({
                 directory: form.string({ default: `../input/video` }),
@@ -28,7 +35,20 @@ appOptimized({
         operations: allOperationsList.ui(form),
     }),
     run: async (runtime, form) => {
-        console.log(`formSerial`, { formSerial: runtime.formSerial })
+        console.log(`formSerial`, { formSerial: JSON.stringify(runtime.formSerial) })
+        console.log(`formResult`, { formResultJson: JSON.stringify(runtime.formResult) })
+
+        if (form.loadForm) {
+            const formSerial = JSON.parse(form.loadFormJson) as typeof runtime.formSerial
+            console.log(`loadForm`, { formSerial })
+
+            const currentDraft = runtime.st.currentDraft!
+            currentDraft.data.appParams = formSerial
+            currentDraft.isInitialized = false
+            currentDraft.isInitializing = false
+            currentDraft.AWAKE()
+            return
+        }
 
         const jobStateStore = runtime.store.getOrCreate({
             key: `jobState`,

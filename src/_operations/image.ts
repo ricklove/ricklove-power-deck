@@ -224,9 +224,9 @@ const baeNormal = createFrameOperation({
 
 const openPose = createFrameOperation({
     ui: (form) => ({
-        body: form.bool({}),
-        face: form.bool({}),
-        hand: form.bool({}),
+        body: form.bool({ default: true }),
+        face: form.bool({ default: true }),
+        hand: form.bool({ default: true }),
     }),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.OpenposePreprocessor({

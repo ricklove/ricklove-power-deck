@@ -2,6 +2,7 @@ import type { FormBuilder, Widget, Widget_groupOpt, Widget_group_output } from '
 import type { WidgetDict } from 'src/cards/App'
 import { AppState, PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createRandomGenerator } from '../_random'
+import { observable, observe } from 'mobx'
 
 export type Frame = {
     image: _IMAGE
@@ -18,34 +19,78 @@ export type CacheState = {
     dependencyKey: number
 }
 
-export const getCacheStore = (state: AppState, cache: CacheState) => {
-    return state.runtime.store
+export const getCacheStore = (
+    state: AppState,
+    cache: CacheState,
+): {
+    isCached: boolean
+} => {
+    const cacheStore = state.runtime.store
         .getOrCreate({
-            key: `${cache.dependencyKey}`,
-            scope: `app`,
+            key: `cacheStore[${cache.cacheIndex}]`,
+            scope: `global`,
             makeDefaultValue: () => ({
-                isCached: false,
+                dependencyKeys: {} as {
+                    [dependencyKey: string]: { isCached: boolean }
+                },
             }),
         })
         .get()
+
+    const depKeyValue =
+        cacheStore.dependencyKeys[cache.dependencyKey] ?? (cacheStore.dependencyKeys[cache.dependencyKey] = { isCached: false })
+
+    const obs = observable(depKeyValue)
+    console.log(
+        `getCacheStore ${cache.cacheIndex} ${cache.dependencyKey} ${Object.entries(cacheStore.dependencyKeys)
+            .map(([k, v]) => `${k}:${v.isCached}`)
+            .join(`, `)}`,
+        {
+            cacheStore,
+            cache,
+            depKeyValue,
+            obs,
+        },
+    )
+    observe(obs, (x) => {
+        cacheStore.dependencyKeys[cache.dependencyKey] = x.object
+
+        console.log(
+            `getCacheStore: changed ${cache.cacheIndex} ${cache.dependencyKey} ${Object.entries(cacheStore.dependencyKeys)
+                .map(([k, v]) => `${k}:${v.isCached}`)
+                .join(`, `)}`,
+            { x },
+        )
+    })
+    return obs
 }
 
 export const getCacheFilePattern = (workingDirectory: string, name: string, cacheIndex: number) =>
     `${workingDirectory}/${cacheIndex.toString().padStart(4, `0`)}-${name}/#####.png`
 
 export const calculateDependencyKey = (cache: CacheState, form: Record<string, unknown>) => {
-    console.log(`calculateDependencyKey`, { cache, form })
+    // console.log(`calculateDependencyKey`, { cache, form })
 
-    const formCleaned = {
-        ...form,
-        // previews should not affect the cache key
-        preview: undefined,
-        buildCache: undefined,
-        rebuildCache: undefined,
-        __preview: undefined,
+    const getCleanedFormObj = (o: unknown): unknown => {
+        if (!o || typeof o !== `object`) {
+            return o
+        }
+
+        if (Array.isArray(o)) {
+            return o.map((x) => getCleanedFormObj(x))
+        }
+
+        return Object.fromEntries(
+            Object.entries(o)
+                .filter(([k, v]) => ![`preview`, `cache`].some((x) => k.toLowerCase().includes(x)))
+                .map(([k, v]) => [k, getCleanedFormObj(v)]),
+        )
     }
+    const formCleaned = getCleanedFormObj(form)
+    const result = createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(formCleaned)}`).randomInt()
 
-    return createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(formCleaned)}`).randomInt()
+    console.log(`calculateDependencyKey ${result}`, { result, formCleaned, cache, form })
+    return result
 }
 
 type FrameIdsPattern = {

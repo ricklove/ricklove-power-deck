@@ -67,10 +67,10 @@ const cacheEverything = createFrameOperation({
         const buildCacheTriggered = form.rebuildCache || form.buildCache || cache.cacheIndex === cache.cacheIndex_run
         const shouldBuildCache =
             form.rebuildCache || ((form.buildCache || cache.cacheIndex === cache.cacheIndex_run) && !cacheStore.isCached)
-        if (!cacheStore.isCached) {
-            // invalidate dependency key if cache is stale
-            cache.dependencyKey += 10000
-        }
+        // if (!cacheStore.isCached) {
+        //     // invalidate dependency key if cache is stale
+        //     cache.dependencyKey += 10000
+        // }
 
         // const cacheStore = state.runtime.store
         //     .getOrCreate({
