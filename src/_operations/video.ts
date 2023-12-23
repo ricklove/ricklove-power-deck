@@ -20,10 +20,10 @@ const filmInterpolationDoubleBack = createFrameOperation({
         const isManualTrigger = form.buildCache
         const buildCacheTriggered = form.buildCache || cache.cacheIndex === cache.cacheIndex_run
         const shouldBuildCache = (form.buildCache || cache.cacheIndex === cache.cacheIndex_run) && !cacheStore.isCached
-        if (!cacheStore.isCached) {
-            // invalidate dependency key if cache is stale
-            cache.dependencyKey += 10000
-        }
+        // if (!cacheStore.isCached) {
+        //     // invalidate dependency key if cache is stale
+        //     cache.dependencyKey += 10000
+        // }
 
         if (shouldBuildCache) {
             const iNodeStart = getNextActiveNodeIndex(runtime)

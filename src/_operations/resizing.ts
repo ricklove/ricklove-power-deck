@@ -10,7 +10,7 @@ const cropResizeByMask = createFrameOperation({
         padding: form.int({ default: 0 }),
         size: form.choice({
             items: () => ({
-                maxSideLength: form.intOpt({ default: 1024 }),
+                maxSideLength: form.int({ default: 1024 }),
                 target: form.group({
                     items: () => ({
                         width: form.intOpt({ default: 1024 }),
@@ -32,6 +32,7 @@ const cropResizeByMask = createFrameOperation({
             }),
         }),
         storeVariables: form.groupOpt({
+            default: true,
             items: () => ({
                 beforeCropImage: form.strOpt({ default: `beforeCropImage` }),
                 beforeCropMask: form.strOpt({ default: `beforeCropMask` }),
@@ -228,7 +229,6 @@ const upscaleWithModel = createFrameOperation({
         }),
         resize: form.choice({
             items: () => ({
-                none: form.bool({ default: false }),
                 ratio: form.float({ default: 1 }),
                 maxSideLength: form.int({ default: 1024 }),
                 // targetWidth: form.int({ default: 1024 }),
@@ -244,12 +244,24 @@ const upscaleWithModel = createFrameOperation({
             }),
         }).outputs.IMAGE
 
+        const originalSize = graph.Get_image_size({
+            image,
+        })
+
         const resizedImage = form.resize.ratio
-            ? graph.ImageTransformResizeRelative({
+            ? graph.ImageTransformResizeAbsolute({
                   images: upscaledImage,
                   method: `lanczos`,
-                  scale_width: form.resize.ratio,
-                  scale_height: form.resize.ratio,
+                  width: graph.Evaluate_Floats({
+                      a: graph.Int_to_float({ Value: originalSize.outputs.INT }),
+                      python_expression: `a*${form.resize.ratio}`,
+                      print_to_console: `False`,
+                  }).outputs.INT,
+                  height: graph.Evaluate_Floats({
+                      a: graph.Int_to_float({ Value: originalSize.outputs.INT_1 }),
+                      python_expression: `a*${form.resize.ratio}`,
+                      print_to_console: `False`,
+                  }).outputs.INT,
               })
             : form.resize.maxSideLength
             ? graph.RL$_Crop$_Resize({

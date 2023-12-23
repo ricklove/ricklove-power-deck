@@ -288,7 +288,7 @@ const ultimateUpscale = createFrameOperation({
                   input_mode: `simple`,
                   lora_count: 1,
                   //   lora_name_1: !form.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`,
-                  lora_name_1: `lcm-lora-sdxl.safetensors`,
+                  lora_name_1: `lcm-lora-sd.safetensors`,
               } as LoRA_Stacker_input).outputs.LORA_STACK
 
         const loader = graph.Efficient_Loader({

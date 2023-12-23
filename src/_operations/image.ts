@@ -3,8 +3,8 @@ import { createFrameOperation } from './_frame'
 
 const zoeDepth = createFrameOperation({
     ui: (form) => ({
-        cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 0.001 }),
-        cutoffRadius: form.float({ default: 0.1, min: 0, max: 1, step: 0.001 }),
+        cutoffMid: form.float({ default: 0.25, min: 0, max: 1, step: 0.001 }),
+        cutoffRadius: form.float({ default: 0.25, min: 0, max: 1, step: 0.001 }),
         invertCutoffMax: form.bool({ default: false }),
         invertCutoffMin: form.bool({ default: false }),
         // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
