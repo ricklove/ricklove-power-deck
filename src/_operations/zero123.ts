@@ -2,8 +2,7 @@ import { createFrameOperation } from './_frame'
 
 const zero123 = createFrameOperation({
     ui: (form) => ({
-        angle: form.float({ default: 0, min: -180, max: 180 }),
-        elevation: form.float({ default: 0, min: -90, max: 90 }),
+        orbit: form.orbit({}),
         seed: form.seed({}),
         steps: form.int({ default: 20 }),
         sampler: form.enum({
@@ -21,8 +20,8 @@ const zero123 = createFrameOperation({
             width: 256,
             height: 256,
             batch_size: 1,
-            elevation: form.elevation,
-            azimuth: form.angle,
+            elevation: form.orbit.elevation,
+            azimuth: form.orbit.azimuth,
             clip_vision: ckpt.outputs.CLIP_VISION,
             init_image: image,
             vae: ckpt,

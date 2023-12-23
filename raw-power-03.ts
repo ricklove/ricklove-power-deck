@@ -133,6 +133,7 @@ appOptimized({
                     workingDirectory: form.imageSource.workingDirectory,
                     afterFramePrompt: [],
                 })
+                state.graph.PreviewImage({ images: result.image })
 
                 for (const frameId of frameIdProvider) {
                     await runtime.PROMPT()

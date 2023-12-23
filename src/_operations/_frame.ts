@@ -37,12 +37,12 @@ export const getCacheStore = (
     // return storeAccess.getWithAutoUpdate()
 
     // workaround: use observer and call update manually
-    console.log(`getCacheStore: storeAccess`, { storeAccess })
+    // console.log(`getCacheStore: storeAccess ${cache.cacheIndex} ${cache.dependencyKey}`, { storeAccess, cache })
 
     const storeValue = observable(storeAccess.get())
     observe(storeValue, (x) => {
         const v = JSON.parse(JSON.stringify(x.object))
-        console.log(`getCacheStore: changed ${cache.cacheIndex} ${cache.dependencyKey}`, { v, storeValue, x })
+        // console.log(`getCacheStore: changed ${cache.cacheIndex} ${cache.dependencyKey}`, { v, storeValue, x })
 
         // manually call update
         storeAccess.update({ json: v })
@@ -67,14 +67,15 @@ export const calculateDependencyKey = (cache: CacheState, form: Record<string, u
 
         return Object.fromEntries(
             Object.entries(o)
-                .filter(([k, v]) => ![`preview`, `cache`].some((x) => k.toLowerCase().includes(x)))
+                .filter(([k, v]) => ![`preview`, `cache`, `seed`].some((x) => k.toLowerCase().includes(x)))
                 .map(([k, v]) => [k, getCleanedFormObj(v)]),
         )
     }
-    const formCleaned = getCleanedFormObj(form)
+    const formCleaned = JSON.parse(JSON.stringify(getCleanedFormObj(form)))
     const result = createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(formCleaned)}`).randomInt()
 
-    console.log(`calculateDependencyKey ${result}`, { result, formCleaned, cache, form })
+    // console.log(`calculateDependencyKey ${result} <- ${cache.dependencyKey}`, { result, formCleaned, cache, form })
+    // console.log(`calculateDependencyKey ${result} <- ${cache.dependencyKey}`, JSON.stringify(formCleaned))
     return result
 }
 
