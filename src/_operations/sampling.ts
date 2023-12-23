@@ -1,6 +1,7 @@
 import { PreviewStopError, loadFromScope } from '../_appState'
 import { createFrameOperation } from './_frame'
 import { storageOperations } from './storage'
+import { videoOperations } from './video'
 
 const sampler = createFrameOperation({
     ui: (form) => ({
@@ -55,6 +56,7 @@ const sampler = createFrameOperation({
         lcmTurbo: form.bool({ default: true }),
         freeU: form.bool({ default: true }),
         config: form.float({ default: 1.5 }),
+        batchSizeForPyramidReduce: form.int({ default: 1, min: 1, max: 16 }),
     }),
     run: (state, form, frame) => {
         const { runtime, graph } = state
@@ -153,12 +155,12 @@ const sampler = createFrameOperation({
             throw new PreviewStopError(undefined)
         }
 
-        // if (form.film?.singleFramePyramidSize) {
-        //     latent = graph.RepeatLatentBatch({
-        //         samples: latent,
-        //         amount: form.film.singleFramePyramidSize,
-        //     }).outputs.LATENT
-        // }
+        if (form.batchSizeForPyramidReduce) {
+            latent = graph.RepeatLatentBatch({
+                samples: latent,
+                amount: form.batchSizeForPyramidReduce,
+            }).outputs.LATENT
+        }
 
         const startStep = Math.max(
             0,
@@ -202,12 +204,24 @@ const sampler = createFrameOperation({
             negative: loader.outputs.CONDITIONING$7, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
             // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
             // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
-            latent_image: startLatent,
+            latent_image: latent,
         })
 
-        const finalImage = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE
+        // const finalImage = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE
 
-        return { image: finalImage }
+        // return { image: finalImage }
+
+        let batchImages = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE
+
+        if (form.batchSizeForPyramidReduce <= 1) {
+            return { image: batchImages }
+        }
+
+        return videoOperations.filmInterpolationPyramidReduceImageBatch.run(
+            state,
+            { imageBatchSize: form.batchSizeForPyramidReduce },
+            { ...frame, image: batchImages },
+        )
     },
 })
 

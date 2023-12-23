@@ -18,8 +18,8 @@ const zero123 = createFrameOperation({
         depthImageVariable: form.strOpt({ default: `zoe` }),
         width: form.int({ default: 256 }),
         height: form.int({ default: 256 }),
-        batchCount: form.int({ default: 1 }),
         segmentCount: form.int({ default: 1 }),
+        batchSizeForPyramidReduce: form.int({ default: 1 }),
     }),
     run: (state, form, frame) => {
         const { runtime, graph } = state
@@ -29,7 +29,7 @@ const zero123 = createFrameOperation({
         const sz123 = graph.StableZero123$_Conditioning({
             width: form.width,
             height: form.height,
-            batch_size: form.batchCount,
+            batch_size: form.batchSizeForPyramidReduce,
             elevation: form.orbit.elevation,
             azimuth: form.orbit.azimuth,
 
@@ -76,13 +76,13 @@ const zero123 = createFrameOperation({
 
         let batchImages = graph.VAEDecode({ samples: latent, vae: ckpt }).outputs.IMAGE
 
-        if (form.batchCount <= 1) {
+        if (form.batchSizeForPyramidReduce <= 1) {
             return { image: batchImages }
         }
 
         return videoOperations.filmInterpolationPyramidReduceImageBatch.run(
             state,
-            { imageBatchSize: form.batchCount },
+            { imageBatchSize: form.batchSizeForPyramidReduce },
             { ...frame, image: batchImages },
         )
     },

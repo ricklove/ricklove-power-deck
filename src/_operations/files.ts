@@ -166,6 +166,21 @@ const cacheEverything = createFrameOperation({
                 })
             }
 
+            graph.PreviewImage({
+                images: graph.ImageBatch({
+                    image1: graph.MaskToImage({ mask: resultMask ?? mask }),
+                    image2: graph.ImageBatch({
+                        image1: graph.ImageBlend({
+                            image1: resultImage ?? image,
+                            image2: graph.MaskToImage({ mask: resultMask ?? mask }),
+                            blend_mode: `normal`,
+                            blend_factor: 0.5,
+                        }),
+                        image2: resultImage ?? image,
+                    }),
+                }),
+            })
+
             cacheStore.isCached = true
             throw new PreviewStopError({
                 //

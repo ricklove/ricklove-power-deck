@@ -3,25 +3,28 @@ import { createFrameOperation } from './_frame'
 
 const zoeDepth = createFrameOperation({
     ui: (form) => ({
-        cutoffMid: form.float({ default: 0.25, min: 0, max: 1, step: 0.001 }),
-        cutoffRadius: form.float({ default: 0.25, min: 0, max: 1, step: 0.001 }),
+        cutoffByMaskVariable: form.strOpt({ default: `mask` }),
+        cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 0.001 }),
+        cutoffRadius: form.float({ default: 0.5, min: 0, max: 1, step: 0.001 }),
         invertCutoffMax: form.bool({ default: false }),
         invertCutoffMin: form.bool({ default: false }),
         // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
         // normMax: form.float({ default: 85, min: 0, max: 100, step: 0.1 }),
     }),
-    run: ({ runtime, graph }, form, { image }) => {
+    run: (state, form, { image }) => {
+        const { runtime, graph } = state
         const zoeRaw = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Infer({
             image,
         })
 
         const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
             zoeRaw,
+            cutoffByMask: form.cutoffByMaskVariable ? loadFromScope<_MASK>(state, form.cutoffByMaskVariable) : undefined,
             // This makes more sense reversed
             cutoffMid: 1 - form.cutoffMid,
             cutoffRadius: form.cutoffRadius,
-            normMin: 0, //form.zoeDepth.normMin,
-            normMax: 100, //form.zoeDepth.normMax,
+            normMin: 1, //form.zoeDepth.normMin,
+            normMax: 99, //form.zoeDepth.normMax,
         })
         const zoeImage = graph.ImageBatchGet({
             images: zoeImages,

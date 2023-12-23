@@ -67,15 +67,26 @@ export const calculateDependencyKey = (cache: CacheState, form: Record<string, u
 
         return Object.fromEntries(
             Object.entries(o)
-                .filter(([k, v]) => ![`preview`, `cache`, `seed`].some((x) => k.toLowerCase().includes(x)))
+                .filter(
+                    ([k, v]) =>
+                        ![
+                            //
+                            `preview`,
+                            `cache`,
+                            `seed`,
+                            `subOperations`,
+                        ]
+                            .map((x) => x.toLowerCase())
+                            .some((x) => k.toLowerCase().includes(x)),
+                )
                 .map(([k, v]) => [k, getCleanedFormObj(v)]),
         )
     }
     const formCleaned = JSON.parse(JSON.stringify(getCleanedFormObj(form)))
     const result = createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(formCleaned)}`).randomInt()
 
-    // console.log(`calculateDependencyKey ${result} <- ${cache.dependencyKey}`, { result, formCleaned, cache, form })
-    // console.log(`calculateDependencyKey ${result} <- ${cache.dependencyKey}`, JSON.stringify(formCleaned))
+    console.log(`calculateDependencyKey ${result} <- ${cache.dependencyKey}`, { result, formCleaned, cache, form })
+    console.log(`calculateDependencyKey ${result} <- ${cache.dependencyKey}`, JSON.stringify(formCleaned))
     return result
 }
 

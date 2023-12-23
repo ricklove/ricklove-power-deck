@@ -13,8 +13,25 @@ const cropResizeByMask = createFrameOperation({
                 maxSideLength: form.int({ default: 1024 }),
                 target: form.group({
                     items: () => ({
-                        width: form.intOpt({ default: 1024 }),
-                        height: form.floatOpt({ default: 1024 }),
+                        width: form.int({ default: 1024 }),
+                        height: form.int({ default: 1024 }),
+                    }),
+                }),
+                standard: form.group({
+                    items: () => ({
+                        landscape: form.bool({}),
+                        size: form.selectOne({
+                            choices: () => [
+                                { id: `sd    1 x 1 =  512x 512` },
+                                { id: `sd    1 x 2 =  384x 768` },
+                                { id: `sd    2 x 3 =  512x 768` },
+                                { id: `sdxl  1 x 1 = 1024x1024` },
+                                { id: `sdxl  3 x 4 =  896x1152` },
+                                { id: `sdxl  2 x 3 =  832x1216` },
+                                { id: `sdxl  9 x16 =  768x1344` },
+                                { id: `sdxl 10 x24 =  640x1536` },
+                            ],
+                        }),
                     }),
                 }),
             }),
@@ -85,13 +102,31 @@ const cropResizeByMask = createFrameOperation({
             })
         }
 
+        const getTargetSize = (input: typeof form.size) => {
+            if (input.maxSideLength) {
+                return {}
+            }
+
+            if (input.target) {
+                return { width: input.target.width, height: input.target.height }
+            }
+
+            const [_id, values] = input.standard?.size.id.split(`=`) ?? []
+            const [xRaw, yRaw] = values?.split(`x`) ?? []
+            const [x, y] = input.standard?.landscape ? [yRaw, xRaw] : [xRaw, yRaw]
+            const [w, h] = [x, y].map((v) => (v ? Number(v) : undefined))
+
+            return { width: w, height: h }
+        }
+        const targetSize = getTargetSize(form.size)
+
         const resizeNode = graph.RL$_Crop$_Resize({
             image: startImage,
             mask: cropMask,
             padding: form.padding,
-            max_side_length: form.size.maxSideLength ?? undefined,
-            width: form.size.target?.width ?? undefined,
-            height: form.size.target?.height ?? undefined,
+            max_side_length: form.size.maxSideLength,
+            width: targetSize.width,
+            height: targetSize.height,
             interpolate_mask_a,
             interpolate_mask_b,
             interpolate_ratio: 0,
