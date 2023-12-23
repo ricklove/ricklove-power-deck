@@ -161,6 +161,42 @@ const filmInterpolationDoubleBack = createFrameOperation({
     },
 })
 
+const filmInterpolationPyramidReduceImageBatch = createFrameOperation({
+    ui: (form) => ({
+        imageBatchSize: form.int({ default: 3 }),
+    }),
+    run: (state, form, { image }) => {
+        const { runtime, graph } = state
+
+        const filmModelNode = graph.Load_Film_Model_$1mtb$2({
+            film_model: `Style`,
+        })
+        let currentImages = image
+
+        for (let i = 0; i < form.imageBatchSize - 1; i++) {
+            const filmFrames = graph.Film_Interpolation_$1mtb$2({
+                film_model: filmModelNode,
+                images: currentImages,
+                interpolate: 1,
+            })
+            const filmframes_removedFirst = graph.ImageBatchRemove({
+                images: filmFrames,
+                index: 1,
+            })
+            const middleFrames = graph.VHS$_SelectEveryNthImage({
+                images: filmframes_removedFirst,
+                select_every_nth: 2,
+            })
+            currentImages = middleFrames.outputs.IMAGE
+        }
+
+        return {
+            image: currentImages,
+        }
+    },
+})
+
 export const videoOperations = {
     filmInterpolationDoubleBack,
+    filmInterpolationPyramidReduceImageBatch,
 }

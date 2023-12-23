@@ -25,6 +25,7 @@ appOptimized({
                 startIndex: form.int({ default: 1, min: 0 }),
                 endIndex: form.intOpt({ default: 10000, min: 0, max: 10000 }),
                 selectEveryNth: form.intOpt({ default: 1, min: 1 }),
+                repeatCount: form.intOpt({ default: 1, min: 1 }),
                 // batchSize: form.int({ default: 1, min: 1 }),
                 iterationCount: form.int({ default: 1, min: 1 }),
                 // iterationSize: form.intOpt({ default: 1, min: 1 }),

@@ -83,10 +83,13 @@ type FrameIdsPattern = {
     startIndex: number
     iterationCount: number
     selectEveryNth?: null | number
+    repeatCount?: null | number
 }
 export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
     const frameIds = [...new Array(frameIdsPattern.iterationCount)].map(
-        (_, i) => frameIdsPattern.startIndex + i * (frameIdsPattern.selectEveryNth ?? 1),
+        (_, i) =>
+            frameIdsPattern.startIndex +
+            Math.floor(i / (frameIdsPattern.repeatCount ?? 1)) * (frameIdsPattern.selectEveryNth ?? 1),
     )
 
     const getBatchAtFrameIdIndex = (
@@ -118,6 +121,7 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
             startIndex: frameIdsPattern.startIndex,
             iterationCount: frameIdsPattern.iterationCount,
             selectEveryNth: frameIdsPattern.selectEveryNth,
+            repeatCount: frameIdsPattern.repeatCount,
         },
         frameIds,
         currentFrameIdIndex: -1,
