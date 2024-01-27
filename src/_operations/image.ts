@@ -3,23 +3,36 @@ import { createFrameOperation } from './_frame'
 
 const zoeDepth = createFrameOperation({
     ui: (form) => ({
-        cutoffByMaskVariable: form.strOpt({ default: `mask` }),
+        cutoffByMask: form.groupOpt({
+            items: () => ({
+                variable: form.str({ default: `mask` }),
+                erode: form.int({ default: 4, min: 1, max: 64 }),
+                // preview: form.inlineRun({}),
+            }),
+        }),
         cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 0.001 }),
-        cutoffRadius: form.float({ default: 0.5, min: 0, max: 1, step: 0.001 }),
+        cutoffRadius: form.float({ default: 0.6, min: 0, max: 1, step: 0.001 }),
         invertCutoffMax: form.bool({ default: false }),
         invertCutoffMin: form.bool({ default: false }),
         // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
         // normMax: form.float({ default: 85, min: 0, max: 100, step: 0.1 }),
     }),
-    run: (state, form, { image }) => {
+    run: (state, form, { image, mask }) => {
         const { runtime, graph } = state
         const zoeRaw = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Infer({
             image,
         })
 
+        const cutoffByMask = form.cutoffByMask
+            ? graph.Mask_Erode_Region({
+                  masks: loadFromScope<_MASK>(state, form.cutoffByMask.variable) ?? mask,
+                  iterations: 4,
+              })
+            : undefined
+
         const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
             zoeRaw,
-            cutoffByMask: form.cutoffByMaskVariable ? loadFromScope<_MASK>(state, form.cutoffByMaskVariable) : undefined,
+            cutoffByMask,
             // This makes more sense reversed
             cutoffMid: 1 - form.cutoffMid,
             cutoffRadius: form.cutoffRadius,

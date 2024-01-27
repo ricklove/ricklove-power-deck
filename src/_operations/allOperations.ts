@@ -9,6 +9,7 @@ import { videoOperations } from './video'
 import { outputOperations } from './output'
 import { zeroOperations } from './zero123'
 import { faceOperations } from './face'
+import { interactiveOperations } from './interactive'
 
 const divider = createFrameOperation({
     ui: (form) => ({}),
@@ -28,6 +29,7 @@ const alloperations = {
     ...zeroOperations,
     ...faceOperations,
     ...outputOperations,
+    ...interactiveOperations,
 }
 
 const subOperationsInner = createFrameOperationsChoiceList({

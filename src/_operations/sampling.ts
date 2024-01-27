@@ -27,6 +27,21 @@ const sampler = createFrameOperation({
                 }),
         }),
 
+        loras: form.list({
+            element: () =>
+                form.group({
+                    items: () => ({
+                        enabled: form.bool({ default: true }),
+                        lora: form.enum({
+                            enumName: 'Enum_LoRA_Stacker_lora_name_1',
+                            default: 'add-detail-xl.safetensors',
+                        }),
+                        clipStrength: form.float({ default: 1, min: 0, max: 1, step: 0.01 }),
+                        modelStrength: form.float({ default: 1, min: 0, max: 1, step: 0.01 }),
+                    }),
+                }),
+        }),
+
         positive: form.str({}),
         negative: form.str({}),
 
@@ -87,20 +102,50 @@ const sampler = createFrameOperation({
             }).outputs.CNET_STACK
         }
 
-        const loraStack =
-            form.lcmTurbo && form.sdxl
-                ? graph.LoRA_Stacker({
-                      input_mode: `simple`,
-                      lora_count: 1,
-                      lora_name_1: `LCMTurboMix_Euler_A_fix.safetensors`,
-                  } as LoRA_Stacker_input).outputs.LORA_STACK
+        const allLoras: {
+            lora: Enum_LoRA_Stacker_lora_name_1
+            clipStrength: number
+            modelStrength: number
+        }[] = [
+            ...(form.lcmTurbo && form.sdxl
+                ? [
+                      {
+                          lora: `LCMTurboMix_Euler_A_fix.safetensors`,
+                          clipStrength: 1,
+                          modelStrength: 1,
+                      } as const,
+                  ]
                 : form.lcm
-                ? graph.LoRA_Stacker({
-                      input_mode: `simple`,
-                      lora_count: 1,
-                      lora_name_1: !form.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`,
-                  } as LoRA_Stacker_input).outputs.LORA_STACK
-                : undefined
+                ? [
+                      {
+                          lora: !form.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`,
+                          clipStrength: 1,
+                          modelStrength: 1,
+                      } as const,
+                  ]
+                : []),
+            ...(form.loras.filter((x) => x.enabled) ?? []),
+        ]
+
+        const loraEntries = allLoras.map((x, i) => ({
+            [`lora_name_${i + 1}`]: x.lora,
+            [`clip_str_${i + 1}`]: x.clipStrength,
+            [`model_str_${i + 1}`]: x.modelStrength,
+        }))
+
+        const loraStack = loraEntries.length
+            ? graph.LoRA_Stacker({
+                  input_mode: `advanced`,
+                  lora_count: loraEntries.length,
+                  ...Object.fromEntries(loraEntries.flatMap((x) => Object.entries(x))),
+              } as LoRA_Stacker_input).outputs.LORA_STACK
+            : undefined
+
+        // for(const lora of form.loras){
+        //     loraStack = graph.LoRA_Stacker({
+        //         lora
+        //     }).outputs.LORA_STACK
+        // }
 
         const loader = graph.Efficient_Loader({
             ckpt_name: form.checkpoint,

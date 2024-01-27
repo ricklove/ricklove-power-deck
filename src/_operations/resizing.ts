@@ -256,6 +256,7 @@ const uncrop = createFrameOperation({
         return { image: restoredImage }
     },
 })
+
 const upscaleWithModel = createFrameOperation({
     ui: (form) => ({
         model: form.enum({
@@ -320,8 +321,48 @@ const upscaleWithModel = createFrameOperation({
     },
 })
 
+const resize = createFrameOperation({
+    ui: (form) => ({
+        ratio: form.float({ default: 1 }),
+    }),
+    run: ({ graph }, form, { image, mask }) => {
+        const originalSize = graph.Get_image_size({
+            image,
+        })
+
+        const resizedImage = graph.ImageTransformResizeAbsolute({
+            images: image,
+            method: `lanczos`,
+            width: graph.Evaluate_Floats({
+                a: graph.Int_to_float({ Value: originalSize.outputs.INT }),
+                python_expression: `a*${form.ratio}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+            height: graph.Evaluate_Floats({
+                a: graph.Int_to_float({ Value: originalSize.outputs.INT_1 }),
+                python_expression: `a*${form.ratio}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+        })
+
+        const size = graph.Get_image_size({ image: resizedImage })
+        const resizedMask = graph.Image_To_Mask({
+            method: `intensity`,
+            image: graph.ImageTransformResizeAbsolute({
+                images: graph.MaskToImage({ mask }),
+                method: `lanczos`,
+                width: size.outputs.INT,
+                height: size.outputs.INT_1,
+            }),
+        }).outputs.MASK
+
+        return { image: resizedImage, mask: resizedMask }
+    },
+})
+
 export const resizingOperations = {
     cropResizeByMask,
     uncrop,
     upscaleWithModel,
+    resize,
 }
