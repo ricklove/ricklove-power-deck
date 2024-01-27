@@ -52,6 +52,6 @@ const subOperations = createFrameOperation({
 })
 
 export const allOperationsList = createFrameOperationsChoiceList({
-    ...alloperations,
     subOperations,
+    ...alloperations,
 })

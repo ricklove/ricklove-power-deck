@@ -79,7 +79,7 @@ const sampler = createFrameOperation({
         const startImage = image
         const replaceMask = mask
 
-        let controlNetStack = undefined as undefined | CONTROL_NET_STACK
+        let controlNetStack = undefined as undefined | _CONTROL_NET_STACK
         for (const c of form.controlNet) {
             if (!c.enabled) {
                 continue
@@ -318,7 +318,7 @@ const ultimateUpscale = createFrameOperation({
         const startImage = image
         const replaceMask = mask
 
-        let controlNetStack = undefined as undefined | CONTROL_NET_STACK
+        let controlNetStack = undefined as undefined | _CONTROL_NET_STACK
         for (const c of form.controlNet) {
             if (!c.enabled) {
                 continue
@@ -366,7 +366,7 @@ const ultimateUpscale = createFrameOperation({
 
         const sampler = graph.UltimateSDUpscaleNoUpscale({
             mode_type: `Linear`,
-            force_uniform_tiles: `enable`,
+            force_uniform_tiles: true,
             seam_fix_mode: `None`,
 
             seed: form.seed,

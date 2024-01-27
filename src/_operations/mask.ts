@@ -206,22 +206,9 @@ const combineMasks = createFrameOperation({
 export const maskOperations = {
     imageToMask,
     maskToImage,
-
-    /** @deprecated */
-    clipSeg,
     clipSegToMask: clipSeg,
-
-    /** @deprecated */
-    segment,
     selectMaskSegment: segment,
-
-    /** @deprecated */
-    sam,
     samImageWithMask: sam,
-
-    /** @deprecated */
-    erodeOrDilate,
     erodeOrDilateMask: erodeOrDilate,
-
     combineMasks,
 }

@@ -1,8 +1,10 @@
-import type { FormBuilder, Widget, Widget_groupOpt, Widget_group_output } from 'src'
+import type { FormBuilder, Widget } from 'src'
 import type { WidgetDict } from 'src/cards/App'
 import { AppState, PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createRandomGenerator } from '../_random'
 import { observable, observe } from 'mobx'
+import type { Widget_choices_output } from 'src/controls/widgets/choices/WidgetChoices'
+import type { Widget_group, Widget_group_output } from 'src/controls/widgets/group/WidgetGroup'
 
 export type Frame = {
     image: _IMAGE
@@ -220,7 +222,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
             form.list({
                 element: () =>
                     form.choice({
-                        items: () => ({
+                        items: {
                             ...Object.fromEntries(
                                 Object.entries(operations).map(([k, v]) => {
                                     const { simple, hidePreview, hideLoadVariables, hideStoreVariables } = v.options ?? {}
@@ -230,64 +232,66 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
 
                                     return [
                                         k,
-                                        form.group({
-                                            items: () => ({
-                                                ...(!showLoadVariables
-                                                    ? {}
-                                                    : {
-                                                          __loadVariables: form.group({
-                                                              className: `text-xs`,
-                                                              label: false,
-                                                              items: () => ({
-                                                                  loadVariables: form.groupOpt({
-                                                                      items: () => ({
-                                                                          image: form.stringOpt({}),
-                                                                          mask: form.stringOpt({}),
+                                        () =>
+                                            form.group({
+                                                items: () => ({
+                                                    ...(!showLoadVariables
+                                                        ? {}
+                                                        : {
+                                                              __loadVariables: form.group({
+                                                                  className: `text-xs`,
+                                                                  label: false,
+                                                                  items: () => ({
+                                                                      loadVariables: form.groupOpt({
+                                                                          items: () => ({
+                                                                              image: form.stringOpt({}),
+                                                                              mask: form.stringOpt({}),
+                                                                          }),
                                                                       }),
                                                                   }),
                                                               }),
                                                           }),
-                                                      }),
 
-                                                ...v.ui(form),
-                                                ...(!showStoreVariables
-                                                    ? {}
-                                                    : {
-                                                          __storeVariables: form.group({
-                                                              className: `text-xs`,
-                                                              label: false,
-                                                              items: () => ({
-                                                                  storeVariables: form.groupOpt({
-                                                                      items: () => ({
-                                                                          image: form.stringOpt({}),
-                                                                          mask: form.stringOpt({}),
+                                                    ...v.ui(form),
+                                                    ...(!showStoreVariables
+                                                        ? {}
+                                                        : {
+                                                              __storeVariables: form.group({
+                                                                  className: `text-xs`,
+                                                                  label: false,
+                                                                  items: () => ({
+                                                                      storeVariables: form.groupOpt({
+                                                                          items: () => ({
+                                                                              image: form.stringOpt({}),
+                                                                              mask: form.stringOpt({}),
+                                                                          }),
                                                                       }),
                                                                   }),
                                                               }),
                                                           }),
-                                                      }),
-                                                ...(!showPreview
-                                                    ? {}
-                                                    : {
-                                                          __preview: form.inlineRun({}),
-                                                      }),
+                                                    ...(!showPreview
+                                                        ? {}
+                                                        : {
+                                                              __preview: form.inlineRun({}),
+                                                          }),
+                                                }),
                                             }),
-                                        }),
                                     ]
                                 }),
                             ),
-                        }),
+                        },
                     }),
             }),
         run: (state, form, frame) => {
             const { runtime, graph } = state
 
             for (const listItem of form) {
-                const listItemGroupOptFields = listItem as unknown as Widget_group_output<
-                    Record<string, Widget_groupOpt<Record<string, Widget>>>
-                >
+                const listItemGroupOptFields = listItem
+                // as unknown as Widget_choices_output<
+                //     Record<string, Widget_group<Record<string, Widget>>>
+                // >
                 for (const [opName, op] of Object.entries(operations)) {
-                    const opGroupOptValue = listItemGroupOptFields[opName]
+                    const opGroupOptValue = listItemGroupOptFields[opName] as Widget_group_output<Record<string, Widget>>
                     // console.log(`createFrameOperationsChoiceList: loop operations`, {
                     //     opGroupOptValue,
                     //     operations,

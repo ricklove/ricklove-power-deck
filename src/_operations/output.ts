@@ -26,8 +26,12 @@ const output3d = createFrameOperation({
                 scale_width: 1,
                 scale_height: 1,
             }).outputs.IMAGE
-            graph.SaveImage({ images: resizedImage, filename_prefix: saveName })
-            graph.PreviewImage({ images: resizedImage })
+
+            state.runtime.add_saveImage(resizedImage, saveName)
+            // graph.SaveImage({ images: resizedImage, filename_prefix: saveName })
+            // graph.PreviewImage({ images: resizedImage })
+
+            // state.runtime. add_saveImage()
             return resizedImage
         }
 
@@ -72,7 +76,7 @@ const outputVideo = createFrameOperation({
         })
         graph.VHS$_VideoCombine({
             images: loadImageBatchNode.outputs.image,
-            format: `video/h264-mp4`,
+            format: `video/h264-mp4` as `image/webp`,
         })
 
         const iNodeAfterEnd = getNextActiveNodeIndex(runtime)

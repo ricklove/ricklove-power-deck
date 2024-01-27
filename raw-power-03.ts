@@ -1,9 +1,11 @@
 import { PreviewStopError, AppState } from './src/_appState'
-import { appOptimized } from './src/optimizer'
+// import { appOptimized } from './src/optimizer'
 import { allOperationsList } from './src/_operations/allOperations'
 import { CacheState, calculateDependencyKey, createFrameIdProvider } from './src/_operations/_frame'
 
-appOptimized({
+// appOptimized({
+app({
+    canStartFromImage: true,
     ui: (form) => ({
         cancel: form.inlineRun({
             kind: `warning`,
@@ -16,26 +18,32 @@ appOptimized({
         //     kind: `warning`,
         //     text: `Load Form!`,
         // }),
-        imageSource: form.group({
-            items: () => ({
-                directory: form.string({ default: `../input/video` }),
-                workingDirectory: form.string({ default: `../input/video/working` }),
-                filePattern: form.string({ default: `#####.png` }),
-                // pattern: form.string({ default: `*.png` }),
-                startIndex: form.int({ default: 1, min: 0 }),
-                endIndex: form.intOpt({ default: 10000, min: 0, max: 10000 }),
-                selectEveryNth: form.intOpt({ default: 1, min: 1 }),
-                repeatCount: form.intOpt({ default: 1, min: 1 }),
-                // batchSize: form.int({ default: 1, min: 1 }),
-                iterationCount: form.int({ default: 1, min: 1 }),
-                // iterationSize: form.intOpt({ default: 1, min: 1 }),
-                preview: form.inlineRun({}),
-            }),
+        imageSource: form.choice({
+            items: {
+                image: () => form.image({}),
+                frames: () =>
+                    form.group({
+                        items: () => ({
+                            directory: form.string({ default: `../input/video` }),
+                            workingDirectory: form.string({ default: `../input/video/working` }),
+                            filePattern: form.string({ default: `#####.png` }),
+                            // pattern: form.string({ default: `*.png` }),
+                            startIndex: form.int({ default: 1, min: 0 }),
+                            endIndex: form.intOpt({ default: 10000, min: 0, max: 10000 }),
+                            selectEveryNth: form.intOpt({ default: 1, min: 1 }),
+                            repeatCount: form.intOpt({ default: 1, min: 1 }),
+                            // batchSize: form.int({ default: 1, min: 1 }),
+                            iterationCount: form.int({ default: 1, min: 1 }),
+                            // iterationSize: form.intOpt({ default: 1, min: 1 }),
+                            preview: form.inlineRun({}),
+                        }),
+                    }),
+            },
         }),
         // size: form.size({}),
         operations: allOperationsList.ui(form),
     }),
-    run: async (runtime, form) => {
+    run: async (runtime, form, startImage) => {
         console.log(`formSerial`, { formSerial: JSON.stringify(runtime.formSerial) })
         console.log(`formResult`, { formResultJson: JSON.stringify(runtime.formResult) })
 
@@ -69,21 +77,50 @@ appOptimized({
             scopeStack: [{}],
         }
         const graph = state.graph
-        const frameIdProvider = createFrameIdProvider(form.imageSource)
+        const imageSourceCacheObj = startImage ? { id: startImage.id } : form.imageSource
+        const imageSourcePreview = !!form.imageSource.frames?.preview
 
-        const imageDir = form.imageSource.directory.replace(/\/$/g, ``)
-        const loadImageNode = graph.RL$_LoadImageSequence({
-            path: `${imageDir}/${form.imageSource.filePattern}`,
-            current_frame: frameIdProvider.get().frameId,
-        })
-        frameIdProvider.subscribe((v) => {
-            console.log(`frameIdProvider.subscribe - changing loadImageNode.inputs.current_frame`, {
-                current_frame: loadImageNode.inputs.current_frame,
-                v,
+        const workingDirectory = form.imageSource.frames?.workingDirectory ?? `../input/working`
+
+        const frameIdProvider = createFrameIdProvider(
+            form.imageSource.frames ?? {
+                iterationCount: 1,
+                startIndex: 1,
+            },
+        )
+
+        const getInitialImage = async () => {
+            if (startImage) return (await startImage.loadInWorkflow())._IMAGE
+
+            if (form.imageSource.image) {
+                return (await runtime.loadImageAnswer(form.imageSource.image))._IMAGE
+            }
+
+            if (!form.imageSource.frames) {
+                // This should not happen
+                return graph.EmptyImage({
+                    width: 512,
+                    height: 512,
+                })
+            }
+
+            const frameImageSource = form.imageSource.frames
+            const imageDir = frameImageSource.directory.replace(/\/$/g, ``)
+            const loadImageNode = graph.RL$_LoadImageSequence({
+                path: `${imageDir}/${frameImageSource.filePattern}`,
+                current_frame: frameIdProvider.get().frameId,
             })
-            loadImageNode.inputs.current_frame = v
-        })
-        const initialImage = loadImageNode.outputs.image
+            frameIdProvider.subscribe((v) => {
+                console.log(`frameIdProvider.subscribe - changing loadImageNode.inputs.current_frame`, {
+                    current_frame: loadImageNode.inputs.current_frame,
+                    v,
+                })
+                loadImageNode.inputs.current_frame = v
+            })
+            return loadImageNode.outputs.image
+        }
+
+        const initialImage = await getInitialImage()
 
         const { INT: width, INT_1: height } = graph.Get_Image_Size({
             image: initialImage,
@@ -99,7 +136,7 @@ appOptimized({
             value: 1,
         })
 
-        if (form.imageSource.preview) {
+        if (imageSourcePreview) {
             graph.PreviewImage({
                 images: runtime.AUTO,
             })
@@ -129,9 +166,9 @@ appOptimized({
                 const result = allOperationsList.run(state, form.operations, {
                     image: initialImage,
                     mask: initialMask,
-                    cache: { ...cache, dependencyKey: calculateDependencyKey(cache, form.imageSource) },
+                    cache: { ...cache, dependencyKey: calculateDependencyKey(cache, imageSourceCacheObj) },
                     frameIdProvider,
-                    workingDirectory: form.imageSource.workingDirectory,
+                    workingDirectory,
                     afterFramePrompt: [],
                 })
                 state.graph.PreviewImage({ images: result.image })

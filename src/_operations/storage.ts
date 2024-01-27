@@ -1,7 +1,7 @@
 import { loadFromScope, storeInScope } from '../_appState'
 import { createFrameOperation } from './_frame'
 
-const storeImageVarible = createFrameOperation({
+const storeImageVariable = createFrameOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -70,7 +70,7 @@ const loadVariables = createFrameOperation({
 
 export const storageOperations = {
     loadImageVariable,
-    storeImageVarible,
+    storeImageVarible: storeImageVariable,
     storeMaskVariable,
     loadMaskVariable,
     loadVariables,

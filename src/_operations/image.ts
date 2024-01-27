@@ -355,6 +355,16 @@ const selectColor = createFrameOperation({
     },
 })
 
+const invertImage = createFrameOperation({
+    ui: (form) => ({}),
+    run: ({ runtime, graph }, form, { image }) => {
+        const result = graph.InvertImage({
+            image,
+        })
+        return { image: result }
+    },
+})
+
 const blendImages = createFrameOperation({
     options: {
         hideLoadVariables: true,
@@ -453,6 +463,7 @@ export const imageOperations = {
     grayscale,
     selectChannel,
     selectColor,
+    invertImage,
     adjustChannelLevels,
     blendImages,
 }

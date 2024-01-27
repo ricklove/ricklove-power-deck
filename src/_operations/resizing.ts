@@ -9,32 +9,34 @@ const cropResizeByMask = createFrameOperation({
     ui: (form) => ({
         padding: form.int({ default: 0 }),
         size: form.choice({
-            items: () => ({
-                maxSideLength: form.int({ default: 1024 }),
-                target: form.group({
-                    items: () => ({
-                        width: form.int({ default: 1024 }),
-                        height: form.int({ default: 1024 }),
-                    }),
-                }),
-                standard: form.group({
-                    items: () => ({
-                        landscape: form.bool({}),
-                        size: form.selectOne({
-                            choices: () => [
-                                { id: `sd    1 x 1 =  512x 512` },
-                                { id: `sd    1 x 2 =  384x 768` },
-                                { id: `sd    2 x 3 =  512x 768` },
-                                { id: `sdxl  1 x 1 = 1024x1024` },
-                                { id: `sdxl  3 x 4 =  896x1152` },
-                                { id: `sdxl  2 x 3 =  832x1216` },
-                                { id: `sdxl  9 x16 =  768x1344` },
-                                { id: `sdxl 10 x24 =  640x1536` },
-                            ],
+            items: {
+                maxSideLength: () => form.int({ default: 1024 }),
+                target: () =>
+                    form.group({
+                        items: () => ({
+                            width: form.int({ default: 1024 }),
+                            height: form.int({ default: 1024 }),
                         }),
                     }),
-                }),
-            }),
+                standard: () =>
+                    form.group({
+                        items: () => ({
+                            landscape: form.bool({}),
+                            size: form.selectOne({
+                                choices: () => [
+                                    { id: `sd    1 x 1 =  512x 512` },
+                                    { id: `sd    1 x 2 =  384x 768` },
+                                    { id: `sd    2 x 3 =  512x 768` },
+                                    { id: `sdxl  1 x 1 = 1024x1024` },
+                                    { id: `sdxl  3 x 4 =  896x1152` },
+                                    { id: `sdxl  2 x 3 =  832x1216` },
+                                    { id: `sdxl  9 x16 =  768x1344` },
+                                    { id: `sdxl 10 x24 =  640x1536` },
+                                ],
+                            }),
+                        }),
+                    }),
+            },
         }),
         interpolate: form.groupOpt({
             items: () => ({
@@ -49,7 +51,7 @@ const cropResizeByMask = createFrameOperation({
             }),
         }),
         storeVariables: form.groupOpt({
-            default: true,
+            // default: true,
             items: () => ({
                 beforeCropImage: form.strOpt({ default: `beforeCropImage` }),
                 beforeCropMask: form.strOpt({ default: `beforeCropMask` }),
@@ -264,12 +266,12 @@ const upscaleWithModel = createFrameOperation({
             default: `8x_NMKD-Superscale_150000_G.pth`,
         }),
         resize: form.choice({
-            items: () => ({
-                ratio: form.float({ default: 1 }),
-                maxSideLength: form.int({ default: 1024 }),
-                // targetWidth: form.int({ default: 1024 }),
-                // targetHeight: form.int({ default: 1024 }),
-            }),
+            items: {
+                ratio: () => form.float({ default: 1 }),
+                maxSideLength: () => form.int({ default: 1024 }),
+                // targetWidth: () => form.int({ default: 1024 }),
+                // targetHeight: () => form.int({ default: 1024 }),
+            },
         }),
     }),
     run: ({ graph }, form, { image, mask }) => {
