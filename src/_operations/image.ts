@@ -1,6 +1,22 @@
 import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createFrameOperation } from './_frame'
 
+const emptyImage = createFrameOperation({
+    ui: (form) => ({
+        width: form.int({ default: 512, min: 0 }),
+        height: form.int({ default: 512, min: 0 }),
+    }),
+    run: ({ runtime, graph }, form, { image }) => {
+        const resultImage = graph.EmptyImage({
+            width: form.width,
+            height: form.height,
+            color: 0,
+        }).outputs.IMAGE
+
+        return { image: resultImage }
+    },
+})
+
 const zoeDepth = createFrameOperation({
     ui: (form) => ({
         cutoffByMask: form.groupOpt({
@@ -450,6 +466,7 @@ const blendImages = createFrameOperation({
 })
 
 export const imageOperations = {
+    emptyImage,
     enhanceLighting,
     zoeDepth,
     hedEdge,
