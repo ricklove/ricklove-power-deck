@@ -2,6 +2,110 @@ import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
 import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createFrameOperation } from './_frame'
 
+const solidMask = createFrameOperation({
+    ui: (form) => ({
+        width: form.int({ default: 512, min: 0 }),
+        height: form.int({ default: 512, min: 0 }),
+    }),
+    run: ({ runtime, graph }, form, { image }) => {
+        const result = graph.SolidMask({
+            width: form.width,
+            height: form.height,
+        }).outputs.MASK
+
+        return { mask: result }
+    },
+})
+
+const drawRegion = createFrameOperation({
+    ui: (form) => ({
+        // region: form.regional({
+        //     width: 100,
+        //     height: 100,
+        //     initialPosition: () => ({
+        //         x: 0,
+        //         y: 0,
+        //         width: 50,
+        //         height: 100,
+        //     }),
+        //     element: () => form.string({}),
+        // }),
+        left: form.number({ min: 0, max: 1, step: 0.001 }),
+        right: form.number({ default: 1, min: 0, max: 1, step: 0.001 }),
+        top: form.number({ min: 0, max: 1, step: 0.001 }),
+        bottom: form.number({ default: 1, min: 0, max: 1, step: 0.001 }),
+    }),
+    run: ({ runtime, graph }, form, { image, mask }) => {
+        // graph.Evaluate_Floats
+
+        const { INT: w, INT_1: h } = graph.Get_Image_Size({
+            image,
+        }).outputs
+
+        const whiteImage = graph.EmptyImage({
+            color: 0xffffff,
+            width: w,
+            height: h,
+        }).outputs.IMAGE
+
+        const blackImage = graph.EmptyImage({
+            color: 0,
+            width: w,
+            height: h,
+        }).outputs.IMAGE
+
+        // const pos = form.region.items[0].position
+        // const { width, height } = form.region
+        // const { t, l, b, r } = {
+        //     l: Math.max(0, Math.min(1, (pos.x - pos.width / 2) / width)),
+        //     r: Math.max(0, Math.min(1, (pos.x + pos.width / 2) / width)),
+        //     t: Math.max(0, Math.min(1, (pos.y - pos.height / 2) / height)),
+        //     b: Math.max(0, Math.min(1, (pos.y + pos.height / 2) / height)),
+        // }
+
+        const { t, l, b, r } = {
+            l: form.left,
+            r: form.right,
+            t: form.top,
+            b: form.bottom,
+        }
+
+        const cropImage = graph.Image_Paste_Crop_by_Location({
+            image: blackImage,
+            crop_image: whiteImage,
+            crop_blending: 0,
+            crop_sharpening: 0,
+            left: graph.Evaluate_Integers({
+                a: w,
+                python_expression: `a*${l}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+            right: graph.Evaluate_Integers({
+                a: w,
+                python_expression: `a*${r}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+            top: graph.Evaluate_Integers({
+                a: w,
+                python_expression: `a*${t}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+            bottom: graph.Evaluate_Integers({
+                a: w,
+                python_expression: `a*${b}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+        }).outputs.IMAGE
+
+        const resultMask = graph.Image_To_Mask({
+            image: cropImage,
+            method: `intensity`,
+        })
+
+        return { mask: resultMask }
+    },
+})
+
 const clipSeg = createFrameOperation({
     ui: (form) => ({
         prompt: form.str({ default: `ball` }),
@@ -202,6 +306,8 @@ const combineMasks = createFrameOperation({
 })
 
 export const maskOperations = {
+    solidMask,
+    drawRegion,
     imageToMask,
     maskToImage,
     clipSegToMask: clipSeg,
