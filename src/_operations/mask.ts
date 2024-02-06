@@ -87,12 +87,10 @@ const sam = createFrameOperation({
     ui: (form) => ({
         // prompt: form.str({ default: `ball` }),
         threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
-        detection_hint: form.enum({
-            enumName: `Enum_SAMDetectorCombined_detection_hint`,
+        detection_hint: form.enum.Enum_SAMDetectorCombined_detection_hint({
             default: `center-1`,
         }),
-        mask_hint_use_negative: form.enum({
-            enumName: `Enum_SAMDetectorCombined_mask_hint_use_negative`,
+        mask_hint_use_negative: form.enum.Enum_SAMDetectorCombined_mask_hint_use_negative({
             default: `False`,
         }),
         // dilation: form.int({ default: 4, min: 0 }),

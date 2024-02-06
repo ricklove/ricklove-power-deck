@@ -154,9 +154,7 @@ const grayscale = createFrameOperation({
 
 const selectChannel = createFrameOperation({
     ui: (form) => ({
-        channel: form.enum({
-            enumName: `Enum_Image_Select_Channel_channel`,
-        }),
+        channel: form.enum.Enum_Image_Select_Channel_channel({}),
     }),
     run: ({ runtime, graph }, form, { image }) => {
         const channelImage = graph.Image_Select_Channel({
@@ -387,7 +385,7 @@ const blendImages = createFrameOperation({
                 name: form.string({ default: `b` }),
                 inverse: form.bool({ default: false }),
                 blendRatio: form.float({ default: 0.5, min: 0, max: 1, step: 0.01 }),
-                blendMode: form.enum({ enumName: `Enum_ImageBlend_blend_mode`, default: `normal` }),
+                blendMode: form.enum.Enum_ImageBlend_blend_mode({ default: `normal` }),
             }),
         }),
         // c: form.groupOpt({

@@ -7,12 +7,10 @@ const zero123 = createFrameOperation({
         seed: form.seed({}),
         steps: form.int({ default: 20 }),
         freeU: form.boolean({ default: false }),
-        sampler: form.enum({
-            enumName: `Enum_KSampler_sampler_name`,
+        sampler: form.enum.Enum_KSampler_sampler_name({
             default: `euler`,
         }),
-        scheduler: form.enum({
-            enumName: `Enum_KSampler_scheduler`,
+        scheduler: form.enum.Enum_KSampler_scheduler({
             default: `sgm_uniform`,
         }),
         depthImageVariable: form.strOpt({ default: `zoe` }),

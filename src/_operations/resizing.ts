@@ -261,8 +261,7 @@ const uncrop = createFrameOperation({
 
 const upscaleWithModel = createFrameOperation({
     ui: (form) => ({
-        model: form.enum({
-            enumName: `Enum_UpscaleModelLoader_model_name`,
+        model: form.enum.Enum_UpscaleModelLoader_model_name({
             default: `8x_NMKD-Superscale_150000_G.pth`,
         }),
         resize: form.choice({

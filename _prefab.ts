@@ -1,12 +1,10 @@
 import type { FormBuilder } from 'src/controls/FormBuilder'
 export const ui_vaeName = (form: FormBuilder) =>
-    form.enumOpt({
+    form.enumOpt.Enum_VAELoader_vae_name({
         label: 'VAE',
-        enumName: 'Enum_VAELoader_vae_name',
     })
 
 export const ui_modelName = (form: FormBuilder) =>
-    form.enum({
+    form.enum.Enum_CheckpointLoaderSimple_ckpt_name({
         label: 'Checkpoint',
-        enumName: 'Enum_CheckpointLoaderSimple_ckpt_name',
     })

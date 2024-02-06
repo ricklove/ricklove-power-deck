@@ -14,8 +14,7 @@ const sampler = createFrameOperation({
                 form.group({
                     items: () => ({
                         enabled: form.bool({ default: true }),
-                        controlNet: form.enum({
-                            enumName: 'Enum_ControlNetLoader_control_net_name',
+                        controlNet: form.enum.Enum_ControlNetLoader_control_net_name({
                             default: 'sdxl-depth-mid.safetensors',
                         }),
                         strength: form.float({ default: 1, min: 0, max: 1, step: 0.01 }),
@@ -32,8 +31,7 @@ const sampler = createFrameOperation({
                 form.group({
                     items: () => ({
                         enabled: form.bool({ default: true }),
-                        lora: form.enum({
-                            enumName: 'Enum_LoRA_Stacker_lora_name_1',
+                        lora: form.enum.Enum_LoRA_Stacker_lora_name_1({
                             default: 'add-detail-xl.safetensors',
                         }),
                         clipStrength: form.float({ default: 1, min: 0, max: 1, step: 0.01 }),
@@ -54,16 +52,13 @@ const sampler = createFrameOperation({
         endStep: form.intOpt({ default: 1000, min: 0, max: 100 }),
         endStepFromEnd: form.intOpt({ default: 0, min: 0, max: 100 }),
 
-        checkpoint: form.enum({
-            enumName: 'Enum_CheckpointLoaderSimple_ckpt_name',
+        checkpoint: form.enum.Enum_CheckpointLoaderSimple_ckpt_name({
             default: 'nightvisionXLPhotorealisticPortrait_release0770Bakedvae.safetensors',
         }),
-        sampler: form.enum({
-            enumName: `Enum_KSampler_sampler_name`,
+        sampler: form.enum.Enum_KSampler_sampler_name({
             default: `dpmpp_3m_sde_gpu`,
         }),
-        scheduler: form.enum({
-            enumName: `Enum_KSampler_scheduler`,
+        scheduler: form.enum.Enum_KSampler_scheduler({
             default: `karras`,
         }),
         sdxl: form.bool({ default: true }),
@@ -277,8 +272,7 @@ const ultimateUpscale = createFrameOperation({
                 form.group({
                     items: () => ({
                         enabled: form.bool({ default: true }),
-                        controlNet: form.enum({
-                            enumName: 'Enum_ControlNetLoader_control_net_name',
+                        controlNet: form.enum.Enum_ControlNetLoader_control_net_name({
                             default: 'control_v11f1e_sd15_tile.pth',
                         }),
                         strength: form.float({ default: 1, min: 0, max: 1, step: 0.01 }),
@@ -304,8 +298,7 @@ const ultimateUpscale = createFrameOperation({
         // endStep: form.intOpt({ default: 1000, min: 0, max: 100 }),
         // endStepFromEnd: form.intOpt({ default: 0, min: 0, max: 100 }),
 
-        checkpoint: form.enum({
-            enumName: 'Enum_CheckpointLoaderSimple_ckpt_name',
+        checkpoint: form.enum.Enum_CheckpointLoaderSimple_ckpt_name({
             default: 'realisticVisionV51_v51VAE-inpainting.safetensors',
         }),
         // sdxl: form.bool({ default: true }),
