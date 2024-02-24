@@ -254,8 +254,9 @@ const uncrop = createFrameOperation({
             mask: uncroppedReplaceMaskImage,
             blend_percentage: 1,
         }).outputs.IMAGE
+        const resultImage = graph.Images_to_RGB({ images: restoredImage }).outputs.IMAGE
 
-        return { image: restoredImage }
+        return { image: resultImage }
     },
 })
 

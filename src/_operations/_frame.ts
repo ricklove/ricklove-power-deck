@@ -350,7 +350,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         })
 
                         throw new PreviewStopError({
-                            previewCount: !frame.afterFramePrompt ? 3 : undefined,
+                            previewCount: !frame.afterFramePrompt?.length ? 3 : undefined,
                             afterFramePrompt: frame.afterFramePrompt,
                         })
                     }

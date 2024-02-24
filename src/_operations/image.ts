@@ -83,6 +83,7 @@ const zoeDepth = createFrameOperation({
                 mask: graph.MaskToImage({ mask: removeMask }),
                 blend_percentage: 1,
             }).outputs.IMAGE
+            resultImage = graph.Images_to_RGB({ images: resultImage }).outputs.IMAGE
         }
         if (form.invertCutoffMin) {
             const removeMask = graph.ImageColorToMask({
@@ -96,6 +97,7 @@ const zoeDepth = createFrameOperation({
                 mask: graph.MaskToImage({ mask: removeMask }),
                 blend_percentage: 1,
             }).outputs.IMAGE
+            resultImage = graph.Images_to_RGB({ images: resultImage }).outputs.IMAGE
         }
 
         return { image: resultImage }

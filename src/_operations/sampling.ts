@@ -40,8 +40,12 @@ const sampler = createFrameOperation({
                 }),
         }),
 
-        positive: form.str({}),
-        negative: form.str({}),
+        positive: form.string({
+            textarea: true,
+        }),
+        negative: form.string({
+            textarea: true,
+        }),
 
         seed: form.seed({}),
 
@@ -67,6 +71,18 @@ const sampler = createFrameOperation({
         freeU: form.bool({ default: true }),
         config: form.float({ default: 1.5 }),
         batchSizeForPyramidReduce: form.int({ default: 1, min: 1, max: 16 }),
+        script: form.string({
+            textarea: true,
+            placeHolder: `
+            1+3/12 (start at 1 for 3 steps at total steps 12)
+            1+3/12@0.5 (start at 1 for 3 steps at total steps 12 at config 0.5)
+            config=1.5 (set config to 1.5 for next step)
+            *3(multiply latents)
+            merge(merge latents)
+            init=0.5(merge with original latent at blend strength)
+            controlnet[0]@0.5 (set controlnet strength to 0.5)
+            `,
+        }),
     }),
     run: (state, form, frame) => {
         const { runtime, graph } = state
@@ -181,6 +197,7 @@ const sampler = createFrameOperation({
         })()
 
         let latent = startLatent._LATENT
+        let latentCount = 1
         // latent = graph.LatentUpscaleBy({ samples: latent, scale_by: 1.1, upscale_method: `bicubic` }).outputs.LATENT
         // latent = graph.LatentCrop({ samples: latent, width: 1024, height: 1024, x: width* }).outputs.LATENT
 
@@ -200,58 +217,217 @@ const sampler = createFrameOperation({
                 samples: latent,
                 amount: form.batchSizeForPyramidReduce,
             }).outputs.LATENT
+            latentCount = form.batchSizeForPyramidReduce
         }
 
-        const startStep = Math.max(
-            0,
-            Math.min(
-                form.steps - 1,
-                form.startStep ? form.startStep : form.startStepFromEnd ? form.steps - form.startStepFromEnd : 0,
-            ),
-        )
-        const endStep = Math.max(
-            1,
-            Math.min(
-                form.steps,
-                form.endStep
-                    ? form.endStep
-                    : form.endStepFromEnd
-                    ? form.steps - form.endStepFromEnd
-                    : form.stepsToIterate
-                    ? startStep + form.stepsToIterate
-                    : form.steps,
-            ),
-        )
-        const seed = form.seed
-        const sampler = graph.KSampler_Adv$5_$1Efficient$2({
-            add_noise: form.add_noise ? `enable` : `disable`,
-            return_with_leftover_noise: `disable`,
-            vae_decode: `false`,
-            preview_method: `none`,
-            noise_seed: seed,
-            steps: form.steps,
-            start_at_step: startStep,
-            end_at_step: endStep,
+        const parseScript = (script: string) => {
+            if (!script.trim()) {
+                return [{ index: 0 }]
+            }
 
-            cfg: form.config,
-            sampler_name: form.lcm || form.lcmTurbo ? 'lcm' : form.sampler,
-            scheduler: form.lcm || form.lcmTurbo ? 'normal' : form.scheduler,
+            const lines = script
+                .split(`\n`)
+                .map((x) => x.trim())
+                .filter((x) => x && !x.startsWith(`//`))
+            const commands = [] as {
+                index: number
+                startStep?: number
+                stepsToIterate?: number
+                steps?: number
+                // controlNetStrength?: number
+                config?: number
+                mergeLatents?: boolean
+                multiplyLatents?: number
+                blendInitialLatent?: number
+            }[]
 
-            model: form.freeU
-                ? graph.FreeU({ model: loader.outputs.MODEL, b1: 1.2, b2: 1.2, s1: 1.1, s2: 0.2 }).outputs.MODEL
-                : loader,
-            positive: loader.outputs.CONDITIONING$6, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
-            negative: loader.outputs.CONDITIONING$7, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
-            // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
-            // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
-            latent_image: latent,
-        })
+            let command = { index: 0 } as (typeof commands)[0]
+            for (const l of lines) {
+                let m = l.match(/^([\d]+)\s*\+\s*(\d+)\s*\/\s*(\d+)(?:\s*@\s*([\d\.]+))$/)
+                if (m) {
+                    command.startStep = parseInt(m[1])
+                    command.stepsToIterate = parseInt(m[2])
+                    command.steps = parseInt(m[3])
+                    if (m[4]) {
+                        command.config = parseFloat(m[4])
+                    }
+
+                    commands.push(command)
+                    command = { index: commands.length }
+                    continue
+                }
+
+                m = l.match(/^config\s*\=\s*([\d\.]+)$/i)
+                if (m) {
+                    command.config = parseFloat(m[1])
+                    continue
+                }
+
+                m = l.match(/^init\s*\=\s*([\d\.]+)$/i)
+                if (m) {
+                    command.blendInitialLatent = parseFloat(m[1])
+                    commands.push(command)
+                    command = { index: commands.length }
+                    continue
+                }
+
+                m = l.match(/^\*(\d+)$/i)
+                if (m) {
+                    command.multiplyLatents = parseInt(m[1])
+                    commands.push(command)
+                    command = { index: commands.length }
+                    continue
+                }
+
+                m = l.match(/^merge$/i)
+                if (m) {
+                    command.mergeLatents = true
+                    commands.push(command)
+                    command = { index: commands.length }
+                    continue
+                }
+            }
+
+            if (!commands.length) {
+                commands.push({ index: 0 })
+            }
+
+            runtime.output_text({
+                title: `sampler script`,
+                message: JSON.stringify(commands, null, 2),
+            })
+
+            return commands
+        }
+
+        const scriptCommands = parseScript(form.script)
+        for (const command of scriptCommands ?? [{}]) {
+            if (scriptCommands.length > 1 && command.index === 0) {
+                graph.PreviewImage({ images: graph.VAEDecode({ samples: latent, vae: loader }).outputs.IMAGE })
+            }
+
+            if (command.multiplyLatents) {
+                latent = graph.RepeatLatentBatch({
+                    samples: latent,
+                    amount: command.multiplyLatents,
+                }).outputs.LATENT
+                latentCount *= command.multiplyLatents
+                continue
+            }
+            if (command.mergeLatents) {
+                const allLatents = latent
+                latent = graph.selectLatentFromBatch_$_O({ samples: allLatents, index: 0 }).outputs.LATENT
+
+                for (let i = 1; i < latentCount; i++) {
+                    latent = graph.LatentBlend({
+                        samples1: graph.selectLatentFromBatch_$_O({ samples: allLatents, index: i }).outputs.LATENT,
+                        samples2: latent,
+                        blend_factor: 1 / (i + 1),
+                    }).outputs.LATENT
+                }
+
+                latent = graph.SetLatentNoiseMask({ samples: latent, mask: replaceMask }).outputs.LATENT
+                graph.PreviewImage({ images: graph.VAEDecode({ samples: latent, vae: loader }).outputs.IMAGE })
+                continue
+            }
+            if (command.blendInitialLatent !== undefined) {
+                latent = graph.LatentBlend({
+                    samples1: startLatent._LATENT,
+                    samples2: latent,
+
+                    // samples1: graph.selectLatentFromBatch_$_O({ samples: latent, index: 0 }).outputs.LATENT,
+                    // samples2: graph.VAEEncode({ pixels: startImage, vae: loader }),
+                    blend_factor: command.blendInitialLatent,
+                }).outputs.LATENT
+
+                latent = graph.SetLatentNoiseMask({ samples: latent, mask: replaceMask }).outputs.LATENT
+                graph.PreviewImage({ images: graph.VAEDecode({ samples: latent, vae: loader }).outputs.IMAGE })
+                continue
+            }
+
+            const _form = {
+                steps: form.steps,
+                startStep: form.startStep,
+                startStepFromEnd: form.startStepFromEnd,
+                endStep: form.endStep,
+                endStepFromEnd: form.endStepFromEnd,
+                stepsToIterate: form.stepsToIterate,
+
+                seed: form.seed,
+                add_noise: form.add_noise,
+                config: form.config,
+            }
+
+            if (command.steps) {
+                _form.steps = command.steps
+                _form.startStep = command.startStep
+                _form.startStepFromEnd = undefined
+                _form.endStep = undefined
+                _form.endStepFromEnd = undefined
+                _form.stepsToIterate = command.stepsToIterate
+            }
+
+            _form.seed = form.seed + command.index * 1037
+            _form.add_noise = command.index === 0 ? form.add_noise : false
+            _form.config = command.config ?? form.config
+
+            const startStep = Math.max(
+                0,
+                Math.min(
+                    _form.steps - 1,
+                    _form.startStep ? _form.startStep : _form.startStepFromEnd ? _form.steps - _form.startStepFromEnd : 0,
+                ),
+            )
+            const endStep = Math.max(
+                1,
+                Math.min(
+                    _form.steps,
+                    _form.endStep
+                        ? _form.endStep
+                        : _form.endStepFromEnd
+                        ? _form.steps - _form.endStepFromEnd
+                        : _form.stepsToIterate
+                        ? startStep + _form.stepsToIterate
+                        : _form.steps,
+                ),
+            )
+            const seed = _form.seed
+            const sampler = graph.KSampler_Adv$5_$1Efficient$2({
+                add_noise: _form.add_noise ? `enable` : `disable`,
+                return_with_leftover_noise: `disable`,
+                vae_decode: `false`,
+                preview_method: `none`,
+                noise_seed: seed,
+                steps: _form.steps,
+                start_at_step: startStep,
+                end_at_step: endStep,
+
+                cfg: _form.config,
+                sampler_name: form.lcm || form.lcmTurbo ? 'lcm' : form.sampler,
+                scheduler: form.lcm || form.lcmTurbo ? 'normal' : form.scheduler,
+
+                model: form.freeU
+                    ? graph.FreeU({ model: loader.outputs.MODEL, b1: 1.2, b2: 1.2, s1: 1.1, s2: 0.2 }).outputs.MODEL
+                    : loader,
+                positive: loader.outputs.CONDITIONING$6, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
+                negative: loader.outputs.CONDITIONING$7, //graph.CLIPTextEncode({ text: form.positive, clip: loader }),
+                // negative: graph.CLIPTextEncode({ text: '', clip: loader }),
+                // latent_image: graph.EmptyLatentImage({ width: 512, height: 512, batch_size: 1 }),
+                latent_image: latent,
+            })
+
+            latent = sampler.outputs.LATENT
+
+            if (scriptCommands.length > 1) {
+                graph.PreviewImage({ images: graph.VAEDecode({ samples: latent, vae: loader }).outputs.IMAGE })
+            }
+        }
 
         // const finalImage = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE
 
         // return { image: finalImage }
 
-        let batchImages = graph.VAEDecode({ samples: sampler, vae: loader }).outputs.IMAGE
+        let batchImages = graph.VAEDecode({ samples: latent, vae: loader }).outputs.IMAGE
 
         if (form.batchSizeForPyramidReduce <= 1) {
             return { image: batchImages }

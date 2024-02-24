@@ -227,7 +227,7 @@ app({
                         })
 
                         i++
-                        if (err.options?.previewCount && err.options.previewCount > i) {
+                        if (err.options?.previewCount && err.options.previewCount <= i) {
                             break
                         }
                     }

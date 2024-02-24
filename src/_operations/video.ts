@@ -37,16 +37,15 @@ const filmInterpolationDoubleBack = createFrameOperation({
                     loadFromScopeWithExtras(state, form.inputVariableName)?.cacheIndex ?? 0,
                 ),
             })
-            const filmModelNode = graph.Load_Film_Model_$1mtb$2({
-                film_model: `Style`,
-            })
+
             let currentImages = loadImageBatchNode.outputs.image
 
             for (let i = 0; i < form.iterations; i++) {
-                const filmFrames = graph.Film_Interpolation_$1mtb$2({
-                    film_model: filmModelNode,
-                    images: currentImages,
-                    interpolate: 1,
+                const filmFrames = graph.FILM_VFI({
+                    ckpt_name: `film_net_fp32.pt`,
+                    frames: currentImages,
+                    cache_in_fp16: false,
+                    multiplier: 2,
                 })
                 const filmframes_removedFirst = graph.ImageBatchRemove({
                     images: filmFrames,
@@ -72,10 +71,11 @@ const filmInterpolationDoubleBack = createFrameOperation({
                         }).outputs.batch,
                     }),
                 })
-                const filmFrames2 = graph.Film_Interpolation_$1mtb$2({
-                    film_model: filmModelNode,
-                    images: middleFrames_withFirstAndLast,
-                    interpolate: 1,
+                const filmFrames2 = graph.FILM_VFI({
+                    ckpt_name: `film_net_fp32.pt`,
+                    frames: middleFrames_withFirstAndLast,
+                    cache_in_fp16: false,
+                    multiplier: 2,
                 })
                 const filmframes2_removedFirst = graph.ImageBatchRemove({
                     images: filmFrames2,
@@ -168,16 +168,14 @@ const filmInterpolationPyramidReduceImageBatch = createFrameOperation({
     run: (state, form, { image }) => {
         const { runtime, graph } = state
 
-        const filmModelNode = graph.Load_Film_Model_$1mtb$2({
-            film_model: `Style`,
-        })
         let currentImages = image
 
         for (let i = 0; i < form.imageBatchSize - 1; i++) {
-            const filmFrames = graph.Film_Interpolation_$1mtb$2({
-                film_model: filmModelNode,
-                images: currentImages,
-                interpolate: 1,
+            const filmFrames = graph.FILM_VFI({
+                ckpt_name: `film_net_fp32.pt`,
+                frames: currentImages,
+                cache_in_fp16: false,
+                multiplier: 2,
             })
             const filmframes_removedFirst = graph.ImageBatchRemove({
                 images: filmFrames,
