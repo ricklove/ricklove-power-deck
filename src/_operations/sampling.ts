@@ -460,8 +460,8 @@ const ultimateUpscale = createImageOperation({
                 }),
         }),
 
-        positive: form.str({}),
-        negative: form.str({}),
+        positive: form.string({}),
+        negative: form.string({}),
 
         seed: form.seed({}),
         steps: form.int({ default: 20 }),

@@ -237,6 +237,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                         k,
                                         () =>
                                             form.group({
+                                                collapsible: false,
                                                 items: () => ({
                                                     ...(!showLoadVariables
                                                         ? {}
@@ -244,6 +245,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                                               __loadVariables: form.group({
                                                                   className: `text-xs`,
                                                                   label: false,
+                                                                  collapsible: false,
                                                                   items: () => ({
                                                                       loadVariables: form.groupOpt({
                                                                           items: () => ({
@@ -262,6 +264,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                                               __storeVariables: form.group({
                                                                   className: `text-xs`,
                                                                   label: false,
+                                                                  collapsible: false,
                                                                   items: () => ({
                                                                       storeVariables: form.groupOpt({
                                                                           items: () => ({

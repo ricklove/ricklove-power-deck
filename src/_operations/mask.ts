@@ -107,7 +107,7 @@ const drawRegion = createImageOperation({
 
 const clipSeg = createImageOperation({
     ui: (form) => ({
-        prompt: form.str({ default: `ball` }),
+        prompt: form.string({ default: `ball` }),
         threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
         dilation: form.int({ default: 4, min: 0 }),
         blur: form.float({ default: 1, min: 0 }),
@@ -188,7 +188,7 @@ const segment = createImageOperation({
 
 const sam = createImageOperation({
     ui: (form) => ({
-        // prompt: form.str({ default: `ball` }),
+        // prompt: form.string({ default: `ball` }),
         threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
         detection_hint: form.enum.Enum_SAMDetectorCombined_detection_hint({
             default: `center-1`,

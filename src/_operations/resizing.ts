@@ -40,24 +40,24 @@ const cropResizeByMask = createFrameOperation({
         }),
         interpolate: form.groupOpt({
             items: () => ({
-                maskVariableCachedName: form.str({ default: `maskA` }),
+                maskVariableCachedName: form.string({ default: `maskA` }),
 
-                // firstMaskImageFilePath: form.str({ default: `../input/00001.png` }),
-                // lastMaskImageFilePath: form.str({ default: `../input/01000.png` }),
+                // firstMaskImageFilePath: form.string({ default: `../input/00001.png` }),
+                // lastMaskImageFilePath: form.string({ default: `../input/01000.png` }),
                 // firstFrameId: form.int({default:0}),
                 // lastFrameId: form.int({}),
-                // lastMaskVariable: form.str({ default: `maskB` }),
+                // lastMaskVariable: form.string({ default: `maskB` }),
                 // useFrameIdIndexRatio: form.bool({ default: true }),
             }),
         }),
         storeVariables: form.groupOpt({
             // default: true,
             items: () => ({
-                beforeCropImage: form.strOpt({ default: `beforeCropImage` }),
-                beforeCropMask: form.strOpt({ default: `beforeCropMask` }),
-                cropAreaMask: form.strOpt({ default: `cropAreaMask` }),
-                afterCropImage: form.strOpt({ default: `afterCropImage` }),
-                afterCropMask: form.strOpt({ default: `afterCropMask` }),
+                beforeCropImage: form.stringOpt({ default: `beforeCropImage` }),
+                beforeCropMask: form.stringOpt({ default: `beforeCropMask` }),
+                cropAreaMask: form.stringOpt({ default: `cropAreaMask` }),
+                afterCropImage: form.stringOpt({ default: `afterCropImage` }),
+                afterCropMask: form.stringOpt({ default: `afterCropMask` }),
             }),
         }),
     }),
@@ -213,10 +213,10 @@ const uncrop = createImageOperation({
     ui: (form) => ({
         variables: form.group({
             items: () => ({
-                beforeCropImage: form.str({ default: `beforeCropImage` }),
-                cropAreaMask: form.str({ default: `cropAreaMask` }),
-                pasteImage: form.str({ default: `pasteImage` }),
-                pasteMask: form.str({ default: `pasteMask` }),
+                beforeCropImage: form.string({ default: `beforeCropImage` }),
+                cropAreaMask: form.string({ default: `cropAreaMask` }),
+                pasteImage: form.string({ default: `pasteImage` }),
+                pasteMask: form.string({ default: `pasteMask` }),
             }),
         }),
     }),

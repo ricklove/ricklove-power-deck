@@ -41,17 +41,18 @@ const cacheEverything = createFrameOperation({
         cache: form.group({
             label: false,
             layout: `H`,
+            collapsible: false,
             items: () => ({
                 buildCache: form.inlineRun({ text: `Cache Me If You Can!`, kind: `special` }),
                 rebuildCache: form.inlineRun({ text: `Do it again!`, kind: `special` }),
             }),
         }),
         // path: form.string({ default: `../input/working/NAME/#####.png` }),
-        // image: form.strOpt({ default: `imageFinal` }),
+        // image: form.stringOpt({ default: `imageFinal` }),
         // imageVariables: form.list({
         //     element: () => form.string({ default: `imageVariable` }),
         // }),
-        // mask: form.strOpt({ default: `maskFinal` }),
+        // mask: form.stringOpt({ default: `maskFinal` }),
         // maskVariables: form.list({
         //     element: () => form.string({ default: `maskVariable` }),
         // }),

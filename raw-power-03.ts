@@ -11,7 +11,7 @@ app({
             kind: `warning`,
             text: `Cancel!`,
         }),
-        // loadFormJson: form.str({
+        // loadFormJson: form.string({
         //     textarea: true,
         // }),
         // loadForm: form.inlineRun({

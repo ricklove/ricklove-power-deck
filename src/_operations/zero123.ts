@@ -13,7 +13,7 @@ const zero123 = createFrameOperation({
         scheduler: form.enum.Enum_KSampler_scheduler({
             default: `sgm_uniform`,
         }),
-        depthImageVariable: form.strOpt({ default: `zoe` }),
+        depthImageVariable: form.stringOpt({ default: `zoe` }),
         width: form.int({ default: 256 }),
         height: form.int({ default: 256 }),
         segmentCount: form.int({ default: 1 }),

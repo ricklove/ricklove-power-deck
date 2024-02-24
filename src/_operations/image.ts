@@ -2,6 +2,9 @@ import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createImageOperation } from './_frame'
 
 const emptyImage = createImageOperation({
+    options: {
+        hideLoadVariables: true,
+    },
     ui: (form) => ({
         width: form.int({ default: 512, min: 0 }),
         height: form.int({ default: 512, min: 0 }),
@@ -21,7 +24,7 @@ const zoeDepth = createImageOperation({
     ui: (form) => ({
         cutoffByMask: form.groupOpt({
             items: () => ({
-                variable: form.str({ default: `mask` }),
+                variable: form.string({ default: `mask` }),
                 erode: form.int({ default: 4, min: 1, max: 64 }),
                 // preview: form.inlineRun({}),
             }),
