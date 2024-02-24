@@ -196,9 +196,9 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
     return frameIdProvider
 }
 
-export type FrameOperation<TFields extends WidgetDict> = {
+export type FrameOperation<TFields extends WidgetDict, TFrame = Frame> = {
     ui: (form: FormBuilder) => TFields
-    run: (state: AppState, form: { [k in keyof TFields]: TFields[k]['$Output'] }, frame: Frame) => Partial<Frame>
+    run: (state: AppState, form: { [k in keyof TFields]: TFields[k]['$Output'] }, frame: TFrame) => Partial<TFrame>
     options?: {
         simple?: boolean
         hidePreview?: boolean
@@ -208,6 +208,9 @@ export type FrameOperation<TFields extends WidgetDict> = {
     }
 }
 export const createFrameOperation = <TFields extends WidgetDict>(op: FrameOperation<TFields>): FrameOperation<TFields> => op
+export const createImageOperation = <TFields extends WidgetDict>(
+    op: FrameOperation<TFields, Pick<Frame, `image` | `mask`>>,
+): FrameOperation<TFields, Pick<Frame, `image` | `mask`>> => op
 
 export const createFrameOperationValue = <TValue extends Widget>(op: {
     ui: (form: FormBuilder) => TValue

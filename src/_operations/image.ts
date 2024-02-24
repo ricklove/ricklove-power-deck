@@ -1,7 +1,7 @@
 import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation } from './_frame'
+import { createImageOperation } from './_frame'
 
-const emptyImage = createFrameOperation({
+const emptyImage = createImageOperation({
     ui: (form) => ({
         width: form.int({ default: 512, min: 0 }),
         height: form.int({ default: 512, min: 0 }),
@@ -17,7 +17,7 @@ const emptyImage = createFrameOperation({
     },
 })
 
-const zoeDepth = createFrameOperation({
+const zoeDepth = createImageOperation({
     ui: (form) => ({
         cutoffByMask: form.groupOpt({
             items: () => ({
@@ -104,7 +104,7 @@ const zoeDepth = createFrameOperation({
     },
 })
 
-const hedEdge = createFrameOperation({
+const hedEdge = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.HEDPreprocessor({
@@ -117,7 +117,7 @@ const hedEdge = createFrameOperation({
     },
 })
 
-const pidiEdge = createFrameOperation({
+const pidiEdge = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.PiDiNetPreprocessor({
@@ -129,7 +129,7 @@ const pidiEdge = createFrameOperation({
     },
 })
 
-const scribbleEdge = createFrameOperation({
+const scribbleEdge = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.ScribblePreprocessor({
@@ -140,7 +140,7 @@ const scribbleEdge = createFrameOperation({
     },
 })
 
-const threshold = createFrameOperation({
+const threshold = createImageOperation({
     ui: (form) => ({
         threshold: form.int({ default: 128, min: 0, max: 255 }),
         invertInput: form.boolean({ default: true }),
@@ -159,7 +159,7 @@ const threshold = createFrameOperation({
     },
 })
 
-const grayscale = createFrameOperation({
+const grayscale = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.ImageEffectsGrayscale({
@@ -170,7 +170,7 @@ const grayscale = createFrameOperation({
     },
 })
 
-const selectChannel = createFrameOperation({
+const selectChannel = createImageOperation({
     ui: (form) => ({
         channel: form.enum.Enum_Image_Select_Channel_channel({}),
     }),
@@ -197,7 +197,7 @@ const selectChannel = createFrameOperation({
     },
 })
 
-const adjustChannelLevels = createFrameOperation({
+const adjustChannelLevels = createImageOperation({
     ui: (form) => ({
         redMin: form.int({ default: 0, min: 0, max: 255 }),
         redMax: form.int({ default: 255, min: 0, max: 255 }),
@@ -243,7 +243,7 @@ const adjustChannelLevels = createFrameOperation({
     },
 })
 
-const baeNormal = createFrameOperation({
+const baeNormal = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.BAE$7NormalMapPreprocessor({
@@ -254,7 +254,7 @@ const baeNormal = createFrameOperation({
     },
 })
 
-const openPose = createFrameOperation({
+const openPose = createImageOperation({
     ui: (form) => ({
         body: form.bool({ default: true }),
         face: form.bool({ default: true }),
@@ -272,7 +272,7 @@ const openPose = createFrameOperation({
     },
 })
 
-const enhanceLighting = createFrameOperation({
+const enhanceLighting = createImageOperation({
     ui: (form) => ({
         // previewAll: form.inlineRun({}),
         preview: form.groupOpt({
@@ -334,7 +334,7 @@ const enhanceLighting = createFrameOperation({
     },
 })
 
-const selectColor = createFrameOperation({
+const selectColor = createImageOperation({
     ui: (form) => ({
         color: form.color({ default: `#000000` }),
         variance: form.int({ default: 10, min: 0, max: 255 }),
@@ -371,7 +371,7 @@ const selectColor = createFrameOperation({
     },
 })
 
-const invertImage = createFrameOperation({
+const invertImage = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const result = graph.InvertImage({
@@ -381,7 +381,7 @@ const invertImage = createFrameOperation({
     },
 })
 
-const blendImages = createFrameOperation({
+const blendImages = createImageOperation({
     options: {
         hideLoadVariables: true,
     },

@@ -1,7 +1,7 @@
 import { loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation } from './_frame'
+import { createImageOperation } from './_frame'
 
-const storeImageVariable = createFrameOperation({
+const storeImageVariable = createImageOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -11,7 +11,7 @@ const storeImageVariable = createFrameOperation({
     },
 })
 
-const loadImageVariable = createFrameOperation({
+const loadImageVariable = createImageOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -20,7 +20,7 @@ const loadImageVariable = createFrameOperation({
     },
 })
 
-const storeMaskVariable = createFrameOperation({
+const storeMaskVariable = createImageOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -30,7 +30,7 @@ const storeMaskVariable = createFrameOperation({
     },
 })
 
-const loadMaskVariable = createFrameOperation({
+const loadMaskVariable = createImageOperation({
     ui: (form) => ({
         name: form.string({ default: `a` }),
     }),
@@ -39,7 +39,7 @@ const loadMaskVariable = createFrameOperation({
     },
 })
 
-const storeVariables = createFrameOperation({
+const storeVariables = createImageOperation({
     ui: (form) => ({
         image: form.stringOpt({ default: `a` }),
         mask: form.stringOpt({ default: `a` }),
@@ -55,7 +55,7 @@ const storeVariables = createFrameOperation({
     },
 })
 
-const loadVariables = createFrameOperation({
+const loadVariables = createImageOperation({
     ui: (form) => ({
         image: form.stringOpt({ default: `a` }),
         mask: form.stringOpt({ default: `a` }),

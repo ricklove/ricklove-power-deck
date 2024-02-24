@@ -1,8 +1,7 @@
-import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
-import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation } from './_frame'
+import { loadFromScope } from '../_appState'
+import { createImageOperation } from './_frame'
 
-const solidMask = createFrameOperation({
+const solidMask = createImageOperation({
     ui: (form) => ({
         width: form.int({ default: 512, min: 0 }),
         height: form.int({ default: 512, min: 0 }),
@@ -17,7 +16,7 @@ const solidMask = createFrameOperation({
     },
 })
 
-const drawRegion = createFrameOperation({
+const drawRegion = createImageOperation({
     ui: (form) => ({
         // region: form.regional({
         //     width: 100,
@@ -106,7 +105,7 @@ const drawRegion = createFrameOperation({
     },
 })
 
-const clipSeg = createFrameOperation({
+const clipSeg = createImageOperation({
     ui: (form) => ({
         prompt: form.str({ default: `ball` }),
         threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
@@ -126,7 +125,7 @@ const clipSeg = createFrameOperation({
     },
 })
 
-const imageToMask = createFrameOperation({
+const imageToMask = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image, mask }) => {
         const imageMask = graph.Image_To_Mask({
@@ -138,7 +137,7 @@ const imageToMask = createFrameOperation({
     },
 })
 
-const maskToImage = createFrameOperation({
+const maskToImage = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image, mask }) => {
         const maskImage = graph.MaskToImage({
@@ -149,7 +148,7 @@ const maskToImage = createFrameOperation({
     },
 })
 
-const erodeOrDilate = createFrameOperation({
+const erodeOrDilate = createImageOperation({
     ui: (form) => ({
         erodeOrDilate: form.int({ min: -64, max: 64 }),
     }),
@@ -164,7 +163,7 @@ const erodeOrDilate = createFrameOperation({
     },
 })
 
-const segment = createFrameOperation({
+const segment = createImageOperation({
     ui: (form) => ({
         keepIndex: form.int({ default: 0, min: 0, max: 10 }),
         keepCount: form.int({ default: 1, min: 1, max: 10 }),
@@ -187,7 +186,7 @@ const segment = createFrameOperation({
     },
 })
 
-const sam = createFrameOperation({
+const sam = createImageOperation({
     ui: (form) => ({
         // prompt: form.str({ default: `ball` }),
         threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
@@ -223,7 +222,7 @@ const sam = createFrameOperation({
     },
 })
 
-const combineMasks = createFrameOperation({
+const combineMasks = createImageOperation({
     options: {
         hideLoadVariables: true,
     },

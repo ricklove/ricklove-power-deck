@@ -1,5 +1,5 @@
 import { loadFromScope, loadFromScopeWithExtras } from '../_appState'
-import { createFrameOperation, getCacheFilePattern } from './_frame'
+import { createFrameOperation, createImageOperation, getCacheFilePattern } from './_frame'
 import { storageOperations } from './storage'
 
 const cropResizeByMask = createFrameOperation({
@@ -206,7 +206,7 @@ const cropResizeByMask = createFrameOperation({
     },
 })
 
-const uncrop = createFrameOperation({
+const uncrop = createImageOperation({
     options: {
         hideLoadVariables: true,
     },
@@ -260,7 +260,7 @@ const uncrop = createFrameOperation({
     },
 })
 
-const upscaleWithModel = createFrameOperation({
+const upscaleWithModel = createImageOperation({
     ui: (form) => ({
         model: form.enum.Enum_UpscaleModelLoader_model_name({
             default: `8x_NMKD-Superscale_150000_G.pth`,
@@ -323,7 +323,7 @@ const upscaleWithModel = createFrameOperation({
     },
 })
 
-const resize = createFrameOperation({
+const resize = createImageOperation({
     ui: (form) => ({
         ratio: form.float({ default: 1 }),
     }),

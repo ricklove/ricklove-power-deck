@@ -1,7 +1,6 @@
-import { createFrameOperation } from './_frame'
-import { videoOperations } from './video'
+import { createImageOperation } from './_frame'
 
-const interactiveMask = createFrameOperation({
+const interactiveMask = createImageOperation({
     ui: (form) => ({
         // imageMask: form.image({}),
         erodeCenter: form.int({ default: 0, max: 126 }),

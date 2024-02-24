@@ -1,7 +1,7 @@
 import { loadFromScope } from '../_appState'
-import { createFrameOperation } from './_frame'
+import { createImageOperation } from './_frame'
 
-const faceSwap = createFrameOperation({
+const faceSwap = createImageOperation({
     ui: (form) => ({
         faceImageVariable: form.string({}),
     }),

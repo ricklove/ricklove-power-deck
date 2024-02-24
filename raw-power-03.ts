@@ -20,9 +20,11 @@ app({
         // }),
         imageSource: form.choice({
             items: {
-                image: () => form.image({}),
+                empty: () => form.size({ label: false }),
+                image: () => form.image({ label: false }),
                 frames: () =>
                     form.group({
+                        label: false,
                         items: () => ({
                             directory: form.string({ default: `../input/video` }),
                             workingDirectory: form.string({ default: `../input/video/working` }),

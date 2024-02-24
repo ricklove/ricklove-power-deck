@@ -1,9 +1,9 @@
 import { PreviewStopError, loadFromScope } from '../_appState'
-import { createFrameOperation } from './_frame'
+import { createImageOperation } from './_frame'
 import { storageOperations } from './storage'
 import { videoOperations } from './video'
 
-const sampler = createFrameOperation({
+const sampler = createImageOperation({
     ui: (form) => ({
         useImpaintingEncode: form.bool({ default: false }),
         previewLatent: form.inlineRun({}),
@@ -441,7 +441,7 @@ const sampler = createFrameOperation({
     },
 })
 
-const ultimateUpscale = createFrameOperation({
+const ultimateUpscale = createImageOperation({
     ui: (form) => ({
         controlNet: form.list({
             element: () =>
