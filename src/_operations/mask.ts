@@ -1,10 +1,113 @@
-import { ComfyWorkflowBuilder } from 'src/back/NodeBuilder'
-import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { loadFromScope } from '../_appState'
+import { createImageOperation } from './_frame'
 
-const clipSeg = createFrameOperation({
+const solidMask = createImageOperation({
     ui: (form) => ({
-        prompt: form.str({ default: `ball` }),
+        width: form.int({ default: 512, min: 0 }),
+        height: form.int({ default: 512, min: 0 }),
+    }),
+    run: ({ runtime, graph }, form, { image }) => {
+        const result = graph.SolidMask({
+            width: form.width,
+            height: form.height,
+        }).outputs.MASK
+
+        return { mask: result }
+    },
+})
+
+const drawRegion = createImageOperation({
+    ui: (form) => ({
+        // region: form.regional({
+        //     width: 100,
+        //     height: 100,
+        //     initialPosition: () => ({
+        //         x: 0,
+        //         y: 0,
+        //         width: 50,
+        //         height: 100,
+        //     }),
+        //     element: () => form.string({}),
+        // }),
+        left: form.number({ min: 0, max: 1, step: 0.001 }),
+        right: form.number({ default: 1, min: 0, max: 1, step: 0.001 }),
+        top: form.number({ min: 0, max: 1, step: 0.001 }),
+        bottom: form.number({ default: 1, min: 0, max: 1, step: 0.001 }),
+    }),
+    run: ({ runtime, graph }, form, { image, mask }) => {
+        // graph.Evaluate_Floats
+
+        const { INT: w, INT_1: h } = graph.Get_Image_Size({
+            image,
+        }).outputs
+
+        const whiteImage = graph.EmptyImage({
+            color: 0xffffff,
+            width: w,
+            height: h,
+        }).outputs.IMAGE
+
+        const blackImage = graph.EmptyImage({
+            color: 0,
+            width: w,
+            height: h,
+        }).outputs.IMAGE
+
+        // const pos = form.region.items[0].position
+        // const { width, height } = form.region
+        // const { t, l, b, r } = {
+        //     l: Math.max(0, Math.min(1, (pos.x - pos.width / 2) / width)),
+        //     r: Math.max(0, Math.min(1, (pos.x + pos.width / 2) / width)),
+        //     t: Math.max(0, Math.min(1, (pos.y - pos.height / 2) / height)),
+        //     b: Math.max(0, Math.min(1, (pos.y + pos.height / 2) / height)),
+        // }
+
+        const { t, l, b, r } = {
+            l: form.left,
+            r: form.right,
+            t: form.top,
+            b: form.bottom,
+        }
+
+        const cropImage = graph.Image_Paste_Crop_by_Location({
+            image: blackImage,
+            crop_image: whiteImage,
+            crop_blending: 0,
+            crop_sharpening: 0,
+            left: graph.Evaluate_Integers({
+                a: w,
+                python_expression: `a*${l}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+            right: graph.Evaluate_Integers({
+                a: w,
+                python_expression: `a*${r}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+            top: graph.Evaluate_Integers({
+                a: w,
+                python_expression: `a*${t}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+            bottom: graph.Evaluate_Integers({
+                a: w,
+                python_expression: `a*${b}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+        }).outputs.IMAGE
+
+        const resultMask = graph.Image_To_Mask({
+            image: cropImage,
+            method: `intensity`,
+        })
+
+        return { mask: resultMask }
+    },
+})
+
+const clipSeg = createImageOperation({
+    ui: (form) => ({
+        prompt: form.string({ default: `ball` }),
         threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
         dilation: form.int({ default: 4, min: 0 }),
         blur: form.float({ default: 1, min: 0 }),
@@ -22,7 +125,7 @@ const clipSeg = createFrameOperation({
     },
 })
 
-const imageToMask = createFrameOperation({
+const imageToMask = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image, mask }) => {
         const imageMask = graph.Image_To_Mask({
@@ -34,7 +137,7 @@ const imageToMask = createFrameOperation({
     },
 })
 
-const maskToImage = createFrameOperation({
+const maskToImage = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image, mask }) => {
         const maskImage = graph.MaskToImage({
@@ -45,7 +148,7 @@ const maskToImage = createFrameOperation({
     },
 })
 
-const erodeOrDilate = createFrameOperation({
+const erodeOrDilate = createImageOperation({
     ui: (form) => ({
         erodeOrDilate: form.int({ min: -64, max: 64 }),
     }),
@@ -60,9 +163,10 @@ const erodeOrDilate = createFrameOperation({
     },
 })
 
-const segment = createFrameOperation({
+const segment = createImageOperation({
     ui: (form) => ({
-        segmentIndex: form.int({ min: 0, max: 10 }),
+        keepIndex: form.int({ default: 0, min: 0, max: 10 }),
+        keepCount: form.int({ default: 1, min: 1, max: 10 }),
     }),
     run: ({ runtime, graph }, form, { image, mask }) => {
         const segs = graph.MaskToSEGS({
@@ -72,7 +176,8 @@ const segment = createFrameOperation({
         const segsFilter = graph.ImpactSEGSOrderedFilter({
             segs,
             target: `area(=w*h)`,
-            take_start: form.segmentIndex,
+            take_start: form.keepIndex,
+            take_count: form.keepCount,
         })
 
         const resultMask = graph.SegsToCombinedMask({ segs: segsFilter.outputs.filtered_SEGS }).outputs.MASK
@@ -81,16 +186,14 @@ const segment = createFrameOperation({
     },
 })
 
-const sam = createFrameOperation({
+const sam = createImageOperation({
     ui: (form) => ({
-        // prompt: form.str({ default: `ball` }),
+        // prompt: form.string({ default: `ball` }),
         threshold: form.float({ default: 0.4, min: 0, max: 1, step: 0.01 }),
-        detection_hint: form.enum({
-            enumName: `Enum_SAMDetectorCombined_detection_hint`,
+        detection_hint: form.enum.Enum_SAMDetectorCombined_detection_hint({
             default: `center-1`,
         }),
-        mask_hint_use_negative: form.enum({
-            enumName: `Enum_SAMDetectorCombined_mask_hint_use_negative`,
+        mask_hint_use_negative: form.enum.Enum_SAMDetectorCombined_mask_hint_use_negative({
             default: `False`,
         }),
         // dilation: form.int({ default: 4, min: 0 }),
@@ -119,7 +222,7 @@ const sam = createFrameOperation({
     },
 })
 
-const combineMasks = createFrameOperation({
+const combineMasks = createImageOperation({
     options: {
         hideLoadVariables: true,
     },
@@ -202,12 +305,13 @@ const combineMasks = createFrameOperation({
 })
 
 export const maskOperations = {
+    solidMask,
+    drawRegion,
     imageToMask,
     maskToImage,
-    clipSeg,
-    segment,
-    sam,
-    erodeOrDilate,
+    clipSegToMask: clipSeg,
+    selectMaskSegment: segment,
+    samImageWithMask: sam,
+    erodeOrDilateMask: erodeOrDilate,
     combineMasks,
 }
-export const maskOperationsList = createFrameOperationsGroupList(maskOperations)

@@ -1,27 +1,62 @@
 import { PreviewStopError, loadFromScope, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createImageOperation } from './_frame'
 
-const zoeDepth = createFrameOperation({
+const emptyImage = createImageOperation({
+    options: {
+        hideLoadVariables: true,
+    },
     ui: (form) => ({
+        width: form.int({ default: 512, min: 0 }),
+        height: form.int({ default: 512, min: 0 }),
+    }),
+    run: ({ runtime, graph }, form, { image }) => {
+        const resultImage = graph.EmptyImage({
+            width: form.width,
+            height: form.height,
+            color: 0,
+        }).outputs.IMAGE
+
+        return { image: resultImage }
+    },
+})
+
+const zoeDepth = createImageOperation({
+    ui: (form) => ({
+        cutoffByMask: form.groupOpt({
+            items: () => ({
+                variable: form.string({ default: `mask` }),
+                erode: form.int({ default: 4, min: 1, max: 64 }),
+                // preview: form.inlineRun({}),
+            }),
+        }),
         cutoffMid: form.float({ default: 0.5, min: 0, max: 1, step: 0.001 }),
-        cutoffRadius: form.float({ default: 0.1, min: 0, max: 1, step: 0.001 }),
+        cutoffRadius: form.float({ default: 0.6, min: 0, max: 1, step: 0.001 }),
         invertCutoffMax: form.bool({ default: false }),
         invertCutoffMin: form.bool({ default: false }),
         // normMin: form.float({ default: 2, min: 0, max: 100, step: 0.1 }),
         // normMax: form.float({ default: 85, min: 0, max: 100, step: 0.1 }),
     }),
-    run: ({ runtime, graph }, form, { image }) => {
+    run: (state, form, { image, mask }) => {
+        const { runtime, graph } = state
         const zoeRaw = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Infer({
             image,
         })
 
+        const cutoffByMask = form.cutoffByMask
+            ? graph.Mask_Erode_Region({
+                  masks: loadFromScope<_MASK>(state, form.cutoffByMask.variable) ?? mask,
+                  iterations: 4,
+              })
+            : undefined
+
         const zoeImages = graph.RL$_Zoe$_Depth$_Map$_Preprocessor$_Raw$_Process({
             zoeRaw,
+            cutoffByMask,
             // This makes more sense reversed
             cutoffMid: 1 - form.cutoffMid,
             cutoffRadius: form.cutoffRadius,
-            normMin: 0, //form.zoeDepth.normMin,
-            normMax: 100, //form.zoeDepth.normMax,
+            normMin: 1, //form.zoeDepth.normMin,
+            normMax: 99, //form.zoeDepth.normMax,
         })
         const zoeImage = graph.ImageBatchGet({
             images: zoeImages,
@@ -51,6 +86,7 @@ const zoeDepth = createFrameOperation({
                 mask: graph.MaskToImage({ mask: removeMask }),
                 blend_percentage: 1,
             }).outputs.IMAGE
+            resultImage = graph.Images_to_RGB({ images: resultImage }).outputs.IMAGE
         }
         if (form.invertCutoffMin) {
             const removeMask = graph.ImageColorToMask({
@@ -64,13 +100,14 @@ const zoeDepth = createFrameOperation({
                 mask: graph.MaskToImage({ mask: removeMask }),
                 blend_percentage: 1,
             }).outputs.IMAGE
+            resultImage = graph.Images_to_RGB({ images: resultImage }).outputs.IMAGE
         }
 
         return { image: resultImage }
     },
 })
 
-const hedEdge = createFrameOperation({
+const hedEdge = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.HEDPreprocessor({
@@ -83,7 +120,7 @@ const hedEdge = createFrameOperation({
     },
 })
 
-const pidiEdge = createFrameOperation({
+const pidiEdge = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.PiDiNetPreprocessor({
@@ -95,7 +132,7 @@ const pidiEdge = createFrameOperation({
     },
 })
 
-const scribbleEdge = createFrameOperation({
+const scribbleEdge = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.ScribblePreprocessor({
@@ -106,7 +143,7 @@ const scribbleEdge = createFrameOperation({
     },
 })
 
-const threshold = createFrameOperation({
+const threshold = createImageOperation({
     ui: (form) => ({
         threshold: form.int({ default: 128, min: 0, max: 255 }),
         invertInput: form.boolean({ default: true }),
@@ -125,7 +162,7 @@ const threshold = createFrameOperation({
     },
 })
 
-const grayscale = createFrameOperation({
+const grayscale = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.ImageEffectsGrayscale({
@@ -136,11 +173,9 @@ const grayscale = createFrameOperation({
     },
 })
 
-const selectChannel = createFrameOperation({
+const selectChannel = createImageOperation({
     ui: (form) => ({
-        channel: form.enum({
-            enumName: `Enum_Image_Select_Channel_channel`,
-        }),
+        channel: form.enum.Enum_Image_Select_Channel_channel({}),
     }),
     run: ({ runtime, graph }, form, { image }) => {
         const channelImage = graph.Image_Select_Channel({
@@ -165,7 +200,7 @@ const selectChannel = createFrameOperation({
     },
 })
 
-const adjustChannelLevels = createFrameOperation({
+const adjustChannelLevels = createImageOperation({
     ui: (form) => ({
         redMin: form.int({ default: 0, min: 0, max: 255 }),
         redMax: form.int({ default: 255, min: 0, max: 255 }),
@@ -211,7 +246,7 @@ const adjustChannelLevels = createFrameOperation({
     },
 })
 
-const baeNormal = createFrameOperation({
+const baeNormal = createImageOperation({
     ui: (form) => ({}),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.BAE$7NormalMapPreprocessor({
@@ -222,11 +257,11 @@ const baeNormal = createFrameOperation({
     },
 })
 
-const openPose = createFrameOperation({
+const openPose = createImageOperation({
     ui: (form) => ({
-        body: form.bool({}),
-        face: form.bool({}),
-        hand: form.bool({}),
+        body: form.bool({ default: true }),
+        face: form.bool({ default: true }),
+        hand: form.bool({ default: true }),
     }),
     run: ({ runtime, graph }, form, { image }) => {
         const resultImage = graph.OpenposePreprocessor({
@@ -240,7 +275,7 @@ const openPose = createFrameOperation({
     },
 })
 
-const enhanceLighting = createFrameOperation({
+const enhanceLighting = createImageOperation({
     ui: (form) => ({
         // previewAll: form.inlineRun({}),
         preview: form.groupOpt({
@@ -302,7 +337,7 @@ const enhanceLighting = createFrameOperation({
     },
 })
 
-const selectColor = createFrameOperation({
+const selectColor = createImageOperation({
     ui: (form) => ({
         color: form.color({ default: `#000000` }),
         variance: form.int({ default: 10, min: 0, max: 255 }),
@@ -339,7 +374,17 @@ const selectColor = createFrameOperation({
     },
 })
 
-const blendImages = createFrameOperation({
+const invertImage = createImageOperation({
+    ui: (form) => ({}),
+    run: ({ runtime, graph }, form, { image }) => {
+        const result = graph.InvertImage({
+            image,
+        })
+        return { image: result }
+    },
+})
+
+const blendImages = createImageOperation({
     options: {
         hideLoadVariables: true,
     },
@@ -361,7 +406,7 @@ const blendImages = createFrameOperation({
                 name: form.string({ default: `b` }),
                 inverse: form.bool({ default: false }),
                 blendRatio: form.float({ default: 0.5, min: 0, max: 1, step: 0.01 }),
-                blendMode: form.enum({ enumName: `Enum_ImageBlend_blend_mode`, default: `normal` }),
+                blendMode: form.enum.Enum_ImageBlend_blend_mode({ default: `normal` }),
             }),
         }),
         // c: form.groupOpt({
@@ -426,6 +471,7 @@ const blendImages = createFrameOperation({
 })
 
 export const imageOperations = {
+    emptyImage,
     enhanceLighting,
     zoeDepth,
     hedEdge,
@@ -437,7 +483,7 @@ export const imageOperations = {
     grayscale,
     selectChannel,
     selectColor,
+    invertImage,
     adjustChannelLevels,
     blendImages,
 }
-export const imageOperationsList = createFrameOperationsGroupList(imageOperations)

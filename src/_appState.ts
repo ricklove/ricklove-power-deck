@@ -7,7 +7,11 @@ export class PreviewStopError extends Error {
     constructor(
         public options?: {
             previewCount?: number
-            afterFramePrompt: undefined | (() => void)[]
+            isAutoCache?: boolean
+            cacheIndex?: number
+            cacheIndex_run?: number
+            cachedAlready?: boolean
+            afterFramePrompt?: undefined | (() => void)[]
         },
     ) {
         super()
@@ -63,6 +67,7 @@ export const storeInScope = <T extends null | ScopeStackValueType>(
     const { scopeStack } = state
     scopeStack[scopeStack.length - 1][name] = value == undefined ? undefined : { value: value, kind, ...extra }
 
+    // state.runtime.output_text(`'${name}' ${kind} stored`)
     console.log(`storeInScope`, { name, kind, extra, scopeStack })
 }
 

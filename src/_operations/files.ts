@@ -1,5 +1,5 @@
 import { PreviewStopError, getAllScopeKeys, loadFromScopeWithExtras, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern, getCacheStore } from './_frame'
+import { createFrameOperation, getCacheFilePattern, getCacheStore } from './_frame'
 import { disableUnusedGraph } from './_graph'
 
 const saveImageFrame = createFrameOperation({
@@ -38,30 +38,40 @@ const loadImageFrame = createFrameOperation({
 const cacheEverything = createFrameOperation({
     options: { simple: true },
     ui: (form) => ({
-        buildCache: form.inlineRun({ text: `Cache Me If You Can!`, kind: `special` }),
-        rebuildCache: form.inlineRun({ text: `Do it again!`, kind: `special` }),
+        cache: form.group({
+            label: false,
+            layout: `H`,
+            collapsible: false,
+            items: () => ({
+                buildCache: form.inlineRun({ text: `Cache Me If You Can!`, kind: `special` }),
+                rebuildCache: form.inlineRun({ text: `Do it again!`, kind: `special` }),
+            }),
+        }),
         // path: form.string({ default: `../input/working/NAME/#####.png` }),
-        // image: form.strOpt({ default: `imageFinal` }),
+        // image: form.stringOpt({ default: `imageFinal` }),
         // imageVariables: form.list({
         //     element: () => form.string({ default: `imageVariable` }),
         // }),
-        // mask: form.strOpt({ default: `maskFinal` }),
+        // mask: form.stringOpt({ default: `maskFinal` }),
         // maskVariables: form.list({
         //     element: () => form.string({ default: `maskVariable` }),
         // }),
     }),
-    run: (state, form, { image, mask, frameIdProvider, cache, workingDirectory }) => {
+    run: (state, formRaw, { image, mask, frameIdProvider, cache, workingDirectory }) => {
         const { graph } = state
         const previewImages = true
         const { cacheIndex, dependencyKey } = cache
         const cacheStore = getCacheStore(state, cache)
-        const buildCacheTriggered = form.rebuildCache || form.buildCache || cache.cacheIndex_run === cache.cacheIndex
+
+        const form = formRaw.cache
+        const isManualTrigger = form.rebuildCache || form.buildCache
+        const buildCacheTriggered = form.rebuildCache || form.buildCache || cache.cacheIndex === cache.cacheIndex_run
         const shouldBuildCache =
-            form.rebuildCache || ((form.buildCache || cache.cacheIndex_run === cache.cacheIndex) && !cacheStore.isCached)
-        if (!cacheStore.isCached) {
-            // invalidate dependency key if cache is stale
-            cache.dependencyKey += 10000
-        }
+            form.rebuildCache || ((form.buildCache || cache.cacheIndex === cache.cacheIndex_run) && !cacheStore.isCached)
+        // if (!cacheStore.isCached) {
+        //     // invalidate dependency key if cache is stale
+        //     cache.dependencyKey += 10000
+        // }
 
         // const cacheStore = state.runtime.store
         //     .getOrCreate({
@@ -157,8 +167,29 @@ const cacheEverything = createFrameOperation({
                 })
             }
 
+            graph.PreviewImage({
+                images: graph.ImageBatch({
+                    image1: graph.MaskToImage({ mask: resultMask ?? mask }),
+                    image2: graph.ImageBatch({
+                        image1: graph.ImageBlend({
+                            image1: resultImage ?? image,
+                            image2: graph.MaskToImage({ mask: resultMask ?? mask }),
+                            blend_mode: `normal`,
+                            blend_factor: 0.5,
+                        }),
+                        image2: resultImage ?? image,
+                    }),
+                }),
+            })
+
             cacheStore.isCached = true
-            throw new PreviewStopError(undefined)
+            throw new PreviewStopError({
+                //
+                isAutoCache: !isManualTrigger,
+                cacheIndex,
+                cacheIndex_run: cache.cacheIndex_run,
+                cachedAlready: !shouldBuildCache,
+            })
         }
 
         if (!cacheStore.isCached) {
@@ -253,4 +284,3 @@ export const fileOperations = {
     // loadVariables,
     // storeVariables,
 }
-export const fileOperationsList = createFrameOperationsGroupList(fileOperations)

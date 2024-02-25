@@ -1,5 +1,5 @@
 import { getNextActiveNodeIndex, loadFromScope, loadFromScopeWithExtras, setNodesDisabled, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList } from './_frame'
+import { createFrameOperation } from './_frame'
 import { getCacheFilePattern } from './_frame'
 
 const output3d = createFrameOperation({
@@ -26,8 +26,12 @@ const output3d = createFrameOperation({
                 scale_width: 1,
                 scale_height: 1,
             }).outputs.IMAGE
-            graph.SaveImage({ images: resizedImage, filename_prefix: saveName })
-            graph.PreviewImage({ images: resizedImage })
+
+            state.runtime.add_saveImage(resizedImage, saveName)
+            // graph.SaveImage({ images: resizedImage, filename_prefix: saveName })
+            // graph.PreviewImage({ images: resizedImage })
+
+            // state.runtime. add_saveImage()
             return resizedImage
         }
 
@@ -72,7 +76,7 @@ const outputVideo = createFrameOperation({
         })
         graph.VHS$_VideoCombine({
             images: loadImageBatchNode.outputs.image,
-            format: `video/h264-mp4`,
+            format: `video/h264-mp4` as `image/webp`,
         })
 
         const iNodeAfterEnd = getNextActiveNodeIndex(runtime)
@@ -84,6 +88,7 @@ const outputVideo = createFrameOperation({
 
         frameIdProvider.subscribe((_) => {
             const batch = frameIdProvider.getBatch(frameIdProvider._state.frameIds.length, 0)
+            console.log(`outputVideo`, { batch })
             loadImageBatchNode.inputs.current_frame = batch.startFrameId
             loadImageBatchNode.inputs.count = batch.count
             loadImageBatchNode.inputs.select_every_nth = batch.selectEveryNth
@@ -102,4 +107,3 @@ export const outputOperations = {
     output3d,
     outputVideo,
 }
-export const outputOperationsList = createFrameOperationsGroupList(outputOperations)

@@ -1,5 +1,5 @@
 import { PreviewStopError, getNextActiveNodeIndex, loadFromScopeWithExtras, setNodesDisabled, storeInScope } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern, getCacheStore } from './_frame'
+import { createFrameOperation, getCacheFilePattern, getCacheStore } from './_frame'
 
 const filmInterpolationDoubleBack = createFrameOperation({
     ui: (form) => ({
@@ -17,12 +17,13 @@ const filmInterpolationDoubleBack = createFrameOperation({
         const { runtime, graph } = state
         const { cacheIndex, dependencyKey } = cache
         const cacheStore = getCacheStore(state, cache)
-        const buildCacheTriggered = form.buildCache || cache.cacheIndex_run === cache.cacheIndex
-        const shouldBuildCache = (form.buildCache || cache.cacheIndex_run === cache.cacheIndex) && !cacheStore.isCached
-        if (!cacheStore.isCached) {
-            // invalidate dependency key if cache is stale
-            cache.dependencyKey += 10000
-        }
+        const isManualTrigger = form.buildCache
+        const buildCacheTriggered = form.buildCache || cache.cacheIndex === cache.cacheIndex_run
+        const shouldBuildCache = (form.buildCache || cache.cacheIndex === cache.cacheIndex_run) && !cacheStore.isCached
+        // if (!cacheStore.isCached) {
+        //     // invalidate dependency key if cache is stale
+        //     cache.dependencyKey += 10000
+        // }
 
         if (shouldBuildCache) {
             const iNodeStart = getNextActiveNodeIndex(runtime)
@@ -36,16 +37,15 @@ const filmInterpolationDoubleBack = createFrameOperation({
                     loadFromScopeWithExtras(state, form.inputVariableName)?.cacheIndex ?? 0,
                 ),
             })
-            const filmModelNode = graph.Load_Film_Model_$1mtb$2({
-                film_model: `Style`,
-            })
+
             let currentImages = loadImageBatchNode.outputs.image
 
             for (let i = 0; i < form.iterations; i++) {
-                const filmFrames = graph.Film_Interpolation_$1mtb$2({
-                    film_model: filmModelNode,
-                    images: currentImages,
-                    interpolate: 1,
+                const filmFrames = graph.FILM_VFI({
+                    ckpt_name: `film_net_fp32.pt`,
+                    frames: currentImages,
+                    cache_in_fp16: false,
+                    multiplier: 2,
                 })
                 const filmframes_removedFirst = graph.ImageBatchRemove({
                     images: filmFrames,
@@ -71,10 +71,11 @@ const filmInterpolationDoubleBack = createFrameOperation({
                         }).outputs.batch,
                     }),
                 })
-                const filmFrames2 = graph.Film_Interpolation_$1mtb$2({
-                    film_model: filmModelNode,
-                    images: middleFrames_withFirstAndLast,
-                    interpolate: 1,
+                const filmFrames2 = graph.FILM_VFI({
+                    ckpt_name: `film_net_fp32.pt`,
+                    frames: middleFrames_withFirstAndLast,
+                    cache_in_fp16: false,
+                    multiplier: 2,
                 })
                 const filmframes2_removedFirst = graph.ImageBatchRemove({
                     images: filmFrames2,
@@ -129,7 +130,14 @@ const filmInterpolationDoubleBack = createFrameOperation({
             })
         }
         if (buildCacheTriggered) {
-            throw new PreviewStopError(undefined)
+            cacheStore.isCached = true
+            throw new PreviewStopError({
+                //
+                isAutoCache: !isManualTrigger,
+                cacheIndex,
+                cacheIndex_run: cache.cacheIndex_run,
+                cachedAlready: !shouldBuildCache,
+            })
         }
 
         const loadCurrentFrameResultNode = graph.RL$_LoadImageSequence({
@@ -153,7 +161,40 @@ const filmInterpolationDoubleBack = createFrameOperation({
     },
 })
 
+const filmInterpolationPyramidReduceImageBatch = createFrameOperation({
+    ui: (form) => ({
+        imageBatchSize: form.int({ default: 3 }),
+    }),
+    run: (state, form, { image }) => {
+        const { runtime, graph } = state
+
+        let currentImages = image
+
+        for (let i = 0; i < form.imageBatchSize - 1; i++) {
+            const filmFrames = graph.FILM_VFI({
+                ckpt_name: `film_net_fp32.pt`,
+                frames: currentImages,
+                cache_in_fp16: false,
+                multiplier: 2,
+            })
+            const filmframes_removedFirst = graph.ImageBatchRemove({
+                images: filmFrames,
+                index: 1,
+            })
+            const middleFrames = graph.VHS$_SelectEveryNthImage({
+                images: filmframes_removedFirst,
+                select_every_nth: 2,
+            })
+            currentImages = middleFrames.outputs.IMAGE
+        }
+
+        return {
+            image: currentImages,
+        }
+    },
+})
+
 export const videoOperations = {
     filmInterpolationDoubleBack,
+    filmInterpolationPyramidReduceImageBatch,
 }
-export const videoOperationsList = createFrameOperationsGroupList(videoOperations)

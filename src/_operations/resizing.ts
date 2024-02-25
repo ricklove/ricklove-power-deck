@@ -1,5 +1,5 @@
 import { loadFromScope, loadFromScopeWithExtras } from '../_appState'
-import { createFrameOperation, createFrameOperationsGroupList, getCacheFilePattern } from './_frame'
+import { createFrameOperation, createImageOperation, getCacheFilePattern } from './_frame'
 import { storageOperations } from './storage'
 
 const cropResizeByMask = createFrameOperation({
@@ -9,35 +9,55 @@ const cropResizeByMask = createFrameOperation({
     ui: (form) => ({
         padding: form.int({ default: 0 }),
         size: form.choice({
-            items: () => ({
-                maxSideLength: form.intOpt({ default: 1024 }),
-                target: form.group({
-                    items: () => ({
-                        width: form.intOpt({ default: 1024 }),
-                        height: form.floatOpt({ default: 1024 }),
+            items: {
+                maxSideLength: () => form.int({ default: 1024 }),
+                target: () =>
+                    form.group({
+                        items: () => ({
+                            width: form.int({ default: 1024 }),
+                            height: form.int({ default: 1024 }),
+                        }),
                     }),
-                }),
-            }),
+                standard: () =>
+                    form.group({
+                        items: () => ({
+                            landscape: form.bool({}),
+                            size: form.selectOne({
+                                choices: () => [
+                                    { id: `sd    1 x 1 =  512x 512` },
+                                    { id: `sd    1 x 2 =  384x 768` },
+                                    { id: `sd    2 x 3 =  512x 768` },
+                                    { id: `sdxl  1 x 1 = 1024x1024` },
+                                    { id: `sdxl  3 x 4 =  896x1152` },
+                                    { id: `sdxl  2 x 3 =  832x1216` },
+                                    { id: `sdxl  9 x16 =  768x1344` },
+                                    { id: `sdxl 10 x24 =  640x1536` },
+                                ],
+                            }),
+                        }),
+                    }),
+            },
         }),
         interpolate: form.groupOpt({
             items: () => ({
-                maskVariableCachedName: form.str({ default: `maskA` }),
+                maskVariableCachedName: form.string({ default: `maskA` }),
 
-                // firstMaskImageFilePath: form.str({ default: `../input/00001.png` }),
-                // lastMaskImageFilePath: form.str({ default: `../input/01000.png` }),
+                // firstMaskImageFilePath: form.string({ default: `../input/00001.png` }),
+                // lastMaskImageFilePath: form.string({ default: `../input/01000.png` }),
                 // firstFrameId: form.int({default:0}),
                 // lastFrameId: form.int({}),
-                // lastMaskVariable: form.str({ default: `maskB` }),
+                // lastMaskVariable: form.string({ default: `maskB` }),
                 // useFrameIdIndexRatio: form.bool({ default: true }),
             }),
         }),
         storeVariables: form.groupOpt({
+            // default: true,
             items: () => ({
-                beforeCropImage: form.strOpt({ default: `beforeCropImage` }),
-                beforeCropMask: form.strOpt({ default: `beforeCropMask` }),
-                cropAreaMask: form.strOpt({ default: `cropAreaMask` }),
-                afterCropImage: form.strOpt({ default: `afterCropImage` }),
-                afterCropMask: form.strOpt({ default: `afterCropMask` }),
+                beforeCropImage: form.stringOpt({ default: `beforeCropImage` }),
+                beforeCropMask: form.stringOpt({ default: `beforeCropMask` }),
+                cropAreaMask: form.stringOpt({ default: `cropAreaMask` }),
+                afterCropImage: form.stringOpt({ default: `afterCropImage` }),
+                afterCropMask: form.stringOpt({ default: `afterCropMask` }),
             }),
         }),
     }),
@@ -84,13 +104,31 @@ const cropResizeByMask = createFrameOperation({
             })
         }
 
+        const getTargetSize = (input: typeof form.size) => {
+            if (input.maxSideLength) {
+                return {}
+            }
+
+            if (input.target) {
+                return { width: input.target.width, height: input.target.height }
+            }
+
+            const [_id, values] = input.standard?.size.id.split(`=`) ?? []
+            const [xRaw, yRaw] = values?.split(`x`) ?? []
+            const [x, y] = input.standard?.landscape ? [yRaw, xRaw] : [xRaw, yRaw]
+            const [w, h] = [x, y].map((v) => (v ? Number(v) : undefined))
+
+            return { width: w, height: h }
+        }
+        const targetSize = getTargetSize(form.size)
+
         const resizeNode = graph.RL$_Crop$_Resize({
             image: startImage,
             mask: cropMask,
             padding: form.padding,
-            max_side_length: form.size.maxSideLength ?? undefined,
-            width: form.size.target?.width ?? undefined,
-            height: form.size.target?.height ?? undefined,
+            max_side_length: form.size.maxSideLength,
+            width: targetSize.width,
+            height: targetSize.height,
             interpolate_mask_a,
             interpolate_mask_b,
             interpolate_ratio: 0,
@@ -168,17 +206,17 @@ const cropResizeByMask = createFrameOperation({
     },
 })
 
-const uncrop = createFrameOperation({
+const uncrop = createImageOperation({
     options: {
         hideLoadVariables: true,
     },
     ui: (form) => ({
         variables: form.group({
             items: () => ({
-                beforeCropImage: form.str({ default: `beforeCropImage` }),
-                cropAreaMask: form.str({ default: `cropAreaMask` }),
-                pasteImage: form.str({ default: `pasteImage` }),
-                pasteMask: form.str({ default: `pasteMask` }),
+                beforeCropImage: form.string({ default: `beforeCropImage` }),
+                cropAreaMask: form.string({ default: `cropAreaMask` }),
+                pasteImage: form.string({ default: `pasteImage` }),
+                pasteMask: form.string({ default: `pasteMask` }),
             }),
         }),
     }),
@@ -216,24 +254,24 @@ const uncrop = createFrameOperation({
             mask: uncroppedReplaceMaskImage,
             blend_percentage: 1,
         }).outputs.IMAGE
+        const resultImage = graph.Images_to_RGB({ images: restoredImage }).outputs.IMAGE
 
-        return { image: restoredImage }
+        return { image: resultImage }
     },
 })
-const upscaleWithModel = createFrameOperation({
+
+const upscaleWithModel = createImageOperation({
     ui: (form) => ({
-        model: form.enum({
-            enumName: `Enum_UpscaleModelLoader_model_name`,
+        model: form.enum.Enum_UpscaleModelLoader_model_name({
             default: `8x_NMKD-Superscale_150000_G.pth`,
         }),
         resize: form.choice({
-            items: () => ({
-                none: form.bool({ default: false }),
-                ratio: form.float({ default: 1 }),
-                maxSideLength: form.int({ default: 1024 }),
-                // targetWidth: form.int({ default: 1024 }),
-                // targetHeight: form.int({ default: 1024 }),
-            }),
+            items: {
+                ratio: () => form.float({ default: 1 }),
+                maxSideLength: () => form.int({ default: 1024 }),
+                // targetWidth: () => form.int({ default: 1024 }),
+                // targetHeight: () => form.int({ default: 1024 }),
+            },
         }),
     }),
     run: ({ graph }, form, { image, mask }) => {
@@ -244,12 +282,24 @@ const upscaleWithModel = createFrameOperation({
             }),
         }).outputs.IMAGE
 
+        const originalSize = graph.Get_image_size({
+            image,
+        })
+
         const resizedImage = form.resize.ratio
-            ? graph.ImageTransformResizeRelative({
+            ? graph.ImageTransformResizeAbsolute({
                   images: upscaledImage,
                   method: `lanczos`,
-                  scale_width: form.resize.ratio,
-                  scale_height: form.resize.ratio,
+                  width: graph.Evaluate_Floats({
+                      a: graph.Int_to_float({ Value: originalSize.outputs.INT }),
+                      python_expression: `a*${form.resize.ratio}`,
+                      print_to_console: `False`,
+                  }).outputs.INT,
+                  height: graph.Evaluate_Floats({
+                      a: graph.Int_to_float({ Value: originalSize.outputs.INT_1 }),
+                      python_expression: `a*${form.resize.ratio}`,
+                      print_to_console: `False`,
+                  }).outputs.INT,
               })
             : form.resize.maxSideLength
             ? graph.RL$_Crop$_Resize({
@@ -273,9 +323,48 @@ const upscaleWithModel = createFrameOperation({
     },
 })
 
+const resize = createImageOperation({
+    ui: (form) => ({
+        ratio: form.float({ default: 1 }),
+    }),
+    run: ({ graph }, form, { image, mask }) => {
+        const originalSize = graph.Get_image_size({
+            image,
+        })
+
+        const resizedImage = graph.ImageTransformResizeAbsolute({
+            images: image,
+            method: `lanczos`,
+            width: graph.Evaluate_Floats({
+                a: graph.Int_to_float({ Value: originalSize.outputs.INT }),
+                python_expression: `a*${form.ratio}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+            height: graph.Evaluate_Floats({
+                a: graph.Int_to_float({ Value: originalSize.outputs.INT_1 }),
+                python_expression: `a*${form.ratio}`,
+                print_to_console: `False`,
+            }).outputs.INT,
+        })
+
+        const size = graph.Get_image_size({ image: resizedImage })
+        const resizedMask = graph.Image_To_Mask({
+            method: `intensity`,
+            image: graph.ImageTransformResizeAbsolute({
+                images: graph.MaskToImage({ mask }),
+                method: `lanczos`,
+                width: size.outputs.INT,
+                height: size.outputs.INT_1,
+            }),
+        }).outputs.MASK
+
+        return { image: resizedImage, mask: resizedMask }
+    },
+})
+
 export const resizingOperations = {
     cropResizeByMask,
     uncrop,
     upscaleWithModel,
+    resize,
 }
-export const resizingOperationsList = createFrameOperationsGroupList(resizingOperations)

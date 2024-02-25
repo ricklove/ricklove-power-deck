@@ -1,7 +1,10 @@
-import type { FormBuilder, Widget, Widget_groupOpt, Widget_group_output } from 'src'
+import type { FormBuilder, Widget } from 'src'
 import type { WidgetDict } from 'src/cards/App'
 import { AppState, PreviewStopError, loadFromScope, storeInScope } from '../_appState'
 import { createRandomGenerator } from '../_random'
+import { observable, observe } from 'mobx'
+import type { Widget_choices_output } from 'src/controls/widgets/choices/WidgetChoices'
+import type { Widget_group, Widget_group_output } from 'src/controls/widgets/group/WidgetGroup'
 
 export type Frame = {
     image: _IMAGE
@@ -18,44 +21,88 @@ export type CacheState = {
     dependencyKey: number
 }
 
-export const getCacheStore = (state: AppState, cache: CacheState) => {
-    return state.runtime.store
-        .getOrCreate({
-            key: `${cache.dependencyKey}`,
-            scope: `draft`,
-            makeDefaultValue: () => ({
-                isCached: false,
-            }),
-        })
-        .get()
+export const getCacheStore = (
+    state: AppState,
+    cache: CacheState,
+): {
+    isCached: boolean
+} => {
+    const storeAccess = state.runtime.Store.getOrCreate({
+        key: `${cache.dependencyKey}`,
+        scope: `draft`,
+        makeDefaultValue: () => ({
+            isCached: false,
+        }),
+    })
+
+    // ideal should auto update
+    // return storeAccess.getWithAutoUpdate()
+
+    // workaround: use observer and call update manually
+    // console.log(`getCacheStore: storeAccess ${cache.cacheIndex} ${cache.dependencyKey}`, { storeAccess, cache })
+
+    const storeValue = observable(storeAccess.get())
+    observe(storeValue, (x) => {
+        const v = JSON.parse(JSON.stringify(x.object))
+        // console.log(`getCacheStore: changed ${cache.cacheIndex} ${cache.dependencyKey}`, { v, storeValue, x })
+
+        // manually call update
+        storeAccess.update({ json: v })
+    })
+    return storeValue
 }
 
 export const getCacheFilePattern = (workingDirectory: string, name: string, cacheIndex: number) =>
     `${workingDirectory}/${cacheIndex.toString().padStart(4, `0`)}-${name}/#####.png`
 
 export const calculateDependencyKey = (cache: CacheState, form: Record<string, unknown>) => {
-    console.log(`calculateDependencyKey`, { cache, form })
+    // console.log(`calculateDependencyKey`, { cache, form })
 
-    const formCleaned = {
-        ...form,
-        // previews should not affect the cache key
-        preview: undefined,
-        buildCache: undefined,
-        rebuildCache: undefined,
-        __preview: undefined,
+    const getCleanedFormObj = (o: unknown): unknown => {
+        if (!o || typeof o !== `object`) {
+            return o
+        }
+
+        if (Array.isArray(o)) {
+            return o.map((x) => getCleanedFormObj(x))
+        }
+
+        return Object.fromEntries(
+            Object.entries(o)
+                .filter(
+                    ([k, v]) =>
+                        ![
+                            //
+                            `preview`,
+                            `cache`,
+                            `seed`,
+                            `subOperations`,
+                        ]
+                            .map((x) => x.toLowerCase())
+                            .some((x) => k.toLowerCase().includes(x)),
+                )
+                .map(([k, v]) => [k, getCleanedFormObj(v)]),
+        )
     }
+    const formCleaned = JSON.parse(JSON.stringify(getCleanedFormObj(form)))
+    const result = createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(formCleaned)}`).randomInt()
 
-    return createRandomGenerator(`${cache.dependencyKey}:${JSON.stringify(formCleaned)}`).randomInt()
+    console.log(`calculateDependencyKey ${result} <- ${cache.dependencyKey}`, { result, formCleaned, cache, form })
+    console.log(`calculateDependencyKey ${result} <- ${cache.dependencyKey}`, JSON.stringify(formCleaned))
+    return result
 }
 
 type FrameIdsPattern = {
     startIndex: number
     iterationCount: number
     selectEveryNth?: null | number
+    repeatCount?: null | number
 }
 export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
     const frameIds = [...new Array(frameIdsPattern.iterationCount)].map(
-        (_, i) => frameIdsPattern.startIndex + i * (frameIdsPattern.selectEveryNth ?? 1),
+        (_, i) =>
+            frameIdsPattern.startIndex +
+            Math.floor(i / (frameIdsPattern.repeatCount ?? 1)) * (frameIdsPattern.selectEveryNth ?? 1),
     )
 
     const getBatchAtFrameIdIndex = (
@@ -87,6 +134,7 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
             startIndex: frameIdsPattern.startIndex,
             iterationCount: frameIdsPattern.iterationCount,
             selectEveryNth: frameIdsPattern.selectEveryNth,
+            repeatCount: frameIdsPattern.repeatCount,
         },
         frameIds,
         currentFrameIdIndex: -1,
@@ -148,84 +196,26 @@ export const createFrameIdProvider = (frameIdsPattern: FrameIdsPattern) => {
     return frameIdProvider
 }
 
-export type FrameOperation<TFields extends WidgetDict> = {
+export type FrameOperation<TFields extends WidgetDict, TFrame = Frame> = {
     ui: (form: FormBuilder) => TFields
-    run: (state: AppState, form: { [k in keyof TFields]: TFields[k]['$Output'] }, frame: Frame) => Partial<Frame>
+    run: (state: AppState, form: { [k in keyof TFields]: TFields[k]['$Output'] }, frame: TFrame) => Partial<TFrame>
     options?: {
         simple?: boolean
         hidePreview?: boolean
         hideLoadVariables?: boolean
         hideStoreVariables?: boolean
+        title?: () => string
     }
 }
 export const createFrameOperation = <TFields extends WidgetDict>(op: FrameOperation<TFields>): FrameOperation<TFields> => op
+export const createImageOperation = <TFields extends WidgetDict>(
+    op: FrameOperation<TFields, Pick<Frame, `image` | `mask`>>,
+): FrameOperation<TFields, Pick<Frame, `image` | `mask`>> => op
 
 export const createFrameOperationValue = <TValue extends Widget>(op: {
     ui: (form: FormBuilder) => TValue
     run: (state: AppState, form: TValue['$Output'], frame: Frame) => Frame
 }) => op
-
-export const createFrameOperationsGroupList = <TOperations extends Record<string, FrameOperation<any>>>(
-    operations: TOperations,
-) =>
-    createFrameOperationValue({
-        ui: (form) =>
-            form.list({
-                element: () =>
-                    form.group({
-                        layout: 'V',
-                        items: () => ({
-                            ...Object.fromEntries(
-                                Object.entries(operations).map(([k, v]) => {
-                                    return [
-                                        k,
-                                        form.groupOpt({
-                                            items: () => v.ui(form),
-                                        }),
-                                    ]
-                                }),
-                            ),
-                            preview: form.inlineRun({}),
-                        }),
-                    }),
-            }),
-        run: (state, form, frame) => {
-            const { runtime, graph } = state
-
-            // console.log(`createFrameOperationsList run`, { operations, form })
-
-            for (const listItem of form) {
-                const listItemGroupOptFields = listItem as unknown as Widget_group_output<
-                    Record<string, Widget_groupOpt<Record<string, Widget>>>
-                >
-                for (const [opName, op] of Object.entries(operations)) {
-                    const opGroupOptValue = listItemGroupOptFields[opName]
-                    // console.log(`createFrameOperationsList loop operations`, {
-                    //     opGroupOptValue,
-                    //     operations,
-                    //     listItemGroupOptFields,
-                    //     form,
-                    // })
-
-                    if (opGroupOptValue == null) {
-                        continue
-                    }
-
-                    frame = {
-                        ...frame,
-                        ...op.run(state, opGroupOptValue, frame),
-                    }
-                }
-
-                if (listItem.preview) {
-                    graph.PreviewImage({ images: frame.image })
-                    throw new PreviewStopError(undefined)
-                }
-            }
-
-            return frame
-        },
-    })
 
 export const createFrameOperationsChoiceList = <TOperations extends Record<string, FrameOperation<any>>>(
     operations: TOperations,
@@ -235,7 +225,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
             form.list({
                 element: () =>
                     form.choice({
-                        items: () => ({
+                        items: {
                             ...Object.fromEntries(
                                 Object.entries(operations).map(([k, v]) => {
                                     const { simple, hidePreview, hideLoadVariables, hideStoreVariables } = v.options ?? {}
@@ -245,64 +235,69 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
 
                                     return [
                                         k,
-                                        form.group({
-                                            items: () => ({
-                                                ...(!showLoadVariables
-                                                    ? {}
-                                                    : {
-                                                          __loadVariables: form.group({
-                                                              className: `text-xs`,
-                                                              label: false,
-                                                              items: () => ({
-                                                                  loadVariables: form.groupOpt({
-                                                                      items: () => ({
-                                                                          image: form.stringOpt({}),
-                                                                          mask: form.stringOpt({}),
+                                        () =>
+                                            form.group({
+                                                collapsible: false,
+                                                items: () => ({
+                                                    ...(!showLoadVariables
+                                                        ? {}
+                                                        : {
+                                                              __loadVariables: form.group({
+                                                                  className: `text-xs`,
+                                                                  label: false,
+                                                                  collapsible: false,
+                                                                  items: () => ({
+                                                                      loadVariables: form.groupOpt({
+                                                                          items: () => ({
+                                                                              image: form.stringOpt({}),
+                                                                              mask: form.stringOpt({}),
+                                                                          }),
                                                                       }),
                                                                   }),
                                                               }),
                                                           }),
-                                                      }),
 
-                                                ...v.ui(form),
-                                                ...(!showStoreVariables
-                                                    ? {}
-                                                    : {
-                                                          __storeVariables: form.group({
-                                                              className: `text-xs`,
-                                                              label: false,
-                                                              items: () => ({
-                                                                  storeVariables: form.groupOpt({
-                                                                      items: () => ({
-                                                                          image: form.stringOpt({}),
-                                                                          mask: form.stringOpt({}),
+                                                    ...v.ui(form),
+                                                    ...(!showStoreVariables
+                                                        ? {}
+                                                        : {
+                                                              __storeVariables: form.group({
+                                                                  className: `text-xs`,
+                                                                  label: false,
+                                                                  collapsible: false,
+                                                                  items: () => ({
+                                                                      storeVariables: form.groupOpt({
+                                                                          items: () => ({
+                                                                              image: form.stringOpt({}),
+                                                                              mask: form.stringOpt({}),
+                                                                          }),
                                                                       }),
                                                                   }),
                                                               }),
                                                           }),
-                                                      }),
-                                                ...(!showPreview
-                                                    ? {}
-                                                    : {
-                                                          __preview: form.inlineRun({}),
-                                                      }),
+                                                    ...(!showPreview
+                                                        ? {}
+                                                        : {
+                                                              __preview: form.inlineRun({}),
+                                                          }),
+                                                }),
                                             }),
-                                        }),
                                     ]
                                 }),
                             ),
-                        }),
+                        },
                     }),
             }),
         run: (state, form, frame) => {
             const { runtime, graph } = state
 
             for (const listItem of form) {
-                const listItemGroupOptFields = listItem as unknown as Widget_group_output<
-                    Record<string, Widget_groupOpt<Record<string, Widget>>>
-                >
+                const listItemGroupOptFields = listItem
+                // as unknown as Widget_choices_output<
+                //     Record<string, Widget_group<Record<string, Widget>>>
+                // >
                 for (const [opName, op] of Object.entries(operations)) {
-                    const opGroupOptValue = listItemGroupOptFields[opName]
+                    const opGroupOptValue = listItemGroupOptFields[opName] as Widget_group_output<Record<string, Widget>>
                     // console.log(`createFrameOperationsChoiceList: loop operations`, {
                     //     opGroupOptValue,
                     //     operations,
@@ -361,7 +356,7 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                         })
 
                         throw new PreviewStopError({
-                            previewCount: !frame.afterFramePrompt ? 3 : undefined,
+                            previewCount: !frame.afterFramePrompt?.length ? 3 : undefined,
                             afterFramePrompt: frame.afterFramePrompt,
                         })
                     }
