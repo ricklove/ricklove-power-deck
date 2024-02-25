@@ -94,6 +94,12 @@ app({
         const getInitialImage = async () => {
             if (startImage) return (await startImage.loadInWorkflow())._IMAGE
 
+            if (form.imageSource.empty) {
+                return graph.EmptyImage({
+                    width: form.imageSource.empty.width,
+                    height: form.imageSource.empty.height,
+                })
+            }
             if (form.imageSource.image) {
                 return (await runtime.loadImageAnswer(form.imageSource.image))._IMAGE
             }

@@ -3,6 +3,17 @@ import { createImageOperation } from './_frame'
 import { storageOperations } from './storage'
 import { videoOperations } from './video'
 
+const defaultLoraNames = Object.fromEntries([...new Array(100)].map((_, i) => [`lora_name_${i}`, `None`])) as unknown as Record<
+    `lora_name_${
+        //
+        `0` | `1` | `2` | `3` | `4` | `5` | `6` | `7` | `8` | `9`
+    }${
+        //
+        `` | `0` | `1` | `2` | `3` | `4` | `5` | `6` | `7` | `8` | `9`
+    }`,
+    `None`
+>
+
 const sampler = createImageOperation({
     ui: (form) => ({
         useImpaintingEncode: form.bool({ default: false }),
@@ -65,10 +76,10 @@ const sampler = createImageOperation({
         scheduler: form.enum.Enum_KSampler_scheduler({
             default: `karras`,
         }),
-        sdxl: form.bool({ default: true }),
-        lcm: form.bool({ default: true }),
-        lcmTurbo: form.bool({ default: true }),
-        freeU: form.bool({ default: true }),
+        // sdxl: form.bool({ default: true }),
+        // lcm: form.bool({ default: true }),
+        // lcmTurbo: form.bool({ default: true }),
+        // freeU: form.bool({ default: true }),
         config: form.float({ default: 1.5 }),
         batchSizeForPyramidReduce: form.int({ default: 1, min: 1, max: 16 }),
         script: form.string({
@@ -148,8 +159,9 @@ const sampler = createImageOperation({
             ? graph.LoRA_Stacker({
                   input_mode: `advanced`,
                   lora_count: loraEntries.length,
+                  ...defaultLoraNames,
                   ...Object.fromEntries(loraEntries.flatMap((x) => Object.entries(x))),
-              } as LoRA_Stacker_input).outputs.LORA_STACK
+              }).outputs.LORA_STACK
             : undefined
 
         // for(const lora of form.loras){
@@ -516,8 +528,9 @@ const ultimateUpscale = createImageOperation({
                   input_mode: `simple`,
                   lora_count: 1,
                   //   lora_name_1: !form.sdxl ? `lcm-lora-sd.safetensors` : `lcm-lora-sdxl.safetensors`,
+                  ...defaultLoraNames,
                   lora_name_1: `lcm-lora-sd.safetensors`,
-              } as LoRA_Stacker_input).outputs.LORA_STACK
+              }).outputs.LORA_STACK
 
         const loader = graph.Efficient_Loader({
             ckpt_name: form.checkpoint,
