@@ -204,7 +204,8 @@ export type FrameOperation<TFields extends WidgetDict, TFrame = Frame> = {
         hidePreview?: boolean
         hideLoadVariables?: boolean
         hideStoreVariables?: boolean
-        title?: () => string
+        showTitle?: boolean
+        // title?: () => string
     }
 }
 export const createFrameOperation = <TFields extends WidgetDict>(op: FrameOperation<TFields>): FrameOperation<TFields> => op
@@ -223,15 +224,16 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
     createFrameOperationValue({
         ui: (form) =>
             form.list({
-                // neverBordered: true,
-                alwaysExpanded: true,
+                // border: false,
+                collapsed: false,
                 element: () =>
                     form.choice({
                         // summary: (ui) => (ui as { title: string })?.title,
                         items: {
                             ...Object.fromEntries(
                                 Object.entries(operations).map(([k, v]) => {
-                                    const { simple, hidePreview, hideLoadVariables, hideStoreVariables } = v.options ?? {}
+                                    const { simple, hidePreview, hideLoadVariables, hideStoreVariables, showTitle } =
+                                        v.options ?? {}
                                     const showLoadVariables = !simple && !hideLoadVariables
                                     const showStoreVariables = !simple && !hideStoreVariables
                                     const showPreview = !simple && !hidePreview
@@ -239,22 +241,31 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                     return [
                                         k,
                                         form.group({
-                                            neverBordered: true,
-                                            // alwaysExpanded: true,
-                                            label: ``,
-                                            summary: (ui) => (ui as { title: string })?.title,
+                                            border: false,
+                                            // collapsed: false,
+                                            // label: ``,
+                                            summary: (ui) => (ui as { __title: string })?.__title,
                                             items: () => ({
-                                                title: form.string({}),
+                                                ...(!showTitle
+                                                    ? {}
+                                                    : {
+                                                          __title: form.string({ label: `Title` }),
+                                                          // __json: form.string({
+                                                          //     textarea: true,
+                                                          // }),
+                                                      }),
                                                 ...(!showLoadVariables
                                                     ? {}
                                                     : {
                                                           __loadVariables: form.group({
                                                               className: `text-xs`,
                                                               label: false,
-                                                              alwaysExpanded: true,
-                                                              neverBordered: true,
+                                                              collapsed: false,
+                                                              border: false,
                                                               items: () => ({
                                                                   loadVariables: form.groupOpt({
+                                                                      summary: (x) =>
+                                                                          `${[x.image, x.mask].filter((x) => x).join(`, `)}`,
                                                                       items: () => ({
                                                                           image: form.stringOpt({}),
                                                                           mask: form.stringOpt({}),
@@ -271,10 +282,12 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                                                           __storeVariables: form.group({
                                                               className: `text-xs`,
                                                               label: false,
-                                                              alwaysExpanded: true,
-                                                              neverBordered: true,
+                                                              collapsed: false,
+                                                              border: false,
                                                               items: () => ({
                                                                   storeVariables: form.groupOpt({
+                                                                      summary: (x) =>
+                                                                          `${[x.image, x.mask].filter((x) => x).join(`, `)}`,
                                                                       items: () => ({
                                                                           image: form.stringOpt({}),
                                                                           mask: form.stringOpt({}),
@@ -318,6 +331,8 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
                     }
 
                     frame = { ...frame }
+                    // const { json } = opGroupOptValue.json ?? ``;
+
                     const { loadVariables } = opGroupOptValue.__loadVariables ?? {}
                     if (loadVariables?.image) {
                         frame.image = loadFromScope(state, loadVariables.image) ?? frame.image

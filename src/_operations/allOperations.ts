@@ -39,6 +39,7 @@ const subOperationsInner = createFrameOperationsChoiceList({
 const subOperations = createFrameOperation({
     options: {
         simple: true,
+        showTitle: true,
     },
     ui: (form) => ({
         subOperations: subOperationsInner.ui(form),
