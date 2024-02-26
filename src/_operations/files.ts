@@ -41,7 +41,8 @@ const cacheEverything = createFrameOperation({
         cache: form.group({
             label: false,
             layout: `H`,
-            collapsible: false,
+            neverBordered: true,
+            alwaysExpanded: true,
             items: () => ({
                 buildCache: form.inlineRun({ text: `Cache Me If You Can!`, kind: `special` }),
                 rebuildCache: form.inlineRun({ text: `Do it again!`, kind: `special` }),

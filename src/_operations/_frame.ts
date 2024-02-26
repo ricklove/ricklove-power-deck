@@ -223,8 +223,11 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
     createFrameOperationValue({
         ui: (form) =>
             form.list({
+                // neverBordered: true,
+                alwaysExpanded: true,
                 element: () =>
                     form.choice({
+                        // summary: (ui) => (ui as { title: string })?.title,
                         items: {
                             ...Object.fromEntries(
                                 Object.entries(operations).map(([k, v]) => {
@@ -235,53 +238,58 @@ export const createFrameOperationsChoiceList = <TOperations extends Record<strin
 
                                     return [
                                         k,
-                                        () =>
-                                            form.group({
-                                                collapsible: false,
-                                                items: () => ({
-                                                    ...(!showLoadVariables
-                                                        ? {}
-                                                        : {
-                                                              __loadVariables: form.group({
-                                                                  className: `text-xs`,
-                                                                  label: false,
-                                                                  collapsible: false,
-                                                                  items: () => ({
-                                                                      loadVariables: form.groupOpt({
-                                                                          items: () => ({
-                                                                              image: form.stringOpt({}),
-                                                                              mask: form.stringOpt({}),
-                                                                          }),
+                                        form.group({
+                                            neverBordered: true,
+                                            // alwaysExpanded: true,
+                                            label: ``,
+                                            summary: (ui) => (ui as { title: string })?.title,
+                                            items: () => ({
+                                                title: form.string({}),
+                                                ...(!showLoadVariables
+                                                    ? {}
+                                                    : {
+                                                          __loadVariables: form.group({
+                                                              className: `text-xs`,
+                                                              label: false,
+                                                              alwaysExpanded: true,
+                                                              neverBordered: true,
+                                                              items: () => ({
+                                                                  loadVariables: form.groupOpt({
+                                                                      items: () => ({
+                                                                          image: form.stringOpt({}),
+                                                                          mask: form.stringOpt({}),
                                                                       }),
                                                                   }),
                                                               }),
                                                           }),
+                                                      }),
 
-                                                    ...v.ui(form),
-                                                    ...(!showStoreVariables
-                                                        ? {}
-                                                        : {
-                                                              __storeVariables: form.group({
-                                                                  className: `text-xs`,
-                                                                  label: false,
-                                                                  collapsible: false,
-                                                                  items: () => ({
-                                                                      storeVariables: form.groupOpt({
-                                                                          items: () => ({
-                                                                              image: form.stringOpt({}),
-                                                                              mask: form.stringOpt({}),
-                                                                          }),
+                                                ...v.ui(form),
+                                                ...(!showStoreVariables
+                                                    ? {}
+                                                    : {
+                                                          __storeVariables: form.group({
+                                                              className: `text-xs`,
+                                                              label: false,
+                                                              alwaysExpanded: true,
+                                                              neverBordered: true,
+                                                              items: () => ({
+                                                                  storeVariables: form.groupOpt({
+                                                                      items: () => ({
+                                                                          image: form.stringOpt({}),
+                                                                          mask: form.stringOpt({}),
                                                                       }),
                                                                   }),
                                                               }),
                                                           }),
-                                                    ...(!showPreview
-                                                        ? {}
-                                                        : {
-                                                              __preview: form.inlineRun({}),
-                                                          }),
-                                                }),
+                                                      }),
+                                                ...(!showPreview
+                                                    ? {}
+                                                    : {
+                                                          __preview: form.inlineRun({}),
+                                                      }),
                                             }),
+                                        }),
                                     ]
                                 }),
                             ),

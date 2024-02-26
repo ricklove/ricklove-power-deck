@@ -20,26 +20,25 @@ app({
         // }),
         imageSource: form.choice({
             items: {
-                empty: () => form.size({ label: false }),
-                image: () => form.image({ label: false }),
-                frames: () =>
-                    form.group({
-                        label: false,
-                        items: () => ({
-                            directory: form.string({ default: `../input/video` }),
-                            workingDirectory: form.string({ default: `../input/video/working` }),
-                            filePattern: form.string({ default: `#####.png` }),
-                            // pattern: form.string({ default: `*.png` }),
-                            startIndex: form.int({ default: 1, min: 0 }),
-                            endIndex: form.intOpt({ default: 10000, min: 0, max: 10000 }),
-                            selectEveryNth: form.intOpt({ default: 1, min: 1 }),
-                            repeatCount: form.intOpt({ default: 1, min: 1 }),
-                            // batchSize: form.int({ default: 1, min: 1 }),
-                            iterationCount: form.int({ default: 1, min: 1 }),
-                            // iterationSize: form.intOpt({ default: 1, min: 1 }),
-                            preview: form.inlineRun({}),
-                        }),
+                empty: form.size({ label: false }),
+                image: form.image({ label: false }),
+                frames: form.group({
+                    label: false,
+                    items: () => ({
+                        directory: form.string({ default: `../input/video` }),
+                        workingDirectory: form.string({ default: `../input/video/working` }),
+                        filePattern: form.string({ default: `#####.png` }),
+                        // pattern: form.string({ default: `*.png` }),
+                        startIndex: form.int({ default: 1, min: 0 }),
+                        endIndex: form.intOpt({ default: 10000, min: 0, max: 10000 }),
+                        selectEveryNth: form.intOpt({ default: 1, min: 1 }),
+                        repeatCount: form.intOpt({ default: 1, min: 1 }),
+                        // batchSize: form.int({ default: 1, min: 1 }),
+                        iterationCount: form.int({ default: 1, min: 1 }),
+                        // iterationSize: form.intOpt({ default: 1, min: 1 }),
+                        preview: form.inlineRun({}),
                     }),
+                }),
             },
         }),
         // size: form.size({}),
@@ -98,7 +97,7 @@ app({
                 return graph.EmptyImage({
                     width: form.imageSource.empty.width,
                     height: form.imageSource.empty.height,
-                })
+                }).outputs.IMAGE
             }
             if (form.imageSource.image) {
                 return (await runtime.loadImageAnswer(form.imageSource.image))._IMAGE
@@ -109,7 +108,7 @@ app({
                 return graph.EmptyImage({
                     width: 512,
                     height: 512,
-                })
+                }).outputs.IMAGE
             }
 
             const frameImageSource = form.imageSource.frames
